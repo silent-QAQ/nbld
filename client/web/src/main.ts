@@ -492,7 +492,7 @@ function renderAppearanceEditor(character: CharacterSummary): void {
   appearanceEditor.classList.remove("hidden");
   appearanceModal.classList.remove("hidden");
   state.selectedCharacterId = character.id;
-  state.appearanceDraft = structuredClone(character.appearance);
+  state.appearanceDraft = normalizeAppearance(character.appearance);
   renderAppearancePreview(state.appearanceDraft);
   renderAppearanceControls(state.appearanceDraft.body);
   renderPaletteControls(state.appearanceDraft.palette);
@@ -618,6 +618,7 @@ function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
 
 function renderLayerControls(): void {
   if (!state.appearanceDraft) return;
+  state.appearanceDraft = normalizeAppearance(state.appearanceDraft);
   const hair = state.appearanceDraft.hair;
   const hairStyle = state.appearanceDraft.style.hairStyle;
   const hairLayers: Array<[keyof CharacterAppearance["hair"], string]> = [
@@ -639,14 +640,14 @@ function renderLayerControls(): void {
 
   hairToolbar.innerHTML = `
     <div class="layer-mode-switch">
-      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair">发型层</button>
-      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton">骨骼层</button>
+      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair" aria-pressed="${state.selectedLayerMode === "hair"}">发型层</button>
+      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton" aria-pressed="${state.selectedLayerMode === "skeleton"}">骨骼层</button>
     </div>
     <label class="appearance-field">
       <span>发型名</span>
       <input type="text" id="hairStyleInput" value="${hairStyle}">
     </label>
-    ${(state.selectedLayerMode === "hair" ? hairLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}">${label}</button>`) : skeletonLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedSkeletonLayer === key ? "active" : ""}" data-skeleton-layer="${key}">${label}</button>`)).join("")}
+    ${(state.selectedLayerMode === "hair" ? hairLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}" aria-pressed="${state.selectedHairLayer === key}">${label}</button>`) : skeletonLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedSkeletonLayer === key ? "active" : ""}" data-skeleton-layer="${key}" aria-pressed="${state.selectedSkeletonLayer === key}">${label}</button>`)).join("")}
   `;
 
   for (const input of hairToolbar.querySelectorAll<HTMLInputElement>("#hairStyleInput")) {
@@ -688,8 +689,8 @@ function renderLayerControls(): void {
 
 function renderPixelTools(): void {
   pixelTools.innerHTML = `
-    <button type="button" class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill">绘制</button>
-    <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase">擦除</button>
+    <button type="button" class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill" aria-pressed="${state.paintMode === "fill"}">绘制</button>
+    <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase" aria-pressed="${state.paintMode === "erase"}">擦除</button>
     <button type="button" class="secondary" data-tool="mirror-h">水平镜像</button>
     <button type="button" class="secondary" data-tool="mirror-v">垂直镜像</button>
     <button type="button" class="secondary" data-tool="clear">清空图层</button>
@@ -715,7 +716,7 @@ function renderPixelTools(): void {
 }
 
 function readAppearanceFromEditor(): CharacterAppearance {
-  const base = structuredClone(state.appearanceDraft ?? defaultAppearance());
+  const base = normalizeAppearance(state.appearanceDraft ?? defaultAppearance());
 
   for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
     const key = input.dataset.appearanceKey as keyof CharacterBodyAppearance;
@@ -734,7 +735,7 @@ function readAppearanceFromEditor(): CharacterAppearance {
   const hairStyleInput = hairToolbar.querySelector<HTMLInputElement>("#hairStyleInput");
   if (hairStyleInput) base.style.hairStyle = hairStyleInput.value.trim() || "custom";
 
-  return base;
+  return normalizeAppearance(base);
 }
 
 function normalizeHairRows(rows: string[]): string[] {
@@ -784,7 +785,7 @@ function renderPixelEditorGrid(rows: string[]): void {
   }
   hairGrid.addEventListener("pointerleave", () => {
     dragging = false;
-  }, { once: true });
+  });
   window.addEventListener("pointerup", () => {
     dragging = false;
   }, { once: true });
@@ -823,6 +824,7 @@ function applyPixelTool(tool: string): void {
     case "copy-facing":
       copyCurrentLayerToSibling(rows);
       renderLayerControls();
+      renderAppearancePreview(state.appearanceDraft);
       return;
     case "export":
       void navigator.clipboard.writeText(JSON.stringify(state.appearanceDraft, null, 2));
@@ -832,9 +834,9 @@ function applyPixelTool(tool: string): void {
       const raw = window.prompt("粘贴外观 JSON");
       if (!raw) return;
       try {
-        state.appearanceDraft = JSON.parse(raw) as CharacterAppearance;
+        state.appearanceDraft = normalizeAppearance(JSON.parse(raw) as Partial<CharacterAppearance>);
         renderAppearanceEditor({
-          ...(state.availableCharacters.find((item) => item.id === state.selectedCharacterId) as CharacterSummary),
+          ...currentAppearanceCharacter(),
           appearance: state.appearanceDraft,
         });
       } catch {
@@ -893,11 +895,12 @@ async function saveSelectedCharacterAppearance(): Promise<void> {
   setLoginBusy(true, "保存外观中...");
   loginError.textContent = "";
   try {
-    const appearance = readAppearanceFromEditor();
+    const appearance = normalizeAppearance(readAppearanceFromEditor());
     if (!character || character.id === "draft") {
       const name = characterNameInput.value.trim() || state.accountUsername || "Hero";
       const created = await state.api.createCharacter(state.token, name);
       const updated = await state.api.updateCharacterAppearance(state.token, created.character.id, appearance);
+      state.selectedCharacterId = updated.character.id;
       await loadCharacters();
       renderAppearanceEditor(updated.character);
     } else {
@@ -972,6 +975,88 @@ function defaultAppearance() {
       metalPrimary: "#cfd8e3",
       metalShadow: "#7e8794",
     },
+  };
+}
+
+function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppearance): CharacterAppearance {
+  const fallback = defaultAppearance();
+  const body = { ...fallback.body, ...(input.body ?? {}) };
+  const palette = { ...fallback.palette, ...(input.palette ?? {}) };
+  const hair = { ...fallback.hair, ...(input.hair ?? {}) };
+  const skeleton = { ...fallback.skeleton, ...(input.skeleton ?? {}) };
+  const style = { ...fallback.style, ...(input.style ?? {}) };
+
+  return {
+    body: {
+      height: clamp(Math.round(body.height), 42, 58),
+      frontShoulderWidth: clamp(Math.round(body.frontShoulderWidth), 22, 28),
+      sideWidth: clamp(Math.round(body.sideWidth), 10, 16),
+      chestWidth: clamp(Math.round(body.chestWidth), 14, 28),
+      waistWidth: clamp(Math.round(body.waistWidth), 10, 26),
+      hipWidth: clamp(Math.round(body.hipWidth), 12, 27),
+      torsoHeight: clamp(Math.round(body.torsoHeight), 14, 26),
+      upperArmWidth: clamp(Math.round(body.upperArmWidth), 2, 8),
+      upperArmLength: clamp(Math.round(body.upperArmLength), 6, 18),
+      forearmWidth: clamp(Math.round(body.forearmWidth), 2, 7),
+      forearmLength: clamp(Math.round(body.forearmLength), 5, 17),
+      thighWidth: clamp(Math.round(body.thighWidth), 3, 9),
+      thighLength: clamp(Math.round(body.thighLength), 7, 20),
+      calfWidth: clamp(Math.round(body.calfWidth), 2, 8),
+      calfLength: clamp(Math.round(body.calfLength), 6, 19),
+      chestDepth: clamp(Math.round(body.chestDepth), 7, 16),
+      waistDepth: clamp(Math.round(body.waistDepth), 6, 15),
+      hipDepth: clamp(Math.round(body.hipDepth), 7, 16),
+      headScale: clamp(Math.round(body.headScale), 70, 140),
+    },
+    style: {
+      hairStyle: String(style.hairStyle || "custom").slice(0, 32),
+    },
+    hair: {
+      front: normalizeHairRows(hair.front ?? []),
+      back: normalizeHairRows(hair.back ?? []),
+      left: normalizeHairRows(hair.left ?? []),
+      right: normalizeHairRows(hair.right ?? []),
+      frontFg: normalizeHairRows(hair.frontFg ?? []),
+      backFg: normalizeHairRows(hair.backFg ?? []),
+      leftFg: normalizeHairRows(hair.leftFg ?? []),
+      rightFg: normalizeHairRows(hair.rightFg ?? []),
+    },
+    skeleton: {
+      frontTorso: normalizeHairRows(skeleton.frontTorso ?? []),
+      backTorso: normalizeHairRows(skeleton.backTorso ?? []),
+      leftTorso: normalizeHairRows(skeleton.leftTorso ?? []),
+      rightTorso: normalizeHairRows(skeleton.rightTorso ?? []),
+    },
+    palette: {
+      skinPrimary: normalizeHexColor(palette.skinPrimary, fallback.palette.skinPrimary),
+      skinShadow: normalizeHexColor(palette.skinShadow, fallback.palette.skinShadow),
+      hairPrimary: normalizeHexColor(palette.hairPrimary, fallback.palette.hairPrimary),
+      hairShadow: normalizeHexColor(palette.hairShadow, fallback.palette.hairShadow),
+      clothPrimary: normalizeHexColor(palette.clothPrimary, fallback.palette.clothPrimary),
+      clothShadow: normalizeHexColor(palette.clothShadow, fallback.palette.clothShadow),
+      metalPrimary: normalizeHexColor(palette.metalPrimary, fallback.palette.metalPrimary),
+      metalShadow: normalizeHexColor(palette.metalShadow, fallback.palette.metalShadow),
+    },
+  };
+}
+
+function normalizeHexColor(value: string | undefined, fallback: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(value ?? "") ? value! : fallback;
+}
+
+function currentAppearanceCharacter(): CharacterSummary {
+  return state.availableCharacters.find((item) => item.id === state.selectedCharacterId) ?? {
+    id: state.selectedCharacterId || "draft",
+    name: characterNameInput.value.trim() || state.accountUsername || "Hero",
+    version: 0,
+    stats: {} as never,
+    inventory: { items: [] },
+    warehouse: { items: [] },
+    position: { worldId: "", mapId: "", x: 0, y: 0 },
+    equipment: { visibleArmor: {} },
+    appearance: state.appearanceDraft ?? defaultAppearance(),
+    createdAt: "",
+    updatedAt: "",
   };
 }
 
