@@ -294,10 +294,11 @@ type CharacterSummary struct {
 }
 
 type CharacterAppearance struct {
-	Body    CharacterBodyAppearance    `json:"body"`
-	Style   CharacterStyleAppearance   `json:"style"`
-	Hair    CharacterHairAppearance    `json:"hair"`
-	Palette CharacterPaletteAppearance `json:"palette"`
+	Body     CharacterBodyAppearance     `json:"body"`
+	Style    CharacterStyleAppearance    `json:"style"`
+	Hair     CharacterHairAppearance     `json:"hair"`
+	Skeleton CharacterSkeletonAppearance `json:"skeleton"`
+	Palette  CharacterPaletteAppearance  `json:"palette"`
 }
 
 type CharacterBodyAppearance struct {
@@ -335,6 +336,13 @@ type CharacterHairAppearance struct {
 	BackFg  []string `json:"backFg"`
 	LeftFg  []string `json:"leftFg"`
 	RightFg []string `json:"rightFg"`
+}
+
+type CharacterSkeletonAppearance struct {
+	FrontTorso []string `json:"frontTorso"`
+	BackTorso  []string `json:"backTorso"`
+	LeftTorso  []string `json:"leftTorso"`
+	RightTorso []string `json:"rightTorso"`
 }
 
 type CharacterPaletteAppearance struct {

@@ -91,10 +91,11 @@ type Character struct {
 }
 
 type CharacterAppearance struct {
-	Body    CharacterBodyAppearance    `json:"body"`
-	Style   CharacterStyleAppearance   `json:"style"`
-	Hair    CharacterHairAppearance    `json:"hair"`
-	Palette CharacterPaletteAppearance `json:"palette"`
+	Body    CharacterBodyAppearance     `json:"body"`
+	Style   CharacterStyleAppearance    `json:"style"`
+	Hair    CharacterHairAppearance     `json:"hair"`
+	Skeleton CharacterSkeletonAppearance `json:"skeleton"`
+	Palette CharacterPaletteAppearance  `json:"palette"`
 }
 
 type CharacterBodyAppearance struct {
@@ -132,6 +133,13 @@ type CharacterHairAppearance struct {
 	BackFg  []string `json:"backFg"`
 	LeftFg  []string `json:"leftFg"`
 	RightFg []string `json:"rightFg"`
+}
+
+type CharacterSkeletonAppearance struct {
+	FrontTorso []string `json:"frontTorso"`
+	BackTorso  []string `json:"backTorso"`
+	LeftTorso  []string `json:"leftTorso"`
+	RightTorso []string `json:"rightTorso"`
 }
 
 type CharacterPaletteAppearance struct {
@@ -340,6 +348,12 @@ func defaultCharacterAppearance() CharacterAppearance {
 			LeftFg:  []string{"001"},
 			RightFg: []string{"100"},
 		},
+		Skeleton: CharacterSkeletonAppearance{
+			FrontTorso: []string{"01110", "11111", "11111", "01110"},
+			BackTorso:  []string{"01110", "11111", "11111", "01110"},
+			LeftTorso:  []string{"1110", "1111", "1111", "0111"},
+			RightTorso: []string{"0111", "1111", "1111", "1110"},
+		},
 		Palette: CharacterPaletteAppearance{
 			SkinPrimary:  "#f2c199",
 			SkinShadow:   "#d89b72",
@@ -445,6 +459,12 @@ func validateCharacterAppearance(appearance CharacterAppearance) error {
 		!validateHairLayer(appearance.Hair.BackFg) ||
 		!validateHairLayer(appearance.Hair.LeftFg) ||
 		!validateHairLayer(appearance.Hair.RightFg) {
+		return ErrCharacterAppearance
+	}
+	if !validateHairLayer(appearance.Skeleton.FrontTorso) ||
+		!validateHairLayer(appearance.Skeleton.BackTorso) ||
+		!validateHairLayer(appearance.Skeleton.LeftTorso) ||
+		!validateHairLayer(appearance.Skeleton.RightTorso) {
 		return ErrCharacterAppearance
 	}
 

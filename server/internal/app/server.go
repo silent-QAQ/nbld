@@ -1590,6 +1590,12 @@ func toProtocolAppearance(appearance CharacterAppearance) protocol.CharacterAppe
 			LeftFg:  appearance.Hair.LeftFg,
 			RightFg: appearance.Hair.RightFg,
 		},
+		Skeleton: protocol.CharacterSkeletonAppearance{
+			FrontTorso: appearance.Skeleton.FrontTorso,
+			BackTorso:  appearance.Skeleton.BackTorso,
+			LeftTorso:  appearance.Skeleton.LeftTorso,
+			RightTorso: appearance.Skeleton.RightTorso,
+		},
 		Palette: protocol.CharacterPaletteAppearance{
 			SkinPrimary:  appearance.Palette.SkinPrimary,
 			SkinShadow:   appearance.Palette.SkinShadow,
@@ -1786,6 +1792,12 @@ func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) Charact
 			BackFg:  appearance.Hair.BackFg,
 			LeftFg:  appearance.Hair.LeftFg,
 			RightFg: appearance.Hair.RightFg,
+		},
+		Skeleton: CharacterSkeletonAppearance{
+			FrontTorso: appearance.Skeleton.FrontTorso,
+			BackTorso:  appearance.Skeleton.BackTorso,
+			LeftTorso:  appearance.Skeleton.LeftTorso,
+			RightTorso: appearance.Skeleton.RightTorso,
 		},
 		Palette: CharacterPaletteAppearance{
 			SkinPrimary:  appearance.Palette.SkinPrimary,

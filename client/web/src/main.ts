@@ -94,6 +94,8 @@ type AppState = {
   currentTile?: ChunkTile;
   availableCharacters: CharacterSummary[];
   selectedCharacterId: string;
+  selectedHairLayer: keyof CharacterAppearance["hair"];
+  appearanceDraft: CharacterAppearance | null;
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -133,7 +135,8 @@ app.innerHTML = `
           <div class="appearance-preview" id="appearancePreview"></div>
           <div class="appearance-grid" id="appearanceGrid"></div>
           <div class="appearance-palette" id="appearancePalette"></div>
-          <div class="hair-grid" id="hairGrid"></div>
+          <div class="hair-toolbar" id="hairToolbar"></div>
+          <div class="pixel-editor" id="hairGrid"></div>
           <button id="saveAppearanceButton" class="secondary">保存外观</button>
         </div>
       </div>
@@ -163,6 +166,7 @@ const appearanceEditor = app.querySelector<HTMLElement>("#appearanceEditor")!;
 const appearancePreview = app.querySelector<HTMLElement>("#appearancePreview")!;
 const appearanceGrid = app.querySelector<HTMLElement>("#appearanceGrid")!;
 const appearancePalette = app.querySelector<HTMLElement>("#appearancePalette")!;
+const hairToolbar = app.querySelector<HTMLElement>("#hairToolbar")!;
 const hairGrid = app.querySelector<HTMLElement>("#hairGrid")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
@@ -196,6 +200,8 @@ const state: AppState = {
   lastMoveSendAt: 0,
   availableCharacters: [],
   selectedCharacterId: "",
+  selectedHairLayer: "front",
+  appearanceDraft: null,
 };
 
 baseUrlInput.value = localStorage.getItem("nbld_http_base_url") ?? window.location.origin;
@@ -350,6 +356,19 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     const wrapper = document.createElement("div");
     wrapper.className = "character-entry";
 
+    const preview = document.createElement("canvas");
+    preview.width = 96;
+    preview.height = 128;
+    preview.className = "character-card-canvas";
+    const previewCtx = preview.getContext("2d", { alpha: true })!;
+    previewCtx.imageSmoothingEnabled = false;
+    renderAvatarSkeleton(previewCtx, { x: 48, y: 104 }, character, "front", true, {
+      leftArm: 0,
+      rightArm: 0,
+      leftLeg: 0,
+      rightLeg: 0,
+    });
+
     const meta = document.createElement("div");
     meta.className = "character-meta";
     meta.innerHTML = `
@@ -390,7 +409,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     });
 
     actions.append(enterButton, deleteButton);
-    wrapper.append(meta, actions);
+    wrapper.append(preview, meta, actions);
     wrapper.addEventListener("click", () => {
       renderAppearanceEditor(character);
     });
@@ -401,10 +420,11 @@ function renderCharacterList(characters: CharacterSummary[]): void {
 function renderAppearanceEditor(character: CharacterSummary): void {
   appearanceEditor.classList.remove("hidden");
   state.selectedCharacterId = character.id;
-  renderAppearancePreview(character.appearance);
-  renderAppearanceControls(character.appearance.body);
-  renderPaletteControls(character.appearance.palette);
-  renderHairControls(character.appearance.hair, character.appearance.style.hairStyle);
+  state.appearanceDraft = structuredClone(character.appearance);
+  renderAppearancePreview(state.appearanceDraft);
+  renderAppearanceControls(state.appearanceDraft.body);
+  renderPaletteControls(state.appearanceDraft.palette);
+  renderHairControls();
 }
 
 function renderAppearancePreview(appearance: CharacterAppearance): void {
@@ -469,7 +489,9 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
 
   for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
     input.addEventListener("input", () => {
-      renderAppearancePreview(readAppearanceFromEditor());
+      if (!state.appearanceDraft) return;
+      state.appearanceDraft = readAppearanceFromEditor();
+      renderAppearancePreview(state.appearanceDraft);
     });
   }
 }
@@ -495,12 +517,17 @@ function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
 
   for (const input of appearancePalette.querySelectorAll<HTMLInputElement>("input[data-palette-key]")) {
     input.addEventListener("input", () => {
-      renderAppearancePreview(readAppearanceFromEditor());
+      if (!state.appearanceDraft) return;
+      state.appearanceDraft = readAppearanceFromEditor();
+      renderAppearancePreview(state.appearanceDraft);
     });
   }
 }
 
-function renderHairControls(hair: CharacterAppearance["hair"], hairStyle: string): void {
+function renderHairControls(): void {
+  if (!state.appearanceDraft) return;
+  const hair = state.appearanceDraft.hair;
+  const hairStyle = state.appearanceDraft.style.hairStyle;
   const layers: Array<[keyof CharacterAppearance["hair"], string]> = [
     ["front", "前层后发"],
     ["frontFg", "前层前发"],
@@ -512,23 +539,33 @@ function renderHairControls(hair: CharacterAppearance["hair"], hairStyle: string
     ["rightFg", "右侧前发"],
   ];
 
-  hairGrid.innerHTML = `
+  hairToolbar.innerHTML = `
     <label class="appearance-field">
       <span>发型名</span>
       <input type="text" id="hairStyleInput" value="${hairStyle}">
     </label>
-    ${layers.map(([key, label]) => `
-      <label class="appearance-field hair-field">
-        <span>${label}</span>
-        <textarea data-hair-key="${key}" rows="4">${(hair[key] ?? []).join("\n")}</textarea>
-      </label>
-    `).join("")}
+    ${layers.map(([key, label]) => `<button class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}">${label}</button>`).join("")}
   `;
+
+  for (const input of hairToolbar.querySelectorAll<HTMLInputElement>("#hairStyleInput")) {
+    input.addEventListener("input", () => {
+      if (!state.appearanceDraft) return;
+      state.appearanceDraft.style.hairStyle = input.value.trim() || "custom";
+    });
+  }
+
+  for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-hair-layer]")) {
+    button.addEventListener("click", () => {
+      state.selectedHairLayer = button.dataset.hairLayer as keyof CharacterAppearance["hair"];
+      renderHairControls();
+    });
+  }
+
+  renderPixelEditorGrid(hair[state.selectedHairLayer] ?? []);
 }
 
 function readAppearanceFromEditor(): CharacterAppearance {
-  const character = state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
-  const base = structuredClone(character?.appearance ?? defaultAppearance());
+  const base = structuredClone(state.appearanceDraft ?? defaultAppearance());
 
   for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
     const key = input.dataset.appearanceKey as keyof CharacterBodyAppearance;
@@ -545,16 +582,52 @@ function readAppearanceFromEditor(): CharacterAppearance {
   }
 
   const hairStyleInput = hairGrid.querySelector<HTMLInputElement>("#hairStyleInput");
-  if (hairStyleInput) {
-    base.style.hairStyle = hairStyleInput.value.trim() || "custom";
-  }
-
-  for (const input of hairGrid.querySelectorAll<HTMLTextAreaElement>("textarea[data-hair-key]")) {
-    const key = input.dataset.hairKey as keyof CharacterAppearance["hair"];
-    base.hair[key] = input.value.split("\n").map((row) => row.trim()).filter(Boolean);
-  }
+  if (hairStyleInput) base.style.hairStyle = hairStyleInput.value.trim() || "custom";
 
   return base;
+}
+
+function normalizeHairRows(rows: string[]): string[] {
+  return rows
+    .map((row) => row.replace(/[^01]/g, ""))
+    .filter((row) => row.length > 0)
+    .slice(0, 24)
+    .map((row) => row.slice(0, 24));
+}
+
+function renderPixelEditorGrid(rows: string[]): void {
+  const width = 24;
+  const height = 24;
+  const normalized = normalizeHairRows(rows);
+  const matrix = Array.from({ length: height }, (_, y) => {
+    const row = normalized[y] ?? "";
+    return Array.from({ length: width }, (_, x) => row[x] === "1");
+  });
+
+  hairGrid.innerHTML = "";
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const cell = document.createElement("button");
+      cell.className = `pixel-cell ${matrix[y][x] ? "filled" : ""}`;
+      cell.dataset.x = String(x);
+      cell.dataset.y = String(y);
+      cell.addEventListener("click", () => {
+        matrix[y][x] = !matrix[y][x];
+        cell.classList.toggle("filled", matrix[y][x]);
+        updateDraftHairFromMatrix(matrix);
+      });
+      hairGrid.appendChild(cell);
+    }
+  }
+}
+
+function updateDraftHairFromMatrix(matrix: boolean[][]): void {
+  if (!state.appearanceDraft) return;
+  const rows = matrix
+    .map((row) => row.map((cell) => (cell ? "1" : "0")).join("").replace(/0+$/g, ""))
+    .filter((row) => row.length > 0);
+  state.appearanceDraft.hair[state.selectedHairLayer] = normalizeHairRows(rows);
+  renderAppearancePreview(state.appearanceDraft);
 }
 
 async function saveSelectedCharacterAppearance(): Promise<void> {

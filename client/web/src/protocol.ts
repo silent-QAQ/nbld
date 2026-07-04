@@ -146,6 +146,13 @@ export type CharacterHairAppearance = {
   rightFg: string[];
 };
 
+export type CharacterSkeletonAppearance = {
+  frontTorso: string[];
+  backTorso: string[];
+  leftTorso: string[];
+  rightTorso: string[];
+};
+
 export type CharacterPaletteAppearance = {
   skinPrimary: string;
   skinShadow: string;
@@ -161,6 +168,7 @@ export type CharacterAppearance = {
   body: CharacterBodyAppearance;
   style: CharacterStyleAppearance;
   hair: CharacterHairAppearance;
+  skeleton: CharacterSkeletonAppearance;
   palette: CharacterPaletteAppearance;
 };
 

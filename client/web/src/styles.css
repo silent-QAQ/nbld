@@ -209,6 +209,13 @@ input {
 
 .hair-grid {
   display: grid;
+  grid-template-columns: repeat(24, 12px);
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.hair-toolbar {
+  display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-top: 12px;
@@ -234,6 +241,30 @@ input {
   font: 12px/1.4 monospace;
 }
 
+.hair-layer-btn.active {
+  background: var(--accent);
+  color: #1f1608;
+}
+
+.pixel-editor {
+  align-items: start;
+}
+
+.pixel-cell {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  border-radius: 2px;
+}
+
+.pixel-cell.filled {
+  background: var(--accent);
+  border-color: rgba(0,0,0,0.22);
+}
+
 .character-entry {
   width: 100%;
   margin-top: 0;
@@ -243,6 +274,17 @@ input {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px;
+}
+
+.character-card-canvas {
+  display: block;
+  margin: 0 auto 8px;
+  width: 96px;
+  height: 128px;
+  image-rendering: pixelated;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.14));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
 }
 
 .character-meta {
