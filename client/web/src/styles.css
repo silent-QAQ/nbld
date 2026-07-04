@@ -57,9 +57,22 @@ input {
 .login-panel {
   left: 50%;
   top: 50%;
-  width: min(420px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
   transform: translate(-50%, -50%);
   padding: 22px;
+}
+
+.auth-page,
+.character-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-hint {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .login-panel h1 {

@@ -20,8 +20,7 @@ const CHUNK_SIZE = 80;
 const CHUNK_TEXTURE_SCALE = 4;
 const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
 const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
-const MIN_TILE_SCALE = 2;
-const MAX_TILE_SCALE = 32;
+const FIXED_TILE_SCALE = 12;
 const CHUNK_REFRESH_INTERVAL_MS = 500;
 const MOVE_SEND_INTERVAL_MS = 90;
 const RENDER_CHUNK_RADIUS = 1;
@@ -82,7 +81,6 @@ type AppState = {
   player: Position;
   camera: Position;
   tileScale: number;
-  userZoomed: boolean;
   chunks: Map<string, ChunkRender>;
   players: Map<string, WorldPlayer>;
   pressed: Set<string>;
@@ -110,33 +108,36 @@ app.innerHTML = `
   <div class="shell">
     <canvas class="world-canvas"></canvas>
     <section class="login-panel">
-      <h1>NBLD H5 客户端</h1>
-      <p>使用邮箱注册/登录，然后选择角色进入世界。</p>
-      <label for="baseUrl">服务端地址</label>
-      <input id="baseUrl" spellcheck="false" />
-      <label for="emailInput">邮箱</label>
-      <input id="emailInput" spellcheck="false" />
-      <label for="usernameInput">用户名（注册时使用）</label>
-      <input id="usernameInput" spellcheck="false" />
-      <label for="passwordInput">密码</label>
-      <input id="passwordInput" type="password" />
-      <label for="confirmPasswordInput">再次输入密码（注册时使用）</label>
-      <input id="confirmPasswordInput" type="password" />
-      <div class="login-actions">
-        <button id="loginButton">邮箱登录</button>
-        <button id="registerButton" class="secondary">注册账号</button>
+      <div class="auth-page" id="authPage">
+        <h1>NBLD H5 客户端</h1>
+        <p>使用邮箱注册/登录。</p>
+        <label for="baseUrl">服务端地址</label>
+        <input id="baseUrl" spellcheck="false" />
+        <label for="emailInput">邮箱</label>
+        <input id="emailInput" spellcheck="false" />
+        <label for="usernameInput">用户名（注册时使用）</label>
+        <input id="usernameInput" spellcheck="false" />
+        <label for="passwordInput">密码</label>
+        <input id="passwordInput" type="password" />
+        <label for="confirmPasswordInput">再次输入密码（注册时使用）</label>
+        <input id="confirmPasswordInput" type="password" />
+        <div class="login-actions">
+          <button id="loginButton">邮箱登录</button>
+          <button id="registerButton" class="secondary">注册账号</button>
+        </div>
       </div>
       <div class="character-panel hidden" id="characterPanel">
         <div class="character-header">
           <strong id="accountSummary">未登录</strong>
           <button id="logoutButton" class="secondary">退出登录 / 返回登录页</button>
         </div>
+        <p class="section-hint">选择角色进入世界，或创建新角色。</p>
+        <div class="character-list" id="characterList"></div>
         <label for="characterNameInput">新角色名</label>
         <input id="characterNameInput" spellcheck="false" />
         <button id="createCharacterButton" class="secondary">创建角色</button>
-        <div class="character-list" id="characterList"></div>
         <div class="appearance-editor hidden" id="appearanceEditor">
-          <h3>角色外观</h3>
+          <h3>角色外观编辑</h3>
           <div class="appearance-preview" id="appearancePreview"></div>
           <div class="appearance-grid" id="appearanceGrid"></div>
           <div class="appearance-palette" id="appearancePalette"></div>
@@ -157,6 +158,7 @@ app.innerHTML = `
 const canvas = app.querySelector<HTMLCanvasElement>(".world-canvas")!;
 const ctx = canvas.getContext("2d", { alpha: false })!;
 const loginPanel = app.querySelector<HTMLElement>(".login-panel")!;
+const authPage = app.querySelector<HTMLElement>("#authPage")!;
 const loginError = app.querySelector<HTMLElement>("#loginError")!;
 const loginButton = app.querySelector<HTMLButtonElement>("#loginButton")!;
 const registerButton = app.querySelector<HTMLButtonElement>("#registerButton")!;
@@ -194,8 +196,7 @@ const state: AppState = {
   mapId: "map_0_0",
   player: { x: 0, y: 0 },
   camera: { x: 0, y: 0 },
-  tileScale: 8,
-  userZoomed: false,
+  tileScale: FIXED_TILE_SCALE,
   chunks: new Map(),
   players: new Map(),
   pressed: new Set(),
@@ -258,17 +259,6 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => {
   state.pressed.delete(event.code);
 });
-canvas.addEventListener(
-  "wheel",
-  (event) => {
-    event.preventDefault();
-    const factor = event.deltaY > 0 ? 0.9 : 1.1;
-    state.tileScale = clamp(state.tileScale * factor, MIN_TILE_SCALE, MAX_TILE_SCALE);
-    state.userZoomed = true;
-  },
-  { passive: false },
-);
-
 resizeCanvas();
 restoreSessionFromStorage();
 requestAnimationFrame(loop);
@@ -345,6 +335,7 @@ async function loadCharacters(): Promise<void> {
   const roster = await state.api.characters(state.token);
   state.availableCharacters = roster.active ?? [];
   renderCharacterList(state.availableCharacters);
+  authPage.classList.add("hidden");
   characterPanel.classList.remove("hidden");
   accountSummary.textContent = `${state.accountUsername || state.accountEmail} (${state.accountId})`;
 
@@ -1007,6 +998,7 @@ function logoutToLogin(): void {
 
   localStorage.removeItem("nbld_session");
   loginPanel.classList.remove("hidden");
+  authPage.classList.remove("hidden");
   characterPanel.classList.add("hidden");
   hud.classList.add("hidden");
   debugPanel.classList.add("hidden");
@@ -1509,12 +1501,7 @@ function resizeCanvas(): void {
   canvas.height = Math.max(1, Math.floor(window.innerHeight));
   canvas.style.width = `${window.innerWidth}px`;
   canvas.style.height = `${window.innerHeight}px`;
-
-  if (!state.userZoomed) {
-    const scaleX = canvas.width / TARGET_VISIBLE_TILES_X;
-    const scaleY = canvas.height / TARGET_VISIBLE_TILES_Y;
-    state.tileScale = clamp(Math.min(scaleX, scaleY), MIN_TILE_SCALE, MAX_TILE_SCALE);
-  }
+  state.tileScale = FIXED_TILE_SCALE;
 }
 
 function coordKey(coord: ChunkCoord): string {
