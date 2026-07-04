@@ -111,8 +111,8 @@ func TestGuestLoginEnterWorldMoveAndState(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &chunkWindow); err != nil {
 		t.Fatalf("decode chunk window: %v", err)
 	}
-	if len(chunkWindow.Chunks) != 25 {
-		t.Fatalf("expected 25 chunks in 5x5 window, got %d", len(chunkWindow.Chunks))
+	if len(chunkWindow.Chunks) != 9 {
+		t.Fatalf("expected 9 chunks in 3x3 window, got %d", len(chunkWindow.Chunks))
 	}
 	if len(chunkWindow.Chunks[0].Tiles) != 80*80 {
 		t.Fatalf("expected 80x80 tiles per chunk, got %d", len(chunkWindow.Chunks[0].Tiles))

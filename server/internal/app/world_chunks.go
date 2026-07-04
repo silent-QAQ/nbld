@@ -19,7 +19,7 @@ import (
 const (
 	chunkTileSize = 80
 	mapChunkSpan  = 6400
-	chunkLoadSpan = 5
+	chunkLoadSpan = 3
 	chunkRadius   = chunkLoadSpan / 2
 )
 

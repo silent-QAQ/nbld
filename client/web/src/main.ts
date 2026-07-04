@@ -20,7 +20,7 @@ const CHUNK_SIZE = 80;
 const TILE_TEXTURE_SIZE_PX = 32;
 const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
 const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
-const CHUNK_REFRESH_INTERVAL_MS = 500;
+const IDLE_CHUNK_REFRESH_INTERVAL_MS = 5000;
 const MOVE_SEND_INTERVAL_MS = 90;
 const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
@@ -92,6 +92,7 @@ type AppState = {
   lastChunkKey: string;
   lastChunkRefreshAt: number;
   lastMoveSendAt: number;
+  chunkRefreshInFlight: boolean;
   currentTile?: ChunkTile;
   availableCharacters: CharacterSummary[];
   selectedCharacterId: string;
@@ -242,6 +243,7 @@ const state: AppState = {
   lastChunkKey: "",
   lastChunkRefreshAt: 0,
   lastMoveSendAt: 0,
+  chunkRefreshInFlight: false,
   availableCharacters: [],
   selectedCharacterId: "",
   selectedHairLayer: "front",
@@ -1373,7 +1375,9 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 
   const occupied = positionToOccupiedTile(state.player);
   const chunkKey = `${state.mapId}:${worldToChunk(occupied.x)}:${worldToChunk(occupied.y)}`;
-  if (chunkKey !== state.lastChunkKey || now - state.lastChunkRefreshAt > CHUNK_REFRESH_INTERVAL_MS) {
+  const movedToNewChunk = chunkKey !== state.lastChunkKey;
+  const idleRefreshDue = state.pressed.size === 0 && now - state.lastChunkRefreshAt > IDLE_CHUNK_REFRESH_INTERVAL_MS;
+  if (movedToNewChunk || idleRefreshDue) {
     state.lastChunkKey = chunkKey;
     state.lastChunkRefreshAt = now;
     void refreshChunks(false);
@@ -1397,9 +1401,11 @@ function sendMove(): void {
 
 async function refreshChunks(force: boolean): Promise<void> {
   if (!state.api || !state.token) return;
+  if (state.chunkRefreshInFlight) return;
   if (!force && state.status === "加载区块中") return;
 
   const previousStatus = state.status;
+  state.chunkRefreshInFlight = true;
   state.status = "加载区块中";
   try {
     const windowData = await state.api.chunks(state.token);
@@ -1408,6 +1414,8 @@ async function refreshChunks(force: boolean): Promise<void> {
   } catch (error) {
     state.status = previousStatus;
     state.lastError = errorToString(error);
+  } finally {
+    state.chunkRefreshInFlight = false;
   }
 }
 
@@ -1417,9 +1425,19 @@ function applyChunkWindow(windowData: ChunkWindowResponse): void {
     state.chunks.delete(coordKey(coord));
   }
   for (const chunk of windowData.chunks) {
-    state.chunks.set(coordKey(chunk.coord), renderChunk(chunk));
+    const key = coordKey(chunk.coord);
+    const previous = state.chunks.get(key);
+    if (previous && canReuseRenderedChunk(chunk)) {
+      previous.snapshot = chunk;
+      continue;
+    }
+    state.chunks.set(key, renderChunk(chunk));
   }
   state.currentTile = findTileAt(state.player.x, state.player.y);
+}
+
+function canReuseRenderedChunk(snapshot: ChunkSnapshot): boolean {
+  return !snapshot.dirty && (!snapshot.deltaTiles || snapshot.deltaTiles.length === 0);
 }
 
 function renderChunk(snapshot: ChunkSnapshot): ChunkRender {
