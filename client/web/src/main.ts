@@ -19,8 +19,8 @@ const MAX_TILE_SCALE = 32;
 const CHUNK_REFRESH_INTERVAL_MS = 500;
 const MOVE_SEND_INTERVAL_MS = 90;
 const RENDER_CHUNK_RADIUS = 1;
-const TARGET_VISIBLE_TILES_X = 80;
-const TARGET_VISIBLE_TILES_Y = 45;
+const TARGET_VISIBLE_TILES_X = 40;
+const TARGET_VISIBLE_TILES_Y = 22.5;
 
 type ChunkRender = {
   snapshot: ChunkSnapshot;

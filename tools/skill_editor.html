@@ -458,7 +458,7 @@
   <header class="topbar">
     <div class="brand">
       <h1>技能编辑器</h1>
-      <span>触发器 · 目标器 · 量化条件 · 机制效果</span>
+      <span>触发器 · 锚点目标器 · 量化条件 · 机制效果</span>
     </div>
     <div class="top-actions">
       <button id="addStepTop" class="primary">新增步骤</button>
@@ -559,27 +559,18 @@
               <select id="stepTrigger"></select>
             </div>
             <div class="field">
-              <label for="targeter">目标器</label>
+              <label for="targeter">锚点目标器</label>
               <select id="targeter"></select>
             </div>
             <div class="field">
-              <label for="targetRange">目标距离</label>
+              <label for="targetRange">锚点搜索距离</label>
               <input id="targetRange" type="number" min="0" step="0.1" value="4">
             </div>
+            <input id="targetRadius" type="hidden" value="0">
+            <input id="targetAngle" type="hidden" value="0">
+            <input id="targetWidth" type="hidden" value="0">
             <div class="field">
-              <label for="targetRadius">目标半径</label>
-              <input id="targetRadius" type="number" min="0" step="0.1" value="0">
-            </div>
-            <div class="field">
-              <label for="targetAngle">目标角度</label>
-              <input id="targetAngle" type="number" min="0" step="1" value="0">
-            </div>
-            <div class="field">
-              <label for="targetWidth">目标宽度</label>
-              <input id="targetWidth" type="number" min="0" step="0.1" value="0.6">
-            </div>
-            <div class="field">
-              <label for="maxTargets">目标上限</label>
+              <label for="maxTargets">锚点上限</label>
               <input id="maxTargets" type="number" min="1" step="1" value="1">
             </div>
             <div class="field">
@@ -709,16 +700,12 @@
     ];
 
     const targeters = [
-      ["self", "自身"],
-      ["current", "当前目标"],
-      ["hit", "命中目标"],
-      ["line", "前方直线"],
-      ["cone", "前方扇形"],
-      ["circle", "圆形范围"],
-      ["nearEnemies", "周围敌人"],
-      ["nearAllies", "周围友方"],
-      ["point", "指定点"],
-      ["owner", "召唤者"]
+      ["self", "自身锚点"],
+      ["current", "当前目标锚点"],
+      ["hit", "命中目标锚点"],
+      ["point", "指定点锚点"],
+      ["owner", "召唤者锚点"],
+      ["marker", "标记点锚点"]
     ];
 
     const conditionScopes = [
@@ -772,7 +759,7 @@
     const mechanicCategories = [
       ["all", "全部"],
       ["damage", "伤害"],
-      ["shape", "形状"],
+      ["shape", "载体"],
       ["motion", "位移"],
       ["state", "状态"],
       ["entity", "实体"],
@@ -781,7 +768,14 @@
     ];
 
     const mechanics = [
-      mechanic("damage", "伤害", "Damage", "damage", "对目标造成一次即时伤害，是所有武器主动技能的基础输出单元。", ["current", "hit", "line", "cone", "circle"], [
+      mechanic("damage", "伤害", "Damage", "damage", "对目标造成一次即时伤害。形状由本效果的 shape 参数决定，目标器只提供锚点。", ["self", "current", "hit", "point"], [
+        ["shape", "判定形状", "select", "target", [["target", "锚点目标"], ["line", "直线"], ["cone", "扇形"], ["circle", "圆形"]]],
+        ["range", "距离", "number", "0"],
+        ["radius", "半径", "number", "0"],
+        ["width", "宽度", "number", "0"],
+        ["angle", "角度", "number", "0"],
+        ["max_targets", "目标上限", "number", "1"],
+        ["team", "阵营", "select", "enemy", [["enemy", "敌方"], ["ally", "友方"], ["both", "全部"]]],
         ["damage_type", "类型", "select", "physical", [["physical", "物理"], ["magical", "法术"]]],
         ["ratio", "倍率", "number", "1.2"],
         ["flat", "固定值", "number", "0"],
@@ -789,7 +783,7 @@
         ["extra_damage", "追加伤害", "select", "false", [["false", "否"], ["true", "是"]]],
         ["trigger_hit_event", "触发命中事件", "select", "true", [["true", "是"], ["false", "否"]]]
       ]),
-      mechanic("dot", "持续伤害", "DoT", "damage", "挂载持续伤害；适合灼烧、毒、流血，不建议用高频区域伤害模拟。", ["hit", "circle", "nearEnemies"], [
+      mechanic("dot", "持续伤害", "DoT", "damage", "挂载持续伤害；适合灼烧、毒、流血，不建议用高频区域伤害模拟。", ["hit", "current", "point"], [
         ["dot_id", "持续伤害", "text", "burning"],
         ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
         ["ratio", "每跳倍率", "number", "0.18"],
@@ -797,13 +791,13 @@
         ["tick", "跳频", "number", "1"],
         ["stack_mode", "叠加模式", "select", "refresh", [["refresh", "刷新"], ["stack", "叠层"], ["independent", "独立"]]]
       ]),
-      mechanic("heal", "治疗", "Heal", "damage", "对友方或自身回复生命，默认按法术攻击计算。", ["self", "nearAllies", "current"], [
+      mechanic("heal", "治疗", "Heal", "damage", "对友方或自身回复生命，范围治疗通过效果参数过滤友方。", ["self", "current", "point"], [
         ["ratio", "法攻倍率", "number", "0.8"],
         ["flat", "固定值", "number", "0"],
         ["can_crit", "治疗暴击", "select", "false", [["false", "否"], ["true", "是"]]],
         ["overheal_to_shield", "溢出转护盾", "select", "false", [["false", "否"], ["true", "是"]]]
       ]),
-      mechanic("projectile", "投射物", "Projectile", "shape", "生成 2D 投射物；命中后可造成伤害、穿透或追踪。", ["self", "point", "current"], [
+      mechanic("projectile", "投射物", "Projectile", "shape", "生成 2D 投射物；发射起点由目标器提供，飞行与碰撞形状由效果参数提供。", ["self", "point", "current"], [
         ["projectile_id", "投射物", "text", "frost_star"],
         ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
         ["speed", "速度", "number", "12"],
@@ -820,7 +814,7 @@
         ["mode", "模式", "select", "add", [["add", "加法"], ["mul", "乘法"], ["set", "设定"]]],
         ["value", "数值", "number", "1"]
       ]),
-      mechanic("ray", "射线", "Ray", "shape", "生成瞬时或持续射线；适合光束、穿刺、锁定引导。", ["line", "current"], [
+      mechanic("ray", "射线", "Ray", "shape", "生成瞬时或持续射线；射线方向和尺寸属于效果载体，不属于目标器。", ["self", "current", "point"], [
         ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
         ["length", "长度", "number", "8"],
         ["width", "宽度", "number", "0.5"],
@@ -829,7 +823,7 @@
         ["max_targets", "目标上限", "number", "5"],
         ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
       ]),
-      mechanic("area", "区域", "Area", "shape", "生成持续区域；区域本身负责筛选，实际伤害和状态也可拆成技能组。", ["point", "circle", "self"], [
+      mechanic("area", "区域", "Area", "shape", "生成持续区域；区域形状属于效果载体，目标器只决定区域中心。", ["point", "self", "current", "hit"], [
         ["shape", "形状", "select", "circle", [["circle", "圆形"], ["rect", "矩形"], ["sector", "扇形"], ["line", "线形"]]],
         ["radius", "半径", "number", "3"],
         ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
@@ -861,60 +855,60 @@
         ["duration", "耗时", "number", "0.15"],
         ["collision", "碰撞处理", "select", "stop", [["stop", "遇阻停止"], ["slide", "沿墙滑动"], ["ignore", "忽略碰撞"]]]
       ]),
-      mechanic("velocity", "速度修改", "Velocity", "motion", "直接修改单位速度向量，适合击飞、加速、减速推拉。", ["self", "hit", "nearEnemies"], [
+      mechanic("velocity", "速度修改", "Velocity", "motion", "直接修改单位速度向量，适合击飞、加速、减速推拉。", ["self", "hit", "current"], [
         ["mode", "方向", "select", "forward", [["forward", "向前"], ["backward", "向后"], ["towards", "朝目标"], ["away", "远离目标"], ["vector", "指定向量"]]],
         ["speed", "速度", "number", "8"],
         ["duration", "持续", "number", "0.25"],
         ["damping", "阻尼", "number", "0.2"]
       ]),
-      mechanic("force", "力场", "Force", "motion", "对范围内目标施加吸引、排斥、旋涡力。", ["circle", "point", "self"], [
+      mechanic("force", "力场", "Force", "motion", "以锚点为中心对范围内目标施加吸引、排斥、旋涡力。", ["point", "self", "current"], [
         ["mode", "模式", "select", "pull", [["pull", "吸引"], ["push", "排斥"], ["vortex", "旋涡"]]],
         ["radius", "半径", "number", "3"],
         ["strength", "强度", "number", "6"],
         ["duration", "持续", "number", "1"],
         ["tick", "跳频", "number", "0.1"]
       ]),
-      mechanic("status", "状态", "Status", "state", "添加、移除或净化状态；Buff/Debuff 都归入状态系统。", ["self", "hit", "nearAllies", "nearEnemies"], [
+      mechanic("status", "状态", "Status", "state", "添加、移除或净化状态；Buff/Debuff 都归入状态系统。", ["self", "hit", "current", "point"], [
         ["status_id", "状态", "text", "slow"],
         ["operation", "操作", "select", "apply", [["apply", "添加"], ["remove", "移除"], ["cleanse", "净化"]]],
         ["value", "强度", "number", "0.2"],
         ["duration", "持续", "number", "2"],
         ["stack_limit", "层数上限", "number", "1"]
       ]),
-      mechanic("control", "控制", "Control", "state", "施加硬控或软控，必须受韧性/免控规则影响。", ["hit", "current", "circle", "nearEnemies"], [
+      mechanic("control", "控制", "Control", "state", "施加硬控或软控，必须受韧性/免控规则影响。", ["hit", "current", "point"], [
         ["control", "类型", "select", "freeze", [["freeze", "冻结"], ["stun", "眩晕"], ["root", "定身"], ["silence", "沉默"], ["interrupt", "打断"], ["airborne", "浮空"]]],
         ["duration", "持续", "number", "1.5"],
         ["break_on_damage", "受击解除", "select", "false", [["false", "否"], ["true", "是"]]]
       ]),
-      mechanic("shield", "护盾", "Shield", "state", "给目标添加可被伤害消耗的护盾。", ["self", "nearAllies", "current"], [
+      mechanic("shield", "护盾", "Shield", "state", "给目标添加可被伤害消耗的护盾。", ["self", "current", "point"], [
         ["shield_id", "护盾", "text", "guard_shield"],
         ["ratio", "倍率", "number", "0.6"],
         ["flat", "固定值", "number", "0"],
         ["duration", "持续", "number", "4"],
         ["damage_type", "吸收类型", "select", "both", [["physical", "物理"], ["magical", "法术"], ["both", "全部"]]]
       ]),
-      mechanic("immunity", "免疫", "Immunity", "state", "短时间免疫指定伤害、控制或追加伤害，用于翻滚、格挡、霸体窗口。", ["self", "nearAllies"], [
+      mechanic("immunity", "免疫", "Immunity", "state", "短时间免疫指定伤害、控制或追加伤害，用于翻滚、格挡、霸体窗口。", ["self", "current", "point"], [
         ["immune_type", "免疫类型", "select", "control", [["damage", "伤害"], ["control", "控制"], ["extra_damage", "追加伤害"], ["all", "全部"]]],
         ["duration", "持续", "number", "0.8"],
         ["value", "强度", "number", "1"]
       ]),
-      mechanic("dispel", "驱散", "Dispel", "state", "按标签移除状态，适合净化、破盾、解除增益。", ["self", "hit", "nearAllies", "nearEnemies"], [
+      mechanic("dispel", "驱散", "Dispel", "state", "按标签移除状态，适合净化、破盾、解除增益。", ["self", "hit", "current", "point"], [
         ["dispel_type", "驱散类型", "select", "debuff", [["buff", "增益"], ["debuff", "减益"], ["control", "控制"], ["shield", "护盾"]]],
         ["count", "数量", "number", "1"],
         ["priority", "优先级", "select", "newest", [["newest", "最新"], ["oldest", "最旧"], ["strongest", "最强"], ["random", "随机"]]]
       ]),
-      mechanic("resource", "资源", "Resource", "state", "修改生命、法力、耐力；非伤害型扣血也走这里。", ["self", "hit", "nearAllies"], [
+      mechanic("resource", "资源", "Resource", "state", "修改生命、法力、耐力；非伤害型扣血也走这里。", ["self", "hit", "current"], [
         ["resource", "资源", "select", "mana", [["hp", "生命"], ["mana", "法力"], ["stamina", "耐力"]]],
         ["operation", "操作", "select", "restore", [["restore", "回复"], ["drain", "削减"], ["cost", "消耗"], ["set", "设定"]]],
         ["value", "比例", "number", "0.1"]
       ]),
-      mechanic("attribute", "属性修改", "Attribute", "state", "临时修改属性，属性名必须来自属性系统。", ["self", "hit", "nearAllies", "nearEnemies"], [
+      mechanic("attribute", "属性修改", "Attribute", "state", "临时修改属性，属性名必须来自属性系统。", ["self", "hit", "current", "point"], [
         ["attribute", "属性", "select", "physical_attack", [["physical_attack", "物理攻击"], ["magic_attack", "法术攻击"], ["physical_defense", "物理防御"], ["magic_defense", "法术防御"], ["move_speed", "移速"], ["damage_bonus", "伤害加成"], ["damage_immunity", "伤害免疫"], ["crit_resist", "暴击抵抗"]]],
         ["mode", "模式", "select", "add", [["add", "加法"], ["mul", "乘法"], ["override", "覆盖"]]],
         ["value", "数值", "number", "0.1"],
         ["duration", "持续", "number", "6"]
       ]),
-      mechanic("stack", "层数", "Stack", "state", "处理可被条件读取的层数。", ["self", "hit", "nearEnemies"], [
+      mechanic("stack", "层数", "Stack", "state", "处理可被条件读取的层数。", ["self", "hit", "current", "point"], [
         ["stack_id", "层数", "select", "frost", [["frost", "寒霜"], ["burn", "灼烧"], ["armor_break", "破甲"], ["bleed", "流血"]]],
         ["operation", "操作", "select", "add", [["add", "叠加"], ["consume", "消耗"], ["detonate", "引爆"], ["spread", "扩散"], ["set", "设定"]]],
         ["count", "数量", "number", "1"],
@@ -953,7 +947,7 @@
         ["duration", "窗口", "number", "1.2"],
         ["max_stage", "最大段数", "number", "3"]
       ]),
-      mechanic("chain", "连锁", "Chain", "logic", "在目标之间传递效果，接近 MythicMobs 链式技能但限制为 2D 可控范围。", ["hit", "current", "nearEnemies"], [
+      mechanic("chain", "连锁", "Chain", "logic", "以锚点目标为起点在目标之间传递效果，接近 MythicMobs 链式技能但限制为 2D 可控范围。", ["hit", "current"], [
         ["chain_id", "连锁", "text", "lightning_chain"],
         ["jumps", "跳数", "number", "3"],
         ["radius", "跳跃半径", "number", "4"],
@@ -964,7 +958,7 @@
         ["event_id", "事件", "text", "pojun_execute"],
         ["payload", "参数", "text", ""]
       ]),
-      mechanic("meta", "技能组", "MetaSkill", "meta", "调用另一个技能组，是复杂组合的核心入口。", ["self", "hit", "point", "circle"], [
+      mechanic("meta", "技能组", "MetaSkill", "meta", "调用另一个技能组，是复杂组合的核心入口。", ["self", "hit", "point", "current", "marker"], [
         ["skill_ref", "调用技能", "text", "skill_spear_followup_001"],
         ["mode", "模式", "select", "async", [["sync", "同步"], ["async", "异步"], ["queued", "排队"]]],
         ["max_depth", "最大深度", "number", "1"]
@@ -982,13 +976,13 @@
           id: uid("step"),
           name: "穿刺命中",
           trigger: "onCast",
-          targeter: "line",
+          targeter: "self",
           targeter_params: {
-            range: 4.5,
+            range: 0,
             radius: 0,
             angle: 0,
-            width: 0.6,
-            max_targets: 3
+            width: 0,
+            max_targets: 1
           },
           chance: 1,
           delay: 0.18,
@@ -996,6 +990,13 @@
           interval: 0,
           mechanic: {
             id: "damage",
+            shape: "line",
+            range: 4.5,
+            radius: 0,
+            width: 0.6,
+            angle: 0,
+            max_targets: 3,
+            team: "enemy",
             damage_type: "physical",
             ratio: 1.35,
             flat: 0,
@@ -1061,7 +1062,7 @@
       fillSelect($("skillType"), skillTypes, "melee");
       fillSelect($("globalTrigger"), triggers, "onCast");
       fillSelect($("stepTrigger"), triggers, "onCast");
-      fillSelect($("targeter"), targeters, "line");
+      fillSelect($("targeter"), targeters, "self");
       fillSelect($("conditionScope"), conditionScopes, "target");
       fillSelect($("conditionType"), conditionTypes.map(condition => [condition.id, condition.label]), "target_hp_ratio");
       renderTagChips("weaponTags", weapons, ["spear"]);
@@ -1173,13 +1174,9 @@
         self: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 },
         current: { range: 8, radius: 0, angle: 0, width: 0, max_targets: 1 },
         hit: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 },
-        line: { range: 4, radius: 0, angle: 0, width: 0.6, max_targets: 3 },
-        cone: { range: 3.5, radius: 0, angle: 70, width: 0, max_targets: 5 },
-        circle: { range: 0, radius: 3, angle: 0, width: 0, max_targets: 6 },
-        nearEnemies: { range: 0, radius: 5, angle: 0, width: 0, max_targets: 5 },
-        nearAllies: { range: 0, radius: 5, angle: 0, width: 0, max_targets: 5 },
-        point: { range: 8, radius: 2, angle: 0, width: 0, max_targets: 6 },
-        owner: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 }
+        point: { range: 8, radius: 0, angle: 0, width: 0, max_targets: 1 },
+        owner: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 },
+        marker: { range: 12, radius: 0, angle: 0, width: 0, max_targets: 1 }
       };
       return { ...(presets[targeter] || presets.current) };
     }
@@ -1365,7 +1362,7 @@
 
     function renderMechanicParams() {
       const mechanic = currentMechanic();
-      $("mechanicHelp").textContent = `${mechanic.title} · ${mechanic.hint} · 推荐目标器: ${mechanic.targeters.map(targeterLabel).join(", ")} · ${mechanic.description}`;
+      $("mechanicHelp").textContent = `${mechanic.title} · ${mechanic.hint} · 推荐锚点: ${mechanic.targeters.map(targeterLabel).join(", ")} · ${mechanic.description}`;
       document.querySelectorAll("[data-mechanic]").forEach(button => {
         button.classList.toggle("active", button.dataset.mechanic === mechanic.id);
       });
@@ -1490,17 +1487,8 @@
       if (step.repeat > 1 && (step.interval || 0) <= 0) issues.push({ line, level: "warn", text: "重复执行建议配置重复间隔" });
       const targeterParams = normalizedTargeterParams(step);
       if (targeterParams.max_targets < 1) issues.push({ line, level: "bad", text: "目标上限至少为 1" });
-      if (["line", "cone", "current", "point"].includes(step.targeter) && targeterParams.range <= 0) {
-        issues.push({ line, level: "bad", text: "该目标器需要配置目标距离" });
-      }
-      if (step.targeter === "line" && targeterParams.width <= 0) {
-        issues.push({ line, level: "bad", text: "直线目标器需要配置目标宽度" });
-      }
-      if (step.targeter === "cone" && targeterParams.angle <= 0) {
-        issues.push({ line, level: "bad", text: "扇形目标器需要配置目标角度" });
-      }
-      if (["circle", "nearEnemies", "nearAllies"].includes(step.targeter) && targeterParams.radius <= 0) {
-        issues.push({ line, level: "bad", text: "范围目标器需要配置目标半径" });
+      if (["current", "point", "marker"].includes(step.targeter) && targeterParams.range <= 0) {
+        issues.push({ line, level: "bad", text: "该锚点目标器需要配置搜索距离" });
       }
       if (step.mechanic.id === "meta" && Number(step.mechanic.max_depth) > 3) {
         issues.push({ line, level: "warn", text: "技能组调用深度建议不超过 3" });
@@ -1534,6 +1522,12 @@
       if (mechanic.id === "projectile" && number(mechanic.speed) <= 0) issues.push({ line, level: "bad", text: "投射物速度必须大于 0" });
       if (mechanic.id === "projectile" && number(mechanic.range) <= 0) issues.push({ line, level: "bad", text: "投射物射程必须大于 0" });
       if (mechanic.id === "ray" && (number(mechanic.length) <= 0 || number(mechanic.width) <= 0)) issues.push({ line, level: "bad", text: "射线长度和宽度必须大于 0" });
+      if (mechanic.id === "damage") {
+        if (["line", "cone"].includes(mechanic.shape) && number(mechanic.range) <= 0) issues.push({ line, level: "bad", text: "伤害直线/扇形形状必须配置距离" });
+        if (mechanic.shape === "line" && number(mechanic.width) <= 0) issues.push({ line, level: "bad", text: "伤害直线形状必须配置宽度" });
+        if (mechanic.shape === "cone" && number(mechanic.angle) <= 0) issues.push({ line, level: "bad", text: "伤害扇形形状必须配置角度" });
+        if (mechanic.shape === "circle" && number(mechanic.radius) <= 0) issues.push({ line, level: "bad", text: "伤害圆形形状必须配置半径" });
+      }
       if (mechanic.id === "summon" && number(mechanic.count) > number(mechanic.max_count)) issues.push({ line, level: "bad", text: "召唤数量不能大于召唤上限" });
       if (mechanic.id === "trap" && !mechanic.effect_ref) issues.push({ line, level: "bad", text: "陷阱必须配置触发技能" });
       if (mechanic.id === "chain" && !mechanic.effect_ref) issues.push({ line, level: "bad", text: "连锁必须配置每跳技能" });
