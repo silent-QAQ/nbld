@@ -9,6 +9,21 @@ export type GuestLoginResponse = {
   serverTime: string;
 };
 
+export type RegisterResponse = {
+  accountId: string;
+  email: string;
+  username: string;
+  serverTime: string;
+};
+
+export type LoginResponse = {
+  accountId: string;
+  email: string;
+  username: string;
+  token: string;
+  serverTime: string;
+};
+
 export type EnterWorldResponse = {
   playerId: string;
   characterId?: string;
@@ -23,6 +38,101 @@ export type MoveResponse = {
   characterId?: string;
   mapId?: string;
   position: Position;
+};
+
+export type CharacterBaseStats = {
+  health: number;
+  stamina: number;
+  mana: number;
+  moveSpeed: number;
+};
+
+export type CharacterAttackStats = {
+  physicalAttack: number;
+  spellAttack: number;
+  physicalCrit: number;
+  spellCrit: number;
+  damageBonus: number;
+  critDamageBonus: number;
+  bonusDamage: number;
+};
+
+export type CharacterDefenseStats = {
+  physicalDefense: number;
+  spellDefense: number;
+  critResistance: number;
+  damageMitigation: number;
+  bonusMitigation: number;
+};
+
+export type CharacterStats = {
+  base: CharacterBaseStats;
+  attack: CharacterAttackStats;
+  defense: CharacterDefenseStats;
+};
+
+export type ItemStack = {
+  itemId: string;
+  quantity: number;
+};
+
+export type ItemContainer = {
+  items: ItemStack[];
+};
+
+export type CharacterPosition = {
+  worldId: string;
+  mapId: string;
+  x: number;
+  y: number;
+};
+
+export type VisibleArmor = {
+  helmet?: string;
+  chest?: string;
+  pants?: string;
+  shoes?: string;
+  shoulders?: string;
+};
+
+export type CharacterEquipment = {
+  mainHand?: string;
+  offHand?: string;
+  helmet?: string;
+  chest?: string;
+  pants?: string;
+  shoes?: string;
+  shoulders?: string;
+  cloak?: string;
+  leftBracer?: string;
+  rightBracer?: string;
+  visibleArmor: VisibleArmor;
+};
+
+export type CharacterSummary = {
+  id: string;
+  name: string;
+  version: number;
+  stats: CharacterStats;
+  inventory: ItemContainer;
+  warehouse: ItemContainer;
+  position: CharacterPosition;
+  equipment: CharacterEquipment;
+  deletedAt?: string;
+  purgeAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CharacterListResponse = {
+  active: CharacterSummary[];
+  deleted: CharacterSummary[];
+  activeLimit: number;
+  deletedLimit: number;
+};
+
+export type CharacterMutationResponse = {
+  character: CharacterSummary;
 };
 
 export type WorldPlayer = {

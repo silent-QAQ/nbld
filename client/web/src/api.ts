@@ -1,4 +1,13 @@
-import type { ChunkWindowResponse, EnterWorldResponse, GuestLoginResponse, MoveResponse } from "./protocol";
+import type {
+  CharacterListResponse,
+  CharacterMutationResponse,
+  ChunkWindowResponse,
+  EnterWorldResponse,
+  GuestLoginResponse,
+  LoginResponse,
+  MoveResponse,
+  RegisterResponse,
+} from "./protocol";
 
 export class ApiClient {
   constructor(private readonly baseUrl: string) {}
@@ -7,8 +16,28 @@ export class ApiClient {
     return this.post("/api/v1/session/guest", { deviceId });
   }
 
-  async enterWorld(token: string): Promise<EnterWorldResponse> {
-    return this.post("/api/v1/world/enter", { token });
+  async register(email: string, username: string, password: string, confirmPassword: string): Promise<RegisterResponse> {
+    return this.post("/api/v1/session/register", { email, username, password, confirmPassword });
+  }
+
+  async login(email: string, password: string): Promise<LoginResponse> {
+    return this.post("/api/v1/session/login", { email, password });
+  }
+
+  async characters(token: string): Promise<CharacterListResponse> {
+    return this.get(`/api/v1/characters?token=${encodeURIComponent(token)}`);
+  }
+
+  async createCharacter(token: string, name: string): Promise<CharacterMutationResponse> {
+    return this.post("/api/v1/characters/create", { token, name });
+  }
+
+  async deleteCharacter(token: string, characterId: string): Promise<CharacterMutationResponse> {
+    return this.post("/api/v1/characters/delete", { token, characterId });
+  }
+
+  async enterWorld(token: string, characterId: string): Promise<EnterWorldResponse> {
+    return this.post("/api/v1/world/enter", { token, characterId });
   }
 
   async move(token: string, x: number, y: number): Promise<MoveResponse> {

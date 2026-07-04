@@ -2,11 +2,14 @@ import "./styles.css";
 import { ApiClient } from "./api";
 import { loadAssets, type AssetMaps } from "./assets";
 import type {
+  CharacterSummary,
   ChunkCoord,
   ChunkSnapshot,
   ChunkTile,
   ChunkWindowResponse,
+  LoginResponse,
   Position,
+  RegisterResponse,
   WorldPlayer,
   WSServerMessage,
 } from "./protocol";
@@ -61,8 +64,13 @@ type ChunkRender = {
 type AppState = {
   api?: ApiClient;
   ws?: WebSocket;
+  accountId: string;
+  accountEmail: string;
+  accountUsername: string;
   token: string;
   playerId: string;
+  characterId: string;
+  characterName: string;
   worldId: string;
   mapId: string;
   player: Position;
@@ -80,6 +88,8 @@ type AppState = {
   lastChunkRefreshAt: number;
   lastMoveSendAt: number;
   currentTile?: ChunkTile;
+  availableCharacters: CharacterSummary[];
+  selectedCharacterId: string;
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -90,10 +100,31 @@ app.innerHTML = `
     <canvas class="world-canvas"></canvas>
     <section class="login-panel">
       <h1>NBLD H5 客户端</h1>
-      <p>已废弃 Unity / 团结引擎客户端。此页面直接连接服务端，加载区块、渲染地图、控制玩家和相机。</p>
+      <p>使用邮箱注册/登录，然后选择角色进入世界。</p>
       <label for="baseUrl">服务端地址</label>
       <input id="baseUrl" spellcheck="false" />
-      <button id="loginButton">游客进入世界</button>
+      <label for="emailInput">邮箱</label>
+      <input id="emailInput" spellcheck="false" />
+      <label for="usernameInput">用户名（注册时使用）</label>
+      <input id="usernameInput" spellcheck="false" />
+      <label for="passwordInput">密码</label>
+      <input id="passwordInput" type="password" />
+      <label for="confirmPasswordInput">再次输入密码（注册时使用）</label>
+      <input id="confirmPasswordInput" type="password" />
+      <div class="login-actions">
+        <button id="loginButton">邮箱登录</button>
+        <button id="registerButton" class="secondary">注册账号</button>
+      </div>
+      <div class="character-panel hidden" id="characterPanel">
+        <div class="character-header">
+          <strong id="accountSummary">未登录</strong>
+          <button id="logoutButton" class="secondary">退出登录 / 返回登录页</button>
+        </div>
+        <label for="characterNameInput">新角色名</label>
+        <input id="characterNameInput" spellcheck="false" />
+        <button id="createCharacterButton" class="secondary">创建角色</button>
+        <div class="character-list" id="characterList"></div>
+      </div>
       <div class="error" id="loginError"></div>
     </section>
     <section class="hud hidden"></section>
@@ -107,14 +138,29 @@ const ctx = canvas.getContext("2d", { alpha: false })!;
 const loginPanel = app.querySelector<HTMLElement>(".login-panel")!;
 const loginError = app.querySelector<HTMLElement>("#loginError")!;
 const loginButton = app.querySelector<HTMLButtonElement>("#loginButton")!;
+const registerButton = app.querySelector<HTMLButtonElement>("#registerButton")!;
 const baseUrlInput = app.querySelector<HTMLInputElement>("#baseUrl")!;
+const emailInput = app.querySelector<HTMLInputElement>("#emailInput")!;
+const usernameInput = app.querySelector<HTMLInputElement>("#usernameInput")!;
+const passwordInput = app.querySelector<HTMLInputElement>("#passwordInput")!;
+const confirmPasswordInput = app.querySelector<HTMLInputElement>("#confirmPasswordInput")!;
+const characterNameInput = app.querySelector<HTMLInputElement>("#characterNameInput")!;
+const characterPanel = app.querySelector<HTMLElement>("#characterPanel")!;
+const characterList = app.querySelector<HTMLElement>("#characterList")!;
+const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
+const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
 const debugPanel = app.querySelector<HTMLElement>(".debug-panel")!;
 const helpPanel = app.querySelector<HTMLElement>(".help-panel")!;
 
 const state: AppState = {
+  accountId: "",
+  accountEmail: "",
+  accountUsername: "",
   token: "",
   playerId: "",
+  characterId: "",
+  characterName: "",
   worldId: "",
   mapId: "map_0_0",
   player: { x: 0, y: 0 },
@@ -130,18 +176,32 @@ const state: AppState = {
   lastChunkKey: "",
   lastChunkRefreshAt: 0,
   lastMoveSendAt: 0,
+  availableCharacters: [],
+  selectedCharacterId: "",
 };
 
 baseUrlInput.value = localStorage.getItem("nbld_http_base_url") ?? window.location.origin;
 
 loginButton.addEventListener("click", () => {
-  void start();
+  void loginWithEmail();
+});
+
+registerButton.addEventListener("click", () => {
+  void registerWithEmail();
+});
+
+app.querySelector<HTMLButtonElement>("#createCharacterButton")!.addEventListener("click", () => {
+  void createCharacterAndRefresh();
+});
+
+logoutButton.addEventListener("click", () => {
+  logoutToLogin();
 });
 
 baseUrlInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
-    void start();
+    void loginWithEmail();
   }
 });
 
@@ -172,25 +232,175 @@ canvas.addEventListener(
 );
 
 resizeCanvas();
+restoreSessionFromStorage();
 requestAnimationFrame(loop);
 
-async function start(): Promise<void> {
+async function loginWithEmail(): Promise<void> {
   loginError.textContent = "";
-  loginButton.disabled = true;
-  loginButton.textContent = "连接中...";
+  setLoginBusy(true, "登录中...");
 
   try {
-    const baseUrl = normalizeBaseUrl(baseUrlInput.value);
-    localStorage.setItem("nbld_http_base_url", baseUrl);
-    const api = new ApiClient(baseUrl);
-    state.api = api;
-    state.assets ??= await loadAssets();
+    const api = await prepareApi();
+    const login = await api.login(emailInput.value.trim(), passwordInput.value);
+    applyLogin(login);
+    await loadCharacters();
+  } catch (error) {
+    state.status = "连接失败";
+    state.lastError = errorToString(error);
+    loginError.textContent = state.lastError;
+  } finally {
+    setLoginBusy(false);
+  }
+}
 
-    const deviceId = getDeviceId();
-    const login = await api.guestLogin(deviceId);
-    const entered = await api.enterWorld(login.token);
+async function registerWithEmail(): Promise<void> {
+  loginError.textContent = "";
+  setLoginBusy(true, "注册中...");
 
-    state.token = login.token;
+  try {
+    const api = await prepareApi();
+    const register = await api.register(
+      emailInput.value.trim(),
+      usernameInput.value.trim(),
+      passwordInput.value,
+      confirmPasswordInput.value,
+    );
+    applyRegister(register);
+    const login = await api.login(emailInput.value.trim(), passwordInput.value);
+    applyLogin(login);
+    await loadCharacters();
+  } catch (error) {
+    state.lastError = errorToString(error);
+    loginError.textContent = state.lastError;
+  } finally {
+    setLoginBusy(false);
+  }
+}
+
+async function prepareApi(): Promise<ApiClient> {
+  const baseUrl = normalizeBaseUrl(baseUrlInput.value);
+  localStorage.setItem("nbld_http_base_url", baseUrl);
+  const api = new ApiClient(baseUrl);
+  state.api = api;
+  state.assets ??= await loadAssets();
+  return api;
+}
+
+function applyRegister(register: RegisterResponse): void {
+  state.accountId = register.accountId;
+  state.accountEmail = register.email;
+  state.accountUsername = register.username;
+  persistSession();
+}
+
+function applyLogin(login: LoginResponse): void {
+  state.token = login.token;
+  state.accountId = login.accountId;
+  state.accountEmail = login.email;
+  state.accountUsername = login.username;
+  persistSession();
+}
+
+async function loadCharacters(): Promise<void> {
+  if (!state.api || !state.token) return;
+  state.status = "加载角色中";
+  const roster = await state.api.characters(state.token);
+  state.availableCharacters = roster.active ?? [];
+  renderCharacterList(state.availableCharacters);
+  characterPanel.classList.remove("hidden");
+  accountSummary.textContent = `${state.accountUsername || state.accountEmail} (${state.accountId})`;
+
+  if (state.selectedCharacterId) {
+    const selected = state.availableCharacters.find((character) => character.id === state.selectedCharacterId);
+    if (selected) {
+      state.status = "请选择角色进入世界";
+      return;
+    }
+    state.selectedCharacterId = "";
+  }
+
+  state.status = state.availableCharacters.length > 0 ? "请选择角色进入世界" : "请创建角色";
+}
+
+function renderCharacterList(characters: CharacterSummary[]): void {
+  characterList.innerHTML = "";
+  for (const character of characters) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "character-entry";
+
+    const meta = document.createElement("div");
+    meta.className = "character-meta";
+    meta.innerHTML = `
+      <strong>${escapeHtml(character.name)}</strong>
+      <span>${escapeHtml(character.id)}</span>
+      <span>版本 ${character.version}</span>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "character-actions";
+
+    const enterButton = document.createElement("button");
+    enterButton.textContent = "进入世界";
+    enterButton.addEventListener("click", () => {
+      void enterWorldWithCharacter(character);
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "secondary";
+    deleteButton.textContent = "删除角色";
+    deleteButton.addEventListener("click", async () => {
+      if (!state.api || !state.token) return;
+      setLoginBusy(true, "删除角色中...");
+      loginError.textContent = "";
+      try {
+        await state.api.deleteCharacter(state.token, character.id);
+        if (state.selectedCharacterId === character.id) {
+          state.selectedCharacterId = "";
+        }
+        persistSession();
+        await loadCharacters();
+      } catch (error) {
+        loginError.textContent = errorToString(error);
+      } finally {
+        setLoginBusy(false);
+      }
+    });
+
+    actions.append(enterButton, deleteButton);
+    wrapper.append(meta, actions);
+    characterList.appendChild(wrapper);
+  }
+}
+
+async function createCharacterAndRefresh(): Promise<void> {
+  if (!state.api || !state.token) return;
+  setLoginBusy(true, "创建角色中...");
+  loginError.textContent = "";
+
+  try {
+    await state.api.createCharacter(
+      state.token,
+      characterNameInput.value.trim() || state.accountUsername || "Hero",
+    );
+    await loadCharacters();
+  } catch (error) {
+    loginError.textContent = errorToString(error);
+  } finally {
+    setLoginBusy(false);
+  }
+}
+
+async function enterWorldWithCharacter(character: CharacterSummary): Promise<void> {
+  if (!state.api || !state.token) return;
+
+  setLoginBusy(true, "进入世界中...");
+  loginError.textContent = "";
+
+  try {
+    const entered = await state.api.enterWorld(state.token, character.id);
+    state.selectedCharacterId = character.id;
+    state.characterId = entered.characterId || character.id;
+    state.characterName = entered.characterName || character.name;
     state.playerId = entered.playerId;
     state.worldId = entered.worldId;
     state.mapId = entered.mapId || "map_0_0";
@@ -202,22 +412,103 @@ async function start(): Promise<void> {
     state.lastChunkKey = "";
     state.status = "已连接";
     state.lastError = "";
+    persistSession();
 
     await refreshChunks(true);
-    connectWebSocket(api);
+    connectWebSocket(state.api);
 
     loginPanel.classList.add("hidden");
     hud.classList.remove("hidden");
     debugPanel.classList.remove("hidden");
     helpPanel.classList.remove("hidden");
   } catch (error) {
-    state.status = "连接失败";
+    state.status = "进入世界失败";
     state.lastError = errorToString(error);
     loginError.textContent = state.lastError;
   } finally {
-    loginButton.disabled = false;
-    loginButton.textContent = "游客进入世界";
+    setLoginBusy(false);
   }
+}
+
+function setLoginBusy(busy: boolean, loginLabel = "邮箱登录"): void {
+  loginButton.disabled = busy;
+  registerButton.disabled = busy;
+  logoutButton.disabled = busy;
+  loginButton.textContent = busy ? loginLabel : "邮箱登录";
+}
+
+function persistSession(): void {
+  localStorage.setItem("nbld_http_base_url", baseUrlInput.value.trim());
+  localStorage.setItem("nbld_session", JSON.stringify({
+    accountId: state.accountId,
+    accountEmail: state.accountEmail,
+    accountUsername: state.accountUsername,
+    token: state.token,
+    selectedCharacterId: state.selectedCharacterId,
+    characterName: state.characterName,
+  }));
+}
+
+function restoreSessionFromStorage(): void {
+  const raw = localStorage.getItem("nbld_session");
+  if (!raw) return;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<AppState>;
+    state.accountId = parsed.accountId ?? "";
+    state.accountEmail = parsed.accountEmail ?? "";
+    state.accountUsername = parsed.accountUsername ?? "";
+    state.token = parsed.token ?? "";
+    state.selectedCharacterId = parsed.selectedCharacterId ?? "";
+    state.characterName = parsed.characterName ?? "";
+
+    if (state.token) {
+      emailInput.value = state.accountEmail;
+      usernameInput.value = state.accountUsername;
+      characterPanel.classList.remove("hidden");
+      accountSummary.textContent = `${state.accountUsername || state.accountEmail} (${state.accountId})`;
+      void prepareApi().then(() => loadCharacters()).catch((error) => {
+        loginError.textContent = errorToString(error);
+        logoutToLogin();
+      });
+    }
+  } catch {
+    localStorage.removeItem("nbld_session");
+  }
+}
+
+function logoutToLogin(): void {
+  if (state.ws) {
+    state.ws.close();
+    state.ws = undefined;
+  }
+
+  state.accountId = "";
+  state.accountEmail = "";
+  state.accountUsername = "";
+  state.token = "";
+  state.playerId = "";
+  state.characterId = "";
+  state.characterName = "";
+  state.worldId = "";
+  state.mapId = "map_0_0";
+  state.players.clear();
+  state.chunks.clear();
+  state.availableCharacters = [];
+  state.selectedCharacterId = "";
+  state.status = "未连接";
+  state.socketStatus = "未连接";
+  state.lastError = "";
+  state.currentTile = undefined;
+  state.lastChunkKey = "";
+
+  localStorage.removeItem("nbld_session");
+  loginPanel.classList.remove("hidden");
+  characterPanel.classList.add("hidden");
+  hud.classList.add("hidden");
+  debugPanel.classList.add("hidden");
+  helpPanel.classList.add("hidden");
+  loginError.textContent = "";
 }
 
 function connectWebSocket(api: ApiClient): void {
@@ -500,6 +791,7 @@ function updateHud(): void {
     : PLAYER_WALK_SPEED_TILES_PER_SECOND;
   hud.innerHTML = `
     <div><b>状态</b> ${state.status}　<b>Socket</b> ${state.socketStatus}</div>
+    <div><b>账号</b> ${escapeHtml(state.accountUsername || state.accountEmail || "-")}　<b>角色</b> ${escapeHtml(state.characterName || "-")}</div>
     <div><b>玩家</b> ${escapeHtml(state.playerId)}　<b>地图</b> ${escapeHtml(state.mapId)}</div>
     <div><b>实体中心</b> X:${state.player.x.toFixed(2)} Y:${state.player.y.toFixed(2)}　<b>占地</b> 1x${PLAYER_COLLISION_SIZE_TILES} 格　<b>速度</b> ${speed.toFixed(1)} m/s　<b>区块</b> ${chunkX}, ${chunkY}</div>
     <div><b>地形</b> ${escapeHtml(tile?.terrain ?? "未加载")}　<b>方块</b> ${escapeHtml(tile?.block ?? "未加载")}　<b>装饰</b> ${escapeHtml(tile?.decoration ?? "-")}</div>
