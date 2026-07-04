@@ -80,9 +80,9 @@ input {
 }
 
 #appearanceModal {
-  width: min(1180px, calc(100vw - 24px));
-  max-height: calc(100dvh - 24px);
-  padding: 16px;
+  width: min(1040px, calc(100vw - 18px));
+  max-height: calc(100dvh - 18px);
+  padding: 12px;
 }
 
 .auth-page,
@@ -148,6 +148,11 @@ input {
   border-color: #fff3bd;
   box-shadow: 0 0 0 2px rgba(217, 179, 95, 0.26), inset 0 0 0 2px rgba(255, 243, 189, 0.48);
   transform: translateY(1px);
+}
+
+.login-panel button.clicked {
+  border-color: #fff3bd;
+  box-shadow: 0 0 0 2px rgba(217, 179, 95, 0.3), inset 0 0 0 2px rgba(255, 243, 189, 0.52);
 }
 
 .login-panel button:focus-visible {
@@ -220,14 +225,14 @@ input {
 }
 
 .appearance-editor h3 {
-  margin: 0 0 6px;
-  font-size: 16px;
+  margin: 0 0 5px;
+  font-size: 15px;
 }
 
 .appearance-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -239,59 +244,43 @@ input {
 .appearance-preview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 5px;
+  margin-bottom: 6px;
 }
 
 .appearance-card {
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 6px;
+  padding: 5px;
   background: rgba(255, 255, 255, 0.04);
 }
 
 .appearance-card strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   font-size: 12px;
   color: var(--muted);
 }
 
-.silhouette {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  min-height: 54px;
-}
-
-.segment {
-  background: #d9b35f;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  height: 6px;
-}
-
-.segment.head {
-  height: 10px;
-  border-radius: 999px;
-}
-
-.segment.legs {
-  background: #8fb6ff;
+.appearance-card-canvas {
+  display: block;
+  width: 72px;
+  height: 84px;
+  margin: 0 auto;
+  image-rendering: pixelated;
 }
 
 .appearance-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px 7px;
 }
 
 .appearance-palette {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 8px;
-  margin-top: 8px;
+  gap: 4px 7px;
+  margin-top: 6px;
 }
 
 .hair-grid {
@@ -303,8 +292,8 @@ input {
 
 .hair-toolbar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
   margin-top: 0;
 }
 
@@ -317,10 +306,10 @@ input {
 
 .appearance-field {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: 10.5px;
   color: var(--muted);
 }
 
@@ -333,14 +322,14 @@ input {
 .appearance-editor .appearance-field input {
   width: 100%;
   min-width: 0;
-  height: 24px;
-  padding: 2px 7px;
+  height: 22px;
+  padding: 1px 6px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .appearance-editor input[type="color"] {
-  height: 24px;
+  height: 22px;
   padding: 2px;
 }
 
@@ -354,22 +343,22 @@ input {
 .appearance-editor .hair-layer-btn,
 .appearance-editor .pixel-tools button {
   width: auto;
-  min-height: 28px;
+  min-height: 24px;
   margin-top: 0;
-  padding: 5px 7px;
+  padding: 4px 5px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
 .pixel-editor {
   display: grid;
-  grid-template-columns: repeat(24, 11px);
-  grid-auto-rows: 11px;
+  grid-template-columns: repeat(24, 10px);
+  grid-auto-rows: 10px;
   align-items: start;
   justify-content: center;
   gap: 1px;
-  margin-top: 8px;
+  margin-top: 7px;
   overflow: auto;
   max-width: 100%;
   touch-action: none;
@@ -378,14 +367,14 @@ input {
 .pixel-tools {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-  margin-top: 8px;
+  gap: 4px;
+  margin-top: 7px;
 }
 
 .pixel-cell {
-  width: 11px;
-  height: 11px;
-  min-width: 11px;
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
   margin: 0;
   padding: 0;
   border: 1px solid rgba(255,255,255,0.08);

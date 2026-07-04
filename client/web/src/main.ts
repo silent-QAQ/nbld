@@ -194,6 +194,7 @@ const loginButton = app.querySelector<HTMLButtonElement>("#loginButton")!;
 const openRegisterButton = app.querySelector<HTMLButtonElement>("#openRegisterButton")!;
 const registerButton = app.querySelector<HTMLButtonElement>("#registerButton")!;
 const backToLoginButton = app.querySelector<HTMLButtonElement>("#backToLoginButton")!;
+const createCharacterButton = app.querySelector<HTMLButtonElement>("#createCharacterButton")!;
 const baseUrlInput = app.querySelector<HTMLInputElement>("#baseUrl")!;
 const loginEmailInput = app.querySelector<HTMLInputElement>("#loginEmailInput")!;
 const loginPasswordInput = app.querySelector<HTMLInputElement>("#loginPasswordInput")!;
@@ -274,7 +275,16 @@ backToLoginButton.addEventListener("click", () => {
   loginEmailInput.focus();
 });
 
-app.querySelector<HTMLButtonElement>("#createCharacterButton")!.addEventListener("click", () => {
+app.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("button") : null;
+  if (!button) return;
+  button.classList.remove("clicked");
+  void button.offsetWidth;
+  button.classList.add("clicked");
+  window.setTimeout(() => button.classList.remove("clicked"), 220);
+});
+
+createCharacterButton.addEventListener("click", () => {
   void openCreateCharacterWithAppearance();
 });
 
@@ -518,14 +528,42 @@ async function openCreateCharacterWithAppearance(): Promise<void> {
 }
 
 function renderAppearancePreview(appearance: CharacterAppearance): void {
-  const body = appearance.body;
-  const cards = [
-    renderDirectionCard("正面", body, "front"),
-    renderDirectionCard("背面", body, "back"),
-    renderDirectionCard("左侧", body, "left"),
-    renderDirectionCard("右侧", body, "right"),
+  const normalized = normalizeAppearance(appearance);
+  const previewCharacter = {
+    ...currentAppearanceCharacter(),
+    appearance: normalized,
+  };
+  const cards: Array<[string, Facing]> = [
+    ["正面", "front"],
+    ["背面", "back"],
+    ["左侧", "left"],
+    ["右侧", "right"],
   ];
-  appearancePreview.innerHTML = cards.join("");
+
+  appearancePreview.innerHTML = "";
+  for (const [label, facing] of cards) {
+    const card = document.createElement("div");
+    card.className = "appearance-card";
+
+    const title = document.createElement("strong");
+    title.textContent = label;
+
+    const preview = document.createElement("canvas");
+    preview.width = 96;
+    preview.height = 112;
+    preview.className = "appearance-card-canvas";
+    const previewCtx = preview.getContext("2d", { alpha: true })!;
+    previewCtx.imageSmoothingEnabled = false;
+    renderAvatarSkeleton(previewCtx, { x: 48, y: 94 }, previewCharacter, facing, true, {
+      leftArm: 0,
+      rightArm: 0,
+      leftLeg: 0,
+      rightLeg: 0,
+    });
+
+    card.append(title, preview);
+    appearancePreview.appendChild(card);
+  }
 }
 
 function renderDirectionCard(label: string, body: CharacterBodyAppearance, facing: Facing): string {
@@ -570,6 +608,7 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
     ["chestDepth", "胸纵深", 7, 16],
     ["waistDepth", "腰纵深", 6, 15],
     ["hipDepth", "臀纵深", 7, 16],
+    ["headScale", "头身比例", 70, 140],
   ];
 
   appearanceGrid.innerHTML = fields.map(([key, label, min, max]) => `
@@ -827,8 +866,7 @@ function applyPixelTool(tool: string): void {
       renderAppearancePreview(state.appearanceDraft);
       return;
     case "export":
-      void navigator.clipboard.writeText(JSON.stringify(state.appearanceDraft, null, 2));
-      loginError.textContent = "外观 JSON 已复制到剪贴板";
+      void copyTextToClipboard(JSON.stringify(normalizeAppearance(state.appearanceDraft), null, 2));
       return;
     case "import": {
       const raw = window.prompt("粘贴外观 JSON");
@@ -888,6 +926,17 @@ function copyCurrentLayerToSibling(rows: string[]): void {
   }
 }
 
+async function copyTextToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard?.writeText(text);
+    loginError.textContent = "外观 JSON 已复制到剪贴板";
+    return;
+  } catch {
+    window.prompt("复制外观 JSON", text);
+    loginError.textContent = "浏览器不允许直接复制，请从弹窗复制外观 JSON";
+  }
+}
+
 async function saveSelectedCharacterAppearance(): Promise<void> {
   if (!state.api || !state.token || !state.selectedCharacterId) return;
   const character = state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
@@ -902,7 +951,7 @@ async function saveSelectedCharacterAppearance(): Promise<void> {
       const updated = await state.api.updateCharacterAppearance(state.token, created.character.id, appearance);
       state.selectedCharacterId = updated.character.id;
       await loadCharacters();
-      renderAppearanceEditor(updated.character);
+      appearanceModal.classList.add("hidden");
     } else {
       const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, appearance);
       const index = state.availableCharacters.findIndex((item) => item.id === updated.character.id);
@@ -943,7 +992,7 @@ function defaultAppearanceBody(): CharacterBodyAppearance {
   };
 }
 
-function defaultAppearance() {
+function defaultAppearance(): CharacterAppearance {
   return {
     body: defaultAppearanceBody(),
     style: {
@@ -1499,7 +1548,7 @@ function renderAvatarSkeleton(
   local: boolean,
   moveState: { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number },
 ): void {
-  const appearance = character?.appearance ?? defaultAppearance();
+  const appearance = normalizeAppearance(character?.appearance ?? defaultAppearance());
   const body = appearance.body;
   const palette = appearance.palette ?? (local
     ? { skinPrimary: "#f2c199", skinShadow: "#d89b72", hairPrimary: "#2d1a13", hairShadow: "#140b08", clothPrimary: "#ff4040", clothShadow: "#b42222", metalPrimary: "#ffe7d8", metalShadow: "#7e8794" }
