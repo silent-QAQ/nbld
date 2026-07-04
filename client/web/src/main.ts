@@ -17,7 +17,7 @@ import type {
 } from "./protocol";
 
 const CHUNK_SIZE = 80;
-const CHUNK_TEXTURE_SCALE = 4;
+const TILE_TEXTURE_SIZE_PX = 32;
 const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
 const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
 const CHUNK_REFRESH_INTERVAL_MS = 500;
@@ -1424,8 +1424,8 @@ function applyChunkWindow(windowData: ChunkWindowResponse): void {
 
 function renderChunk(snapshot: ChunkSnapshot): ChunkRender {
   const offscreen = document.createElement("canvas");
-  offscreen.width = CHUNK_SIZE * CHUNK_TEXTURE_SCALE;
-  offscreen.height = CHUNK_SIZE * CHUNK_TEXTURE_SCALE;
+  offscreen.width = CHUNK_SIZE * TILE_TEXTURE_SIZE_PX;
+  offscreen.height = CHUNK_SIZE * TILE_TEXTURE_SIZE_PX;
   const chunkCtx = offscreen.getContext("2d", { alpha: false })!;
   chunkCtx.imageSmoothingEnabled = false;
 
@@ -1438,14 +1438,19 @@ function renderChunk(snapshot: ChunkSnapshot): ChunkRender {
     if (tileImage) {
       chunkCtx.drawImage(
         tileImage,
-        tile.x * CHUNK_TEXTURE_SCALE,
-        (CHUNK_SIZE - 1 - tile.y) * CHUNK_TEXTURE_SCALE,
-        CHUNK_TEXTURE_SCALE,
-        CHUNK_TEXTURE_SCALE,
+        tile.x * TILE_TEXTURE_SIZE_PX,
+        (CHUNK_SIZE - 1 - tile.y) * TILE_TEXTURE_SIZE_PX,
+        TILE_TEXTURE_SIZE_PX,
+        TILE_TEXTURE_SIZE_PX,
       );
     } else {
       chunkCtx.fillStyle = fallbackColor(tile.terrain);
-      chunkCtx.fillRect(tile.x * CHUNK_TEXTURE_SCALE, (CHUNK_SIZE - 1 - tile.y) * CHUNK_TEXTURE_SCALE, CHUNK_TEXTURE_SCALE, CHUNK_TEXTURE_SCALE);
+      chunkCtx.fillRect(
+        tile.x * TILE_TEXTURE_SIZE_PX,
+        (CHUNK_SIZE - 1 - tile.y) * TILE_TEXTURE_SIZE_PX,
+        TILE_TEXTURE_SIZE_PX,
+        TILE_TEXTURE_SIZE_PX,
+      );
     }
     if (tile.decoration) decorations.push(tile);
   }
@@ -1453,12 +1458,12 @@ function renderChunk(snapshot: ChunkSnapshot): ChunkRender {
   for (const tile of decorations) {
     const image = state.assets?.decorations.get(tile.decoration || "");
     if (!image) continue;
-    const widthTiles = Math.max(1, image.width / 32);
-    const heightTiles = Math.max(1, image.height / 32);
-    const width = widthTiles * CHUNK_TEXTURE_SCALE;
-    const height = heightTiles * CHUNK_TEXTURE_SCALE;
-    const x = (tile.x + 0.5) * CHUNK_TEXTURE_SCALE - width / 2;
-    const y = (CHUNK_SIZE - tile.y - 0.15) * CHUNK_TEXTURE_SCALE - height;
+    const widthTiles = Math.max(1, image.width / TILE_TEXTURE_SIZE_PX);
+    const heightTiles = Math.max(1, image.height / TILE_TEXTURE_SIZE_PX);
+    const width = widthTiles * TILE_TEXTURE_SIZE_PX;
+    const height = heightTiles * TILE_TEXTURE_SIZE_PX;
+    const x = (tile.x + 0.5) * TILE_TEXTURE_SIZE_PX - width / 2;
+    const y = (CHUNK_SIZE - tile.y - 0.15) * TILE_TEXTURE_SIZE_PX - height;
     chunkCtx.drawImage(image, x, y, width, height);
   }
 
