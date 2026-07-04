@@ -49,8 +49,13 @@ export class ApiClient {
     return this.post("/api/v1/world/move", { token, position: { x, y } });
   }
 
-  async chunks(token: string): Promise<ChunkWindowResponse> {
-    return this.get(`/api/v1/world/chunks?token=${encodeURIComponent(token)}`);
+  async chunks(token: string, position?: { x: number; y: number }): Promise<ChunkWindowResponse> {
+    const params = new URLSearchParams({ token });
+    if (position) {
+      params.set("x", String(position.x));
+      params.set("y", String(position.y));
+    }
+    return this.get(`/api/v1/world/chunks?${params.toString()}`);
   }
 
   wsUrl(): string {

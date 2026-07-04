@@ -26,6 +26,7 @@ const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
 const RENDER_TILE_WINDOW_X = 120;
 const RENDER_TILE_WINDOW_Y = 120;
+const CHUNK_PREFETCH_MARGIN_TILES = 20;
 const PLAYER_RENDER_WIDTH_PX = 28;
 const PLAYER_RENDER_HEIGHT_PX = 58;
 const PLAYER_COLLISION_SIZE_TILES = 1;
@@ -90,6 +91,7 @@ type AppState = {
   socketStatus: string;
   lastError: string;
   lastChunkKey: string;
+  lastChunkWindowKey: string;
   lastChunkRefreshAt: number;
   lastMoveSendAt: number;
   chunkRefreshInFlight: boolean;
@@ -241,6 +243,7 @@ const state: AppState = {
   socketStatus: "未连接",
   lastError: "",
   lastChunkKey: "",
+  lastChunkWindowKey: "",
   lastChunkRefreshAt: 0,
   lastMoveSendAt: 0,
   chunkRefreshInFlight: false,
@@ -1149,6 +1152,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.chunks.clear();
     state.currentTile = undefined;
     state.lastChunkKey = "";
+    state.lastChunkWindowKey = "";
     state.status = "已连接";
     state.lastError = "";
     persistSession();
@@ -1246,6 +1250,7 @@ function logoutToLogin(): void {
   state.lastError = "";
   state.currentTile = undefined;
   state.lastChunkKey = "";
+  state.lastChunkWindowKey = "";
 
   localStorage.removeItem("nbld_session");
   loginEmailInput.value = state.accountEmail;
@@ -1377,8 +1382,12 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   const chunkKey = `${state.mapId}:${worldToChunk(occupied.x)}:${worldToChunk(occupied.y)}`;
   const movedToNewChunk = chunkKey !== state.lastChunkKey;
   const idleRefreshDue = state.pressed.size === 0 && now - state.lastChunkRefreshAt > IDLE_CHUNK_REFRESH_INTERVAL_MS;
-  if (movedToNewChunk || idleRefreshDue) {
+  const nextChunkWindowKey = getPreferredChunkWindowKey(state.player);
+  const shouldPrefetchChunkWindow = nextChunkWindowKey !== state.lastChunkWindowKey;
+  const renderWindowMissingChunks = hasMissingChunksInRenderWindow();
+  if (movedToNewChunk || shouldPrefetchChunkWindow || idleRefreshDue || renderWindowMissingChunks) {
     state.lastChunkKey = chunkKey;
+    state.lastChunkWindowKey = nextChunkWindowKey;
     state.lastChunkRefreshAt = now;
     void refreshChunks(false);
   }
@@ -1408,7 +1417,7 @@ async function refreshChunks(force: boolean): Promise<void> {
   state.chunkRefreshInFlight = true;
   state.status = "加载区块中";
   try {
-    const windowData = await state.api.chunks(state.token);
+    const windowData = await state.api.chunks(state.token, state.player);
     applyChunkWindow(windowData);
     state.status = "已连接";
   } catch (error) {
@@ -1421,6 +1430,7 @@ async function refreshChunks(force: boolean): Promise<void> {
 
 function applyChunkWindow(windowData: ChunkWindowResponse): void {
   state.mapId = windowData.mapId || state.mapId;
+  state.lastChunkWindowKey = `${state.mapId}:${windowData.centerChunkX}:${windowData.centerChunkY}`;
   for (const coord of windowData.unloadedChunks) {
     state.chunks.delete(coordKey(coord));
   }
@@ -1434,6 +1444,37 @@ function applyChunkWindow(windowData: ChunkWindowResponse): void {
     state.chunks.set(key, renderChunk(chunk));
   }
   state.currentTile = findTileAt(state.player.x, state.player.y);
+}
+
+function getPreferredChunkWindowKey(position: Position): string {
+  const occupied = positionToOccupiedTile(position);
+  let chunkX = worldToChunk(occupied.x);
+  let chunkY = worldToChunk(occupied.y);
+  const localX = modFloor(occupied.x, CHUNK_SIZE);
+  const localY = modFloor(occupied.y, CHUNK_SIZE);
+
+  if (localX >= CHUNK_SIZE - CHUNK_PREFETCH_MARGIN_TILES) chunkX += 1;
+  if (localX < CHUNK_PREFETCH_MARGIN_TILES) chunkX -= 1;
+  if (localY >= CHUNK_SIZE - CHUNK_PREFETCH_MARGIN_TILES) chunkY += 1;
+  if (localY < CHUNK_PREFETCH_MARGIN_TILES) chunkY -= 1;
+
+  return `${state.mapId}:${chunkX}:${chunkY}`;
+}
+
+function hasMissingChunksInRenderWindow(): boolean {
+  if (state.chunks.size === 0) return false;
+  const minX = Math.floor(state.camera.x - RENDER_TILE_WINDOW_X / 2);
+  const maxX = Math.floor(state.camera.x + RENDER_TILE_WINDOW_X / 2);
+  const minY = Math.floor(state.camera.y - RENDER_TILE_WINDOW_Y / 2);
+  const maxY = Math.floor(state.camera.y + RENDER_TILE_WINDOW_Y / 2);
+  for (let chunkX = worldToChunk(minX); chunkX <= worldToChunk(maxX); chunkX += 1) {
+    for (let chunkY = worldToChunk(minY); chunkY <= worldToChunk(maxY); chunkY += 1) {
+      if (!state.chunks.has(`${state.mapId}:${chunkX}:${chunkY}`)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function canReuseRenderedChunk(snapshot: ChunkSnapshot): boolean {

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -749,7 +750,18 @@ func (s *Server) handleWorldChunks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	window, err := s.chunks.loadWindow(session.PlayerID, session.MapID, session.Position)
+	position := session.Position
+	if xRaw, yRaw := r.URL.Query().Get("x"), r.URL.Query().Get("y"); xRaw != "" || yRaw != "" {
+		x, xErr := strconv.ParseFloat(xRaw, 64)
+		y, yErr := strconv.ParseFloat(yRaw, 64)
+		if xErr != nil || yErr != nil {
+			http.Error(w, "invalid chunk position", http.StatusBadRequest)
+			return
+		}
+		position = protocol.Position{X: x, Y: y}
+	}
+
+	window, err := s.chunks.loadWindow(session.PlayerID, session.MapID, position)
 	if err != nil {
 		http.Error(w, "failed to load chunks", http.StatusInternalServerError)
 		return
