@@ -1,6 +1,6 @@
-# 团结引擎脚本接入说明
+# 历史团结引擎脚本接入说明
 
-当前目录提供可直接放入团结引擎工程的最小脚本骨架：
+当前目录提供的是历史团结引擎原型脚本骨架，保留用于 H5 客户端迁移参考，不再作为当前接入方案：
 
 - `Protocol/SessionModels.cs`
 - `Network/HttpSessionClient.cs`
@@ -12,7 +12,7 @@
 - `World/DebugCommandConsole.cs`
 - `World/WorldBootstrap.cs`
 
-## 接入步骤
+## 历史接入步骤
 
 1. 在团结引擎中创建一个空场景
 2. 创建玩家对象并绑定 `Transform`
@@ -33,7 +33,12 @@
 7. 若需要基础调试 UI，可在任意对象上挂 `ConnectionStatusOverlay` 并把 `Bootstrap` 拖进去；它会显示连接状态、Socket 状态和当前玩家坐标
 8. 若需要调试指令，可在任意对象上挂 `DebugCommandConsole` 并把 `Bootstrap` 拖进去
 
-## 已知边界
+## 当前状态
+
+- 当前客户端主线已切换为 `H5 + TypeScript`
+- 本目录仅保留作协议、渲染占位和交互逻辑参考
+
+## 历史原型边界
 
 - 当前仓库未在本机创建团结引擎工程
 - 当前脚本未实现其他玩家实体生成

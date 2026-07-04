@@ -582,6 +582,10 @@
               <label for="repeat">重复次数</label>
               <input id="repeat" type="number" step="1" value="1">
             </div>
+            <div class="field">
+              <label for="interval">重复间隔</label>
+              <input id="interval" type="number" min="0" step="0.05" value="0">
+            </div>
           </div>
         </div>
 
@@ -927,6 +931,7 @@
           chance: 1,
           delay: 0.18,
           repeat: 1,
+          interval: 0,
           mechanic: {
             id: "damage",
             damage_type: "physical",
@@ -951,6 +956,7 @@
           chance: 1,
           delay: 0,
           repeat: 1,
+          interval: 0,
           mechanic: {
             id: "damage",
             damage_type: "physical",
@@ -1032,7 +1038,7 @@
       $("addCondition").addEventListener("click", addCondition);
       $("clearConditions").addEventListener("click", clearConditions);
 
-      ["stepName", "stepTrigger", "targeter", "targetRange", "targetRadius", "targetAngle", "targetWidth", "maxTargets", "chance", "delay", "repeat"].forEach(id => {
+      ["stepName", "stepTrigger", "targeter", "targetRange", "targetRadius", "targetAngle", "targetWidth", "maxTargets", "chance", "delay", "repeat", "interval"].forEach(id => {
         $(id).addEventListener("input", updateSelectedStep);
       });
       $("targeter").addEventListener("change", () => {
@@ -1107,6 +1113,7 @@
         chance: 1,
         delay: 0,
         repeat: 1,
+        interval: 0,
         mechanic: { id: mechanic.id, ...normalizedParams(defaultsFor(mechanic)) },
         conditions: []
       };
@@ -1144,6 +1151,7 @@
       step.chance = clamp01($("chance").value);
       step.delay = number($("delay").value);
       step.repeat = Math.max(1, Math.floor(number($("repeat").value)));
+      step.interval = Math.max(0, number($("interval").value));
       render();
     }
 
@@ -1226,6 +1234,7 @@
       $("chance").value = step.chance;
       $("delay").value = step.delay;
       $("repeat").value = step.repeat;
+      $("interval").value = step.interval || 0;
       $("skillLinePreview").textContent = stepText(step);
     }
 
@@ -1295,14 +1304,16 @@
           targeter_params: normalizedTargeterParams(step),
           chance: step.chance,
           delay: step.delay,
-          repeat: step.repeat
+          repeat: step.repeat,
+          interval: step.interval || 0
         });
+        const mechanicParams = Object.fromEntries(Object.entries(step.mechanic).filter(([key]) => key !== "id"));
         mechanicsOut.push({
           mechanic_id: `mech_${skill.skill_id}_${index + 1}`,
           step_id: stepId,
           skill_id: skill.skill_id,
           mechanic_type: step.mechanic.id,
-          ...step.mechanic
+          mechanic_params: mechanicParams
         });
         step.conditions.forEach((condition, conditionIndex) => {
           conditionsOut.push({
@@ -1334,6 +1345,7 @@
       if (!step.mechanic || !step.mechanic.id) issues.push({ line, level: "bad", text: "步骤缺少机制效果" });
       if (step.chance < 0 || step.chance > 1) issues.push({ line, level: "bad", text: "触发几率越界" });
       if (step.repeat < 1) issues.push({ line, level: "bad", text: "重复次数至少为 1" });
+      if (step.repeat > 1 && (step.interval || 0) <= 0) issues.push({ line, level: "warn", text: "重复执行建议配置重复间隔" });
       const targeterParams = normalizedTargeterParams(step);
       if (targeterParams.max_targets < 1) issues.push({ line, level: "bad", text: "目标上限至少为 1" });
       if (["line", "cone", "current", "point"].includes(step.targeter) && targeterParams.range <= 0) {
@@ -1385,12 +1397,13 @@
         .map(([key, value]) => `${key}=${value}`)
         .join(";");
       const cond = step.conditions.length
-        ? ` ?${step.conditions.map(conditionText).join(" && ")}`
+        ? ` ${step.conditions.map(condition => `?${conditionText(condition)}`).join(" ")}`
         : "";
       const timing = [
         step.chance < 1 ? `chance=${step.chance}` : "",
         step.delay > 0 ? `delay=${step.delay}` : "",
-        step.repeat > 1 ? `repeat=${step.repeat}` : ""
+        step.repeat > 1 ? `repeat=${step.repeat}` : "",
+        step.interval > 0 ? `interval=${step.interval}` : ""
       ].filter(Boolean).join(";");
       return `${step.mechanic.id}{${params}} ${targeterText(step)} ~${step.trigger}${timing ? `{${timing}}` : ""}${cond}`;
     }
@@ -1477,10 +1490,6 @@
 
     function targeterLabel(id) {
       return (targeters.find(item => item[0] === id) || [id, id])[1];
-    }
-
-    function conditionLabel(id) {
-      return (conditionTypes.find(item => item[0] === id) || [id, id])[1];
     }
 
     function operatorSymbol(operator) {

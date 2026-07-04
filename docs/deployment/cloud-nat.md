@@ -4,7 +4,7 @@
 
 - 云服务器实际监听内网端口
 - 外网通过 NAT、端口映射、反向代理或域名访问
-- 本地团结引擎连接云端 Go 服务
+- 本地浏览器中的 H5 客户端连接云端 Go 服务
 
 ## 核心区分
 
@@ -14,8 +14,8 @@
 - `NBLD_CHECK_BASE_URL`
   - 当前机器执行自检脚本时访问服务的 URL
   - 例如：`http://127.0.0.1:6363`
-- 团结引擎 `Http Base Url`
-  - 你的本地电脑上团结引擎访问云服务的外部地址
+- H5 客户端 `Http Base Url`
+  - 你的本地电脑上浏览器访问云服务的外部地址
   - 例如：`http://你的域名`、`https://game.example.com`、`http://公网IP:18080`
 
 这三个值不需要相同。
@@ -32,7 +32,7 @@ NBLD_CHECK_BASE_URL=http://127.0.0.1:6363 \
 bash scripts/dev_stack.sh --hold
 ```
 
-本地团结引擎：
+本地 H5 客户端：
 
 - `Http Base Url` 填 `http://公网IP:18080`
 - `Ws Url Override` 留空
@@ -56,7 +56,7 @@ bash scripts/dev_stack.sh --hold
 - `http://127.0.0.1:6363`
 - `/ws/world` 需开启 WebSocket 转发
 
-本地团结引擎：
+本地 H5 客户端：
 
 - `Http Base Url` 填 `https://你的域名`
 - `Ws Url Override` 留空
@@ -97,6 +97,6 @@ curl http://你的外部地址/healthz
 
 ## 工程统一约束
 
-- 客户端统一使用团结引擎
-- 不要再用标准 Unity 打开同一客户端工程
-- 多人协作时统一团结引擎版本
+- 客户端统一使用 H5
+- 浏览器环境需统一 Node.js、包管理器与前端框架版本
+- 历史 `client/unity` 目录不再作为当前联调入口

@@ -6,7 +6,7 @@
 
 ## 技术栈
 
-- 客户端：`团结引擎 + C#`
+- 客户端：`H5 + TypeScript`
 - 服务端：`Go`
 - 性能热点：`Rust`（后期按 profiling 引入）
 - 协议目录：`shared/proto`
@@ -20,13 +20,14 @@
 - 开发规范与任务状态文档
 - 最小世界状态链路
 - SSE/WS 实时同步雏形
-- 团结引擎可导入脚本骨架
+- 团结引擎原型脚本骨架（已废弃，不再作为当前路线）
 - 服务端区块窗口加载与地图分页存档骨架
 - Rust 区块地图生成器原型
 
 ## 目录结构
 
-- `client/unity`：团结引擎客户端工程目录占位
+- `client/unity`：历史客户端原型目录，保留作参考，不再继续开发
+- `client/web`：H5 客户端目录（待初始化）
 - `server`：Go 服务端代码
 - `shared/proto`：客户端与服务端共享协议草案
 - `docs`：项目文档、规范、任务追踪
@@ -137,15 +138,15 @@ bash scripts/dev_stack.sh --hold
 docs/deployment/cloud-nat.md
 ```
 
-10. 客户端统一使用团结引擎，接入规范见：
+10. 客户端当前统一使用 H5，协作约束见：
 
 ```bash
-docs/client/tuanjie-workflow.md
+docs/client/web-workflow.md
 ```
 
 ## 当前阶段目标
 
-- 在团结引擎中创建最小可运行工程并导入现有脚本
+- 初始化最小 H5 客户端工程
 - 客户端登录与移动表现
-- 团结引擎侧接入现有 WebSocket 实时连接
-- 团结引擎侧完成位置同步链路
+- H5 客户端接入现有 WebSocket 实时连接
+- H5 客户端完成位置同步与区块渲染链路
