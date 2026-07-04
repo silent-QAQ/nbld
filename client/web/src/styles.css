@@ -80,8 +80,9 @@ input {
 }
 
 #appearanceModal {
-  width: min(900px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
+  width: min(1180px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 16px;
 }
 
 .auth-page,
@@ -143,6 +144,19 @@ input {
   margin-top: 16px;
 }
 
+#appearanceModal .login-actions {
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#appearanceModal .login-actions button {
+  min-height: 32px;
+  margin-top: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
 .login-panel button.secondary {
   background: rgba(255, 255, 255, 0.12);
   color: var(--text);
@@ -176,27 +190,38 @@ input {
 }
 
 .appearance-editor {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .appearance-editor h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.appearance-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 12px;
+  align-items: start;
+}
+
+.appearance-left,
+.appearance-right {
+  min-width: 0;
 }
 
 .appearance-preview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .appearance-card {
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 8px;
+  padding: 6px;
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -213,7 +238,7 @@ input {
   align-items: center;
   justify-content: center;
   gap: 1px;
-  min-height: 74px;
+  min-height: 54px;
 }
 
 .segment {
@@ -234,14 +259,14 @@ input {
 .appearance-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 8px;
+  gap: 4px 8px;
 }
 
 .appearance-palette {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px 8px;
-  margin-top: 10px;
+  gap: 4px 8px;
+  margin-top: 8px;
 }
 
 .hair-grid {
@@ -253,9 +278,9 @@ input {
 
 .hair-toolbar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-  gap: 6px;
-  margin-top: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 0;
 }
 
 .layer-mode-switch {
@@ -267,10 +292,10 @@ input {
 
 .appearance-field {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 62px minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -283,14 +308,14 @@ input {
 .appearance-editor .appearance-field input {
   width: 100%;
   min-width: 0;
-  height: 28px;
-  padding: 4px 8px;
+  height: 24px;
+  padding: 2px 7px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .appearance-editor input[type="color"] {
-  height: 28px;
+  height: 24px;
   padding: 2px;
 }
 
@@ -302,22 +327,22 @@ input {
 .appearance-editor .hair-layer-btn,
 .appearance-editor .pixel-tools button {
   width: auto;
-  min-height: 32px;
+  min-height: 28px;
   margin-top: 0;
-  padding: 6px 8px;
+  padding: 5px 7px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
 .pixel-editor {
   display: grid;
-  grid-template-columns: repeat(24, 12px);
-  grid-auto-rows: 12px;
+  grid-template-columns: repeat(24, 11px);
+  grid-auto-rows: 11px;
   align-items: start;
   justify-content: center;
-  gap: 2px;
-  margin-top: 12px;
+  gap: 1px;
+  margin-top: 8px;
   overflow: auto;
   max-width: 100%;
   touch-action: none;
@@ -325,15 +350,15 @@ input {
 
 .pixel-tools {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-  gap: 6px;
-  margin-top: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
 }
 
 .pixel-cell {
-  width: 12px;
-  height: 12px;
-  min-width: 12px;
+  width: 11px;
+  height: 11px;
+  min-width: 11px;
   margin: 0;
   padding: 0;
   border: 1px solid rgba(255,255,255,0.08);
@@ -422,17 +447,32 @@ input {
     width: calc(100vw - 20px);
   }
 
+  .appearance-layout {
+    grid-template-columns: 1fr;
+  }
+
   .login-actions,
-  .appearance-grid,
-  .appearance-palette,
   .hair-toolbar,
   .pixel-tools,
   .character-actions {
     grid-template-columns: 1fr;
   }
 
+  .appearance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .appearance-palette {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .appearance-preview {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .hair-toolbar,
+  .pixel-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .toast-error {

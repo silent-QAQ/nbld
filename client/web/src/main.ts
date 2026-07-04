@@ -23,9 +23,10 @@ const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
 const FIXED_TILE_SCALE = 12;
 const CHUNK_REFRESH_INTERVAL_MS = 500;
 const MOVE_SEND_INTERVAL_MS = 90;
-const RENDER_CHUNK_RADIUS = 1;
 const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
+const RENDER_TILE_WINDOW_X = 120;
+const RENDER_TILE_WINDOW_Y = 120;
 const PLAYER_RENDER_WIDTH_PX = 28;
 const PLAYER_RENDER_HEIGHT_PX = 58;
 const PLAYER_COLLISION_SIZE_TILES = 1;
@@ -65,6 +66,7 @@ type ChunkRender = {
 type Facing = "front" | "back" | "left" | "right";
 type LayerEditorMode = "hair" | "skeleton";
 type PaintMode = "fill" | "erase";
+type GameViewport = { x: number; y: number; width: number; height: number };
 
 type AppState = {
   api?: ApiClient;
@@ -157,12 +159,18 @@ app.innerHTML = `
     <section class="modal login-panel hidden" id="appearanceModal">
       <div class="appearance-editor" id="appearanceEditor">
         <h3>角色外观编辑</h3>
-        <div class="appearance-preview" id="appearancePreview"></div>
-        <div class="appearance-grid" id="appearanceGrid"></div>
-        <div class="appearance-palette" id="appearancePalette"></div>
-        <div class="hair-toolbar" id="hairToolbar"></div>
-        <div class="pixel-editor" id="hairGrid"></div>
-        <div class="pixel-tools" id="pixelTools"></div>
+        <div class="appearance-layout">
+          <div class="appearance-left">
+            <div class="appearance-preview" id="appearancePreview"></div>
+            <div class="appearance-grid" id="appearanceGrid"></div>
+            <div class="appearance-palette" id="appearancePalette"></div>
+          </div>
+          <div class="appearance-right">
+            <div class="hair-toolbar" id="hairToolbar"></div>
+            <div class="pixel-editor" id="hairGrid"></div>
+            <div class="pixel-tools" id="pixelTools"></div>
+          </div>
+        </div>
         <div class="login-actions">
           <button id="saveAppearanceButton">保存外观</button>
           <button id="closeAppearanceButton" class="secondary">关闭</button>
@@ -508,20 +516,22 @@ function renderAppearancePreview(appearance: CharacterAppearance): void {
 }
 
 function renderDirectionCard(label: string, body: CharacterBodyAppearance, facing: Facing): string {
+  const scale = 0.72;
   const shoulder = facing === "left" || facing === "right" ? body.sideWidth : body.frontShoulderWidth;
   const chest = facing === "left" || facing === "right" ? body.chestDepth : body.chestWidth;
   const waist = facing === "left" || facing === "right" ? body.waistDepth : body.waistWidth;
   const hip = facing === "left" || facing === "right" ? body.hipDepth : body.hipWidth;
+  const scaled = (value: number) => Math.max(4, Math.round(value * scale));
   return `
     <div class="appearance-card" data-facing="${facing}">
       <strong>${label}</strong>
       <div class="silhouette">
-        <div class="segment head" style="width:${Math.max(10, Math.round(shoulder * 0.55))}px;height:${Math.max(12, Math.round(body.height * 0.22))}px"></div>
-        <div class="segment shoulders" style="width:${shoulder}px"></div>
-        <div class="segment chest" style="width:${chest}px"></div>
-        <div class="segment waist" style="width:${waist}px"></div>
-        <div class="segment hip" style="width:${hip}px"></div>
-        <div class="segment legs" style="width:${Math.max(8, Math.round(hip * 0.7))}px;height:${Math.max(14, Math.round(body.height * 0.35))}px"></div>
+        <div class="segment head" style="width:${Math.max(8, scaled(shoulder * 0.55))}px;height:${Math.max(8, scaled(body.height * 0.22))}px"></div>
+        <div class="segment shoulders" style="width:${scaled(shoulder)}px"></div>
+        <div class="segment chest" style="width:${scaled(chest)}px"></div>
+        <div class="segment waist" style="width:${scaled(waist)}px"></div>
+        <div class="segment hip" style="width:${scaled(hip)}px"></div>
+        <div class="segment legs" style="width:${Math.max(7, scaled(hip * 0.7))}px;height:${Math.max(10, scaled(body.height * 0.35))}px"></div>
       </div>
     </div>
   `;
@@ -1313,9 +1323,14 @@ function draw(): void {
   ctx.fillStyle = "#0c1117";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const renderWindow = getRenderWindow();
+  const viewport = getGameViewport();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(viewport.x, viewport.y, viewport.width, viewport.height);
+  ctx.clip();
+
   for (const chunk of state.chunks.values()) {
-    if (!isChunkInRenderWindow(chunk.snapshot.coord, renderWindow.centerChunkX, renderWindow.centerChunkY)) continue;
+    if (!isChunkInRenderWindow(chunk.snapshot.coord)) continue;
 
     const chunkMinX = chunk.snapshot.coord.chunkX * CHUNK_SIZE;
     const chunkMaxY = (chunk.snapshot.coord.chunkY + 1) * CHUNK_SIZE;
@@ -1332,6 +1347,7 @@ function draw(): void {
     }
   }
   drawLocalPlayer();
+  ctx.restore();
 }
 
 function drawChunkGrid(x: number, y: number, size: number): void {
