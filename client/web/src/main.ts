@@ -13,7 +13,8 @@ import type {
 
 const CHUNK_SIZE = 80;
 const CHUNK_TEXTURE_SCALE = 4;
-const PLAYER_SPEED_TILES_PER_SECOND = 2;
+const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
+const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
 const MIN_TILE_SCALE = 2;
 const MAX_TILE_SCALE = 32;
 const CHUNK_REFRESH_INTERVAL_MS = 500;
@@ -21,6 +22,9 @@ const MOVE_SEND_INTERVAL_MS = 90;
 const RENDER_CHUNK_RADIUS = 1;
 const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
+const PLAYER_RENDER_WIDTH_PX = 28;
+const PLAYER_RENDER_HEIGHT_PX = 58;
+const PLAYER_COLLISION_SIZE_TILES = 1;
 
 type ChunkRender = {
   snapshot: ChunkSnapshot;
@@ -68,7 +72,7 @@ app.innerHTML = `
     </section>
     <section class="hud hidden"></section>
     <section class="debug-panel hidden"></section>
-    <section class="help-panel hidden">WASD / 方向键移动，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
+    <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
   </div>
 `;
 
@@ -286,8 +290,11 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 
   if (dx !== 0 || dy !== 0) {
     const length = Math.hypot(dx, dy);
-    state.player.x += (dx / length) * PLAYER_SPEED_TILES_PER_SECOND * deltaSeconds;
-    state.player.y += (dy / length) * PLAYER_SPEED_TILES_PER_SECOND * deltaSeconds;
+    const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
+      ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
+      : PLAYER_WALK_SPEED_TILES_PER_SECOND;
+    state.player.x += (dx / length) * speed * deltaSeconds;
+    state.player.y += (dy / length) * speed * deltaSeconds;
 
     if (now - state.lastMoveSendAt > MOVE_SEND_INTERVAL_MS) {
       sendMove();
@@ -295,7 +302,8 @@ function updatePlayer(deltaSeconds: number, now: number): void {
     }
   }
 
-  const chunkKey = `${state.mapId}:${worldToChunk(state.player.x)}:${worldToChunk(state.player.y)}`;
+  const occupied = positionToOccupiedTile(state.player);
+  const chunkKey = `${state.mapId}:${worldToChunk(occupied.x)}:${worldToChunk(occupied.y)}`;
   if (chunkKey !== state.lastChunkKey || now - state.lastChunkRefreshAt > CHUNK_REFRESH_INTERVAL_MS) {
     state.lastChunkKey = chunkKey;
     state.lastChunkRefreshAt = now;
@@ -429,8 +437,8 @@ function drawChunkGrid(x: number, y: number, size: number): void {
 
 function drawLocalPlayer(): void {
   const screen = worldToScreen(state.player.x, state.player.y);
-  const width = Math.max(8, state.tileScale * 0.5);
-  const height = Math.max(12, state.tileScale * 0.75);
+  const width = (PLAYER_RENDER_WIDTH_PX / 32) * state.tileScale;
+  const height = (PLAYER_RENDER_HEIGHT_PX / 32) * state.tileScale;
   ctx.fillStyle = "#ff4040";
   ctx.fillRect(screen.x - width / 2, screen.y - height, width, height);
   ctx.strokeStyle = "#ffe7d8";
@@ -440,27 +448,33 @@ function drawLocalPlayer(): void {
 
 function drawRemotePlayer(player: WorldPlayer): void {
   const screen = worldToScreen(player.position.x, player.position.y);
-  const radius = Math.max(4, state.tileScale * 0.28);
+  const width = (PLAYER_RENDER_WIDTH_PX / 32) * state.tileScale;
+  const height = (PLAYER_RENDER_HEIGHT_PX / 32) * state.tileScale;
   ctx.fillStyle = "#67d1ff";
-  ctx.beginPath();
-  ctx.arc(screen.x, screen.y - radius, radius, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(screen.x - width / 2, screen.y - height, width, height);
+  ctx.strokeStyle = "#e6f7ff";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(screen.x - width / 2, screen.y - height, width, height);
   ctx.fillStyle = "#ffffff";
   ctx.font = "12px Microsoft YaHei, sans-serif";
-  ctx.fillText(player.characterName || player.playerId, screen.x + radius + 4, screen.y - radius - 4);
+  ctx.fillText(player.characterName || player.playerId, screen.x + width / 2 + 4, screen.y - height + 12);
 }
 
 function updateHud(): void {
   if (!state.token) return;
-  const chunkX = worldToChunk(state.player.x);
-  const chunkY = worldToChunk(state.player.y);
+  const occupied = positionToOccupiedTile(state.player);
+  const chunkX = worldToChunk(occupied.x);
+  const chunkY = worldToChunk(occupied.y);
   const tile = state.currentTile;
   const visibleTilesX = Math.round(canvas.width / state.tileScale);
   const visibleTilesY = Math.round(canvas.height / state.tileScale);
+  const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
+    ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
+    : PLAYER_WALK_SPEED_TILES_PER_SECOND;
   hud.innerHTML = `
     <div><b>状态</b> ${state.status}　<b>Socket</b> ${state.socketStatus}</div>
     <div><b>玩家</b> ${escapeHtml(state.playerId)}　<b>地图</b> ${escapeHtml(state.mapId)}</div>
-    <div><b>坐标</b> X:${state.player.x.toFixed(2)} Y:${state.player.y.toFixed(2)}　<b>区块</b> ${chunkX}, ${chunkY}</div>
+    <div><b>实体中心</b> X:${state.player.x.toFixed(2)} Y:${state.player.y.toFixed(2)}　<b>占地</b> 1x${PLAYER_COLLISION_SIZE_TILES} 格　<b>速度</b> ${speed.toFixed(1)} m/s　<b>区块</b> ${chunkX}, ${chunkY}</div>
     <div><b>地形</b> ${escapeHtml(tile?.terrain ?? "未加载")}　<b>方块</b> ${escapeHtml(tile?.block ?? "未加载")}　<b>装饰</b> ${escapeHtml(tile?.decoration ?? "-")}</div>
   `;
 
@@ -490,19 +504,21 @@ function dominantTerrain(): string {
 }
 
 function findTileAt(worldX: number, worldY: number): ChunkTile | undefined {
-  const chunkX = worldToChunk(worldX);
-  const chunkY = worldToChunk(worldY);
+  const occupied = positionToOccupiedTile({ x: worldX, y: worldY });
+  const chunkX = worldToChunk(occupied.x);
+  const chunkY = worldToChunk(occupied.y);
   const chunk = state.chunks.get(`${state.mapId}:${chunkX}:${chunkY}`);
   if (!chunk) return undefined;
-  const localX = modFloor(worldX, CHUNK_SIZE);
-  const localY = modFloor(worldY, CHUNK_SIZE);
+  const localX = modFloor(occupied.x, CHUNK_SIZE);
+  const localY = modFloor(occupied.y, CHUNK_SIZE);
   return chunk.snapshot.tiles[localY * CHUNK_SIZE + localX];
 }
 
 function getRenderWindow(): { centerChunkX: number; centerChunkY: number } {
+  const occupied = positionToOccupiedTile(state.player);
   return {
-    centerChunkX: worldToChunk(state.player.x),
-    centerChunkY: worldToChunk(state.player.y),
+    centerChunkX: worldToChunk(occupied.x),
+    centerChunkY: worldToChunk(occupied.y),
   };
 }
 
@@ -540,6 +556,13 @@ function coordKey(coord: ChunkCoord): string {
 
 function worldToChunk(value: number): number {
   return Math.floor(value / CHUNK_SIZE);
+}
+
+function positionToOccupiedTile(position: Position): { x: number; y: number } {
+  return {
+    x: Math.floor(position.x),
+    y: Math.floor(position.y),
+  };
 }
 
 function modFloor(value: number, modulo: number): number {

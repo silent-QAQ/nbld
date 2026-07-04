@@ -117,6 +117,8 @@ type EnterWorldRequest struct {
 }
 
 type Position struct {
+	// X and Y represent the entity center in world tile coordinates.
+	// Gameplay occupancy still uses a 1x1 tile entity footprint.
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
 }
