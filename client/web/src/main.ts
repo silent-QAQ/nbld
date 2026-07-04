@@ -243,7 +243,7 @@ const state: AppState = {
   paintMode: "fill",
 };
 
-baseUrlInput.value = localStorage.getItem("nbld_http_base_url") ?? window.location.origin;
+baseUrlInput.value = normalizeBaseUrl(localStorage.getItem("nbld_http_base_url") ?? defaultApiBaseUrl());
 
 loginButton.addEventListener("click", () => {
   void loginWithEmail();
@@ -292,17 +292,19 @@ baseUrlInput.addEventListener("keydown", (event) => {
 
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("keydown", (event) => {
+  if (isTypingTarget(event.target)) return;
   if (event.code === "KeyH") {
     hud.classList.toggle("hidden");
     debugPanel.classList.toggle("hidden");
     return;
   }
-  if (isMovementKey(event.code)) {
+  if (state.characterId && isMovementKey(event.code)) {
     event.preventDefault();
     state.pressed.add(event.code);
   }
 });
 window.addEventListener("keyup", (event) => {
+  if (isTypingTarget(event.target)) return;
   state.pressed.delete(event.code);
 });
 resizeCanvas();
@@ -353,6 +355,7 @@ async function registerWithEmail(): Promise<void> {
 
 async function prepareApi(): Promise<ApiClient> {
   const baseUrl = normalizeBaseUrl(baseUrlInput.value);
+  baseUrlInput.value = baseUrl;
   localStorage.setItem("nbld_http_base_url", baseUrl);
   const api = new ApiClient(baseUrl);
   state.api = api;
@@ -1006,7 +1009,9 @@ function setLoginBusy(busy: boolean, loginLabel = "邮箱登录"): void {
 }
 
 function persistSession(): void {
-  localStorage.setItem("nbld_http_base_url", baseUrlInput.value.trim());
+  const baseUrl = normalizeBaseUrl(baseUrlInput.value);
+  baseUrlInput.value = baseUrl;
+  localStorage.setItem("nbld_http_base_url", baseUrl);
   localStorage.setItem("nbld_session", JSON.stringify({
     accountId: state.accountId,
     accountEmail: state.accountEmail,
@@ -1173,7 +1178,7 @@ function loop(now: number): void {
 }
 
 function updatePlayer(deltaSeconds: number, now: number): void {
-  if (!state.token) return;
+  if (!state.token || !state.characterId) return;
 
   let dx = 0;
   let dy = 0;
@@ -1485,7 +1490,7 @@ function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: nu
 }
 
 function getLimbMotionState(local: boolean): { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number } {
-  const moving = local ? state.pressed.size > 0 : true;
+  const moving = local ? state.characterId !== "" && state.pressed.size > 0 : true;
   if (!moving) {
     return { leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 };
   }
@@ -1501,7 +1506,7 @@ function getLimbMotionState(local: boolean): { leftArm: number; rightArm: number
 }
 
 function updateHud(): void {
-  if (!state.token) return;
+  if (!state.token || !state.characterId) return;
   const occupied = positionToOccupiedTile(state.player);
   const chunkX = worldToChunk(occupied.x);
   const chunkY = worldToChunk(occupied.y);
@@ -1731,10 +1736,35 @@ function isMovementKey(code: string): boolean {
   return code === "KeyW" || code === "KeyA" || code === "KeyS" || code === "KeyD" || code === "ArrowUp" || code === "ArrowLeft" || code === "ArrowDown" || code === "ArrowRight";
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
+}
+
+function defaultApiBaseUrl(): string {
+  const url = new URL(window.location.href);
+  if (url.port === "27777") {
+    url.port = "6363";
+  }
+  url.pathname = "";
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/+$/, "");
+}
+
 function normalizeBaseUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, "");
-  if (!trimmed) return window.location.origin;
-  return /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`;
+  if (!trimmed) return defaultApiBaseUrl();
+  const normalized = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`;
+  const url = new URL(normalized);
+  if (url.port === "27777") {
+    url.port = "6363";
+  }
+  url.pathname = "";
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/+$/, "");
 }
 
 function getDeviceId(): string {
