@@ -37,6 +37,7 @@ var (
 	ErrInvalidEmailFormat      = errors.New("invalid email format")
 	ErrAuthenticationFailed    = errors.New("invalid email or password")
 	ErrCharacterSelectionEmpty = errors.New("characterId is required")
+	ErrCharacterAppearance     = errors.New("character appearance is invalid")
 )
 
 type accountStore interface {
@@ -74,18 +75,44 @@ type CharacterRoster struct {
 }
 
 type Character struct {
-	ID        string             `json:"id"`
-	Name      string             `json:"name"`
-	Version   int64              `json:"version"`
-	Stats     CharacterStats     `json:"stats"`
-	Inventory ItemContainer      `json:"inventory"`
-	Warehouse ItemContainer      `json:"warehouse"`
-	Position  CharacterPosition  `json:"position"`
-	Equipment CharacterEquipment `json:"equipment"`
-	DeletedAt *time.Time         `json:"deletedAt,omitempty"`
-	PurgeAt   *time.Time         `json:"purgeAt,omitempty"`
-	CreatedAt time.Time          `json:"createdAt"`
-	UpdatedAt time.Time          `json:"updatedAt"`
+	ID         string              `json:"id"`
+	Name       string              `json:"name"`
+	Version    int64               `json:"version"`
+	Stats      CharacterStats      `json:"stats"`
+	Inventory  ItemContainer       `json:"inventory"`
+	Warehouse  ItemContainer       `json:"warehouse"`
+	Position   CharacterPosition   `json:"position"`
+	Equipment  CharacterEquipment  `json:"equipment"`
+	Appearance CharacterAppearance `json:"appearance"`
+	DeletedAt  *time.Time          `json:"deletedAt,omitempty"`
+	PurgeAt    *time.Time          `json:"purgeAt,omitempty"`
+	CreatedAt  time.Time           `json:"createdAt"`
+	UpdatedAt  time.Time           `json:"updatedAt"`
+}
+
+type CharacterAppearance struct {
+	Body CharacterBodyAppearance `json:"body"`
+}
+
+type CharacterBodyAppearance struct {
+	Height             int `json:"height"`
+	FrontShoulderWidth int `json:"frontShoulderWidth"`
+	SideWidth          int `json:"sideWidth"`
+	ChestWidth         int `json:"chestWidth"`
+	WaistWidth         int `json:"waistWidth"`
+	HipWidth           int `json:"hipWidth"`
+	TorsoHeight        int `json:"torsoHeight"`
+	UpperArmWidth      int `json:"upperArmWidth"`
+	UpperArmLength     int `json:"upperArmLength"`
+	ForearmWidth       int `json:"forearmWidth"`
+	ForearmLength      int `json:"forearmLength"`
+	ThighWidth         int `json:"thighWidth"`
+	ThighLength        int `json:"thighLength"`
+	CalfWidth          int `json:"calfWidth"`
+	CalfLength         int `json:"calfLength"`
+	ChestDepth         int `json:"chestDepth"`
+	WaistDepth         int `json:"waistDepth"`
+	HipDepth           int `json:"hipDepth"`
 }
 
 type CharacterStats struct {
@@ -247,6 +274,31 @@ func defaultCharacterEquipment() CharacterEquipment {
 	return equipment
 }
 
+func defaultCharacterAppearance() CharacterAppearance {
+	return CharacterAppearance{
+		Body: CharacterBodyAppearance{
+			Height:             50,
+			FrontShoulderWidth: 24,
+			SideWidth:          12,
+			ChestWidth:         20,
+			WaistWidth:         16,
+			HipWidth:           20,
+			TorsoHeight:        20,
+			UpperArmWidth:      4,
+			UpperArmLength:     11,
+			ForearmWidth:       4,
+			ForearmLength:      10,
+			ThighWidth:         5,
+			ThighLength:        12,
+			CalfWidth:          4,
+			CalfLength:         11,
+			ChestDepth:         10,
+			WaistDepth:         9,
+			HipDepth:           10,
+		},
+	}
+}
+
 func (e *CharacterEquipment) syncVisibleArmor() {
 	e.VisibleArmor = VisibleArmor{
 		Helmet:    e.Helmet,
@@ -261,17 +313,67 @@ func newCharacter(name string) Character {
 	now := time.Now().UTC()
 	equipment := defaultCharacterEquipment()
 	return Character{
-		ID:        "char-" + randomHex(8),
-		Name:      strings.TrimSpace(name),
-		Version:   1,
-		Stats:     defaultCharacterStats(),
-		Inventory: ItemContainer{Items: []ItemStack{}},
-		Warehouse: ItemContainer{Items: []ItemStack{}},
-		Position:  defaultCharacterPosition(),
-		Equipment: equipment,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:         "char-" + randomHex(8),
+		Name:       strings.TrimSpace(name),
+		Version:    1,
+		Stats:      defaultCharacterStats(),
+		Inventory:  ItemContainer{Items: []ItemStack{}},
+		Warehouse:  ItemContainer{Items: []ItemStack{}},
+		Position:   defaultCharacterPosition(),
+		Equipment:  equipment,
+		Appearance: defaultCharacterAppearance(),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
+}
+
+func validateCharacterAppearance(appearance CharacterAppearance) error {
+	body := appearance.Body
+
+	validations := []struct {
+		value int
+		min   int
+		max   int
+	}{
+		{body.Height, 42, 58},
+		{body.FrontShoulderWidth, 22, 28},
+		{body.SideWidth, 10, 16},
+		{body.ChestWidth, 14, 28},
+		{body.WaistWidth, 10, 26},
+		{body.HipWidth, 12, 27},
+		{body.TorsoHeight, 14, 26},
+		{body.UpperArmWidth, 2, 8},
+		{body.UpperArmLength, 6, 18},
+		{body.ForearmWidth, 2, 7},
+		{body.ForearmLength, 5, 17},
+		{body.ThighWidth, 3, 9},
+		{body.ThighLength, 7, 20},
+		{body.CalfWidth, 2, 8},
+		{body.CalfLength, 6, 19},
+		{body.ChestDepth, 7, 16},
+		{body.WaistDepth, 6, 15},
+		{body.HipDepth, 7, 16},
+	}
+	for _, item := range validations {
+		if item.value < item.min || item.value > item.max {
+			return ErrCharacterAppearance
+		}
+	}
+
+	if body.ChestWidth > 28 || body.WaistWidth > 28 || body.HipWidth > 28 {
+		return ErrCharacterAppearance
+	}
+	if body.ChestWidth < 10 || body.WaistWidth < 10 || body.HipWidth < 10 {
+		return ErrCharacterAppearance
+	}
+	if body.ChestDepth > 16 || body.WaistDepth > 16 || body.HipDepth > 16 {
+		return ErrCharacterAppearance
+	}
+	if body.UpperArmWidth+body.ForearmWidth > 28 {
+		return ErrCharacterAppearance
+	}
+
+	return nil
 }
 
 type memoryAccountStore struct {
@@ -640,6 +742,7 @@ func mapStoreError(err error) (int, string) {
 	case errors.Is(err, ErrCharacterNameMissing),
 		errors.Is(err, ErrCharacterNameTooLong),
 		errors.Is(err, ErrCharacterNameTooShort),
+		errors.Is(err, ErrCharacterAppearance),
 		errors.Is(err, ErrEmailMissing),
 		errors.Is(err, ErrUsernameMissing),
 		errors.Is(err, ErrPasswordMissing),

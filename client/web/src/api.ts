@@ -1,4 +1,5 @@
 import type {
+  CharacterAppearance,
   CharacterListResponse,
   CharacterMutationResponse,
   ChunkWindowResponse,
@@ -34,6 +35,10 @@ export class ApiClient {
 
   async deleteCharacter(token: string, characterId: string): Promise<CharacterMutationResponse> {
     return this.post("/api/v1/characters/delete", { token, characterId });
+  }
+
+  async updateCharacterAppearance(token: string, characterId: string, appearance: CharacterAppearance): Promise<CharacterMutationResponse> {
+    return this.post("/api/v1/characters/appearance", { token, characterId, appearance });
   }
 
   async enterWorld(token: string, characterId: string): Promise<EnterWorldResponse> {

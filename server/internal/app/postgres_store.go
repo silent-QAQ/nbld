@@ -126,7 +126,7 @@ func (s *postgresAccountStore) ListCharacters(ctx context.Context, accountID str
 
 	rows, err := s.pool.Query(
 		ctx,
-		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, appearance, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE account_id = $1
 		 ORDER BY created_at ASC`,
@@ -217,12 +217,16 @@ func (s *postgresAccountStore) CreateCharacter(ctx context.Context, accountID, n
 	if err != nil {
 		return Character{}, err
 	}
+	appearance, err := json.Marshal(character.Appearance)
+	if err != nil {
+		return Character{}, err
+	}
 
 	err = tx.QueryRow(
 		ctx,
 		`INSERT INTO characters (
-			id, account_id, name, stats, inventory, warehouse, position, equipment
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			id, account_id, name, stats, inventory, warehouse, position, equipment, appearance
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING created_at, updated_at`,
 		character.ID,
 		accountID,
@@ -232,6 +236,7 @@ func (s *postgresAccountStore) CreateCharacter(ctx context.Context, accountID, n
 		warehouse,
 		position,
 		equipment,
+		appearance,
 	).Scan(&character.CreatedAt, &character.UpdatedAt)
 	if err != nil {
 		return Character{}, err
@@ -290,7 +295,7 @@ func (s *postgresAccountStore) SoftDeleteCharacter(ctx context.Context, accountI
 		 WHERE account_id = $1
 		   AND id = $2
 		   AND deleted_at IS NULL
-		 RETURNING id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at`,
+		 RETURNING id, name, version, stats, inventory, warehouse, position, equipment, appearance, deleted_at, purge_at, created_at, updated_at`,
 		accountID,
 		characterID,
 	)
@@ -315,7 +320,7 @@ func (s *postgresAccountStore) GetCharacter(ctx context.Context, accountID, char
 
 	row := s.pool.QueryRow(
 		ctx,
-		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, appearance, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE account_id = $1 AND id = $2`,
 		accountID,
@@ -356,6 +361,10 @@ func (s *postgresAccountStore) SaveCharacter(ctx context.Context, accountID stri
 	if err != nil {
 		return err
 	}
+	appearanceData, err := json.Marshal(character.Appearance)
+	if err != nil {
+		return err
+	}
 
 	tag, err := s.pool.Exec(
 		ctx,
@@ -365,6 +374,7 @@ func (s *postgresAccountStore) SaveCharacter(ctx context.Context, accountID stri
 		     warehouse = $5,
 		     position = $6,
 		     equipment = $7,
+		     appearance = $8,
 		     version = version + 1,
 		     updated_at = NOW()
 		 WHERE account_id = $1
@@ -377,6 +387,7 @@ func (s *postgresAccountStore) SaveCharacter(ctx context.Context, accountID stri
 		warehouseData,
 		positionData,
 		equipmentData,
+		appearanceData,
 	)
 	if err != nil {
 		return err
@@ -474,7 +485,7 @@ func (s *postgresAccountStore) AdminListAccounts(ctx context.Context, limit int)
 func (s *postgresAccountStore) AdminListCharactersByAccount(ctx context.Context, accountID string) ([]Character, error) {
 	rows, err := s.pool.Query(
 		ctx,
-		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, appearance, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE account_id = $1
 		 ORDER BY created_at ASC`,
@@ -499,7 +510,7 @@ func (s *postgresAccountStore) AdminListCharactersByAccount(ctx context.Context,
 func (s *postgresAccountStore) AdminGetCharacter(ctx context.Context, characterID string) (Character, error) {
 	row := s.pool.QueryRow(
 		ctx,
-		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, appearance, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE id = $1`,
 		characterID,
@@ -637,6 +648,7 @@ func scanCharacter(scanner characterScanner) (Character, error) {
 	var warehouseData []byte
 	var positionData []byte
 	var equipmentData []byte
+	var appearanceData []byte
 
 	err := scanner.Scan(
 		&character.ID,
@@ -647,6 +659,7 @@ func scanCharacter(scanner characterScanner) (Character, error) {
 		&warehouseData,
 		&positionData,
 		&equipmentData,
+		&appearanceData,
 		&character.DeletedAt,
 		&character.PurgeAt,
 		&character.CreatedAt,
@@ -669,6 +682,9 @@ func scanCharacter(scanner characterScanner) (Character, error) {
 		return Character{}, err
 	}
 	if err := json.Unmarshal(equipmentData, &character.Equipment); err != nil {
+		return Character{}, err
+	}
+	if err := json.Unmarshal(appearanceData, &character.Appearance); err != nil {
 		return Character{}, err
 	}
 	character.Equipment.syncVisibleArmor()

@@ -129,6 +129,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("/api/v1/characters/inventory", s.handleUpdateCharacterInventory)
 	mux.HandleFunc("/api/v1/characters/warehouse", s.handleUpdateCharacterWarehouse)
 	mux.HandleFunc("/api/v1/characters/equipment", s.handleUpdateCharacterEquipment)
+	mux.HandleFunc("/api/v1/characters/appearance", s.handleUpdateCharacterAppearance)
 	mux.HandleFunc("/api/v1/world/enter", s.handleEnterWorld)
 	mux.HandleFunc("/api/v1/world/leave", s.handleLeaveWorld)
 	mux.HandleFunc("/api/v1/world/state", s.handleWorldState)
@@ -535,6 +536,34 @@ func (s *Server) handleUpdateCharacterEquipment(w http.ResponseWriter, r *http.R
 		character.Equipment.syncVisibleArmor()
 	})
 	if !ok {
+		return
+	}
+
+	writeJSON(w, http.StatusOK, protocol.CharacterMutationResponse{
+		Character: toProtocolCharacter(character),
+	})
+}
+
+func (s *Server) handleUpdateCharacterAppearance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req protocol.UpdateCharacterAppearanceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json body", http.StatusBadRequest)
+		return
+	}
+
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+		character.Appearance = protocolAppearanceToDomain(req.Appearance)
+	})
+	if !ok {
+		return
+	}
+	if err := validateCharacterAppearance(character.Appearance); err != nil {
+		writeStoreError(w, err)
 		return
 	}
 
@@ -1466,6 +1495,28 @@ func toProtocolCharacter(character Character) protocol.CharacterSummary {
 				Shoulders: character.Equipment.VisibleArmor.Shoulders,
 			},
 		},
+		Appearance: protocol.CharacterAppearance{
+			Body: protocol.CharacterBodyAppearance{
+				Height:             character.Appearance.Body.Height,
+				FrontShoulderWidth: character.Appearance.Body.FrontShoulderWidth,
+				SideWidth:          character.Appearance.Body.SideWidth,
+				ChestWidth:         character.Appearance.Body.ChestWidth,
+				WaistWidth:         character.Appearance.Body.WaistWidth,
+				HipWidth:           character.Appearance.Body.HipWidth,
+				TorsoHeight:        character.Appearance.Body.TorsoHeight,
+				UpperArmWidth:      character.Appearance.Body.UpperArmWidth,
+				UpperArmLength:     character.Appearance.Body.UpperArmLength,
+				ForearmWidth:       character.Appearance.Body.ForearmWidth,
+				ForearmLength:      character.Appearance.Body.ForearmLength,
+				ThighWidth:         character.Appearance.Body.ThighWidth,
+				ThighLength:        character.Appearance.Body.ThighLength,
+				CalfWidth:          character.Appearance.Body.CalfWidth,
+				CalfLength:         character.Appearance.Body.CalfLength,
+				ChestDepth:         character.Appearance.Body.ChestDepth,
+				WaistDepth:         character.Appearance.Body.WaistDepth,
+				HipDepth:           character.Appearance.Body.HipDepth,
+			},
+		},
 		CreatedAt: character.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: character.UpdatedAt.Format(time.RFC3339),
 	}
@@ -1615,4 +1666,29 @@ func protocolEquipmentToDomain(equipment protocol.CharacterEquipment) CharacterE
 	}
 	out.syncVisibleArmor()
 	return out
+}
+
+func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) CharacterAppearance {
+	return CharacterAppearance{
+		Body: CharacterBodyAppearance{
+			Height:             appearance.Body.Height,
+			FrontShoulderWidth: appearance.Body.FrontShoulderWidth,
+			SideWidth:          appearance.Body.SideWidth,
+			ChestWidth:         appearance.Body.ChestWidth,
+			WaistWidth:         appearance.Body.WaistWidth,
+			HipWidth:           appearance.Body.HipWidth,
+			TorsoHeight:        appearance.Body.TorsoHeight,
+			UpperArmWidth:      appearance.Body.UpperArmWidth,
+			UpperArmLength:     appearance.Body.UpperArmLength,
+			ForearmWidth:       appearance.Body.ForearmWidth,
+			ForearmLength:      appearance.Body.ForearmLength,
+			ThighWidth:         appearance.Body.ThighWidth,
+			ThighLength:        appearance.Body.ThighLength,
+			CalfWidth:          appearance.Body.CalfWidth,
+			CalfLength:         appearance.Body.CalfLength,
+			ChestDepth:         appearance.Body.ChestDepth,
+			WaistDepth:         appearance.Body.WaistDepth,
+			HipDepth:           appearance.Body.HipDepth,
+		},
+	}
 }

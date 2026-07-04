@@ -19,6 +19,9 @@ var migration002 string
 //go:embed sql/migrations/003_character_json_indexes.sql
 var migration003 string
 
+//go:embed sql/migrations/004_character_appearance.sql
+var migration004 string
+
 type sqlMigration struct {
 	Version int
 	Name    string
@@ -30,6 +33,7 @@ func defaultMigrations() []sqlMigration {
 		{Version: 1, Name: "init", SQL: migration001},
 		{Version: 2, Name: "sessions_and_audit", SQL: migration002},
 		{Version: 3, Name: "character_json_indexes", SQL: migration003},
+		{Version: 4, Name: "character_appearance", SQL: migration004},
 	}
 }
 

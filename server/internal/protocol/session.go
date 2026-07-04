@@ -272,18 +272,44 @@ type CharacterEquipment struct {
 }
 
 type CharacterSummary struct {
-	ID        string             `json:"id"`
-	Name      string             `json:"name"`
-	Version   int64              `json:"version"`
-	Stats     CharacterStats     `json:"stats"`
-	Inventory ItemContainer      `json:"inventory"`
-	Warehouse ItemContainer      `json:"warehouse"`
-	Position  CharacterPosition  `json:"position"`
-	Equipment CharacterEquipment `json:"equipment"`
-	DeletedAt string             `json:"deletedAt,omitempty"`
-	PurgeAt   string             `json:"purgeAt,omitempty"`
-	CreatedAt string             `json:"createdAt"`
-	UpdatedAt string             `json:"updatedAt"`
+	ID         string              `json:"id"`
+	Name       string              `json:"name"`
+	Version    int64               `json:"version"`
+	Stats      CharacterStats      `json:"stats"`
+	Inventory  ItemContainer       `json:"inventory"`
+	Warehouse  ItemContainer       `json:"warehouse"`
+	Position   CharacterPosition   `json:"position"`
+	Equipment  CharacterEquipment  `json:"equipment"`
+	Appearance CharacterAppearance `json:"appearance"`
+	DeletedAt  string              `json:"deletedAt,omitempty"`
+	PurgeAt    string              `json:"purgeAt,omitempty"`
+	CreatedAt  string              `json:"createdAt"`
+	UpdatedAt  string              `json:"updatedAt"`
+}
+
+type CharacterAppearance struct {
+	Body CharacterBodyAppearance `json:"body"`
+}
+
+type CharacterBodyAppearance struct {
+	Height             int `json:"height"`
+	FrontShoulderWidth int `json:"frontShoulderWidth"`
+	SideWidth          int `json:"sideWidth"`
+	ChestWidth         int `json:"chestWidth"`
+	WaistWidth         int `json:"waistWidth"`
+	HipWidth           int `json:"hipWidth"`
+	TorsoHeight        int `json:"torsoHeight"`
+	UpperArmWidth      int `json:"upperArmWidth"`
+	UpperArmLength     int `json:"upperArmLength"`
+	ForearmWidth       int `json:"forearmWidth"`
+	ForearmLength      int `json:"forearmLength"`
+	ThighWidth         int `json:"thighWidth"`
+	ThighLength        int `json:"thighLength"`
+	CalfWidth          int `json:"calfWidth"`
+	CalfLength         int `json:"calfLength"`
+	ChestDepth         int `json:"chestDepth"`
+	WaistDepth         int `json:"waistDepth"`
+	HipDepth           int `json:"hipDepth"`
 }
 
 type CharacterListResponse struct {
@@ -320,6 +346,12 @@ type UpdateCharacterEquipmentRequest struct {
 	Token       string             `json:"token"`
 	CharacterID string             `json:"characterId"`
 	Equipment   CharacterEquipment `json:"equipment"`
+}
+
+type UpdateCharacterAppearanceRequest struct {
+	Token       string              `json:"token"`
+	CharacterID string              `json:"characterId"`
+	Appearance  CharacterAppearance `json:"appearance"`
 }
 
 type DeleteCharacterRequest struct {

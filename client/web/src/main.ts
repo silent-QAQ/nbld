@@ -2,6 +2,7 @@ import "./styles.css";
 import { ApiClient } from "./api";
 import { loadAssets, type AssetMaps } from "./assets";
 import type {
+  CharacterBodyAppearance,
   CharacterSummary,
   ChunkCoord,
   ChunkSnapshot,
@@ -124,6 +125,12 @@ app.innerHTML = `
         <input id="characterNameInput" spellcheck="false" />
         <button id="createCharacterButton" class="secondary">创建角色</button>
         <div class="character-list" id="characterList"></div>
+        <div class="appearance-editor hidden" id="appearanceEditor">
+          <h3>角色外观</h3>
+          <div class="appearance-preview" id="appearancePreview"></div>
+          <div class="appearance-grid" id="appearanceGrid"></div>
+          <button id="saveAppearanceButton" class="secondary">保存外观</button>
+        </div>
       </div>
       <div class="error" id="loginError"></div>
     </section>
@@ -147,6 +154,10 @@ const confirmPasswordInput = app.querySelector<HTMLInputElement>("#confirmPasswo
 const characterNameInput = app.querySelector<HTMLInputElement>("#characterNameInput")!;
 const characterPanel = app.querySelector<HTMLElement>("#characterPanel")!;
 const characterList = app.querySelector<HTMLElement>("#characterList")!;
+const appearanceEditor = app.querySelector<HTMLElement>("#appearanceEditor")!;
+const appearancePreview = app.querySelector<HTMLElement>("#appearancePreview")!;
+const appearanceGrid = app.querySelector<HTMLElement>("#appearanceGrid")!;
+const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
 const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
@@ -196,6 +207,10 @@ app.querySelector<HTMLButtonElement>("#createCharacterButton")!.addEventListener
 
 logoutButton.addEventListener("click", () => {
   logoutToLogin();
+});
+
+saveAppearanceButton.addEventListener("click", () => {
+  void saveSelectedCharacterAppearance();
 });
 
 baseUrlInput.addEventListener("keydown", (event) => {
@@ -342,6 +357,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     const enterButton = document.createElement("button");
     enterButton.textContent = "进入世界";
     enterButton.addEventListener("click", () => {
+      renderAppearanceEditor(character);
       void enterWorldWithCharacter(character);
     });
 
@@ -368,8 +384,144 @@ function renderCharacterList(characters: CharacterSummary[]): void {
 
     actions.append(enterButton, deleteButton);
     wrapper.append(meta, actions);
+    wrapper.addEventListener("click", () => {
+      renderAppearanceEditor(character);
+    });
     characterList.appendChild(wrapper);
   }
+}
+
+function renderAppearanceEditor(character: CharacterSummary): void {
+  appearanceEditor.classList.remove("hidden");
+  state.selectedCharacterId = character.id;
+  renderAppearancePreview(character.appearance.body);
+  renderAppearanceControls(character.appearance.body);
+}
+
+function renderAppearancePreview(body: CharacterBodyAppearance): void {
+  const cards = [
+    renderDirectionCard("正面", body.frontShoulderWidth, body.chestWidth, body.waistWidth, body.hipWidth, body.height),
+    renderDirectionCard("背面", body.frontShoulderWidth, body.chestWidth, body.waistWidth, body.hipWidth, body.height),
+    renderDirectionCard("左侧", body.sideWidth, body.chestDepth, body.waistDepth, body.hipDepth, body.height),
+    renderDirectionCard("右侧", body.sideWidth, body.chestDepth, body.waistDepth, body.hipDepth, body.height),
+  ];
+  appearancePreview.innerHTML = cards.join("");
+}
+
+function renderDirectionCard(label: string, shoulder: number, chest: number, waist: number, hip: number, height: number): string {
+  return `
+    <div class="appearance-card">
+      <strong>${label}</strong>
+      <div class="silhouette">
+        <div class="segment head" style="width:${Math.max(10, Math.round(shoulder * 0.55))}px"></div>
+        <div class="segment shoulders" style="width:${shoulder}px"></div>
+        <div class="segment chest" style="width:${chest}px"></div>
+        <div class="segment waist" style="width:${waist}px"></div>
+        <div class="segment hip" style="width:${hip}px"></div>
+        <div class="segment legs" style="width:${Math.max(8, Math.round(hip * 0.7))}px;height:${Math.max(14, Math.round(height * 0.35))}px"></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAppearanceControls(body: CharacterBodyAppearance): void {
+  const fields: Array<[keyof CharacterBodyAppearance, string, number, number]> = [
+    ["height", "总身高", 42, 58],
+    ["frontShoulderWidth", "正面肩宽", 22, 28],
+    ["sideWidth", "侧身厚度", 10, 16],
+    ["chestWidth", "胸围", 14, 28],
+    ["waistWidth", "腰围", 10, 26],
+    ["hipWidth", "臀围", 12, 27],
+    ["torsoHeight", "躯干高度", 14, 26],
+    ["upperArmWidth", "上臂宽度", 2, 8],
+    ["upperArmLength", "上臂长度", 6, 18],
+    ["forearmWidth", "小臂宽度", 2, 7],
+    ["forearmLength", "小臂长度", 5, 17],
+    ["thighWidth", "大腿宽度", 3, 9],
+    ["thighLength", "大腿长度", 7, 20],
+    ["calfWidth", "小腿宽度", 2, 8],
+    ["calfLength", "小腿长度", 6, 19],
+    ["chestDepth", "胸纵深", 7, 16],
+    ["waistDepth", "腰纵深", 6, 15],
+    ["hipDepth", "臀纵深", 7, 16],
+  ];
+
+  appearanceGrid.innerHTML = fields.map(([key, label, min, max]) => `
+    <label class="appearance-field">
+      <span>${label}</span>
+      <input type="number" data-appearance-key="${key}" data-min="${min}" data-max="${max}" value="${body[key]}">
+    </label>
+  `).join("");
+
+  for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
+    input.addEventListener("input", () => {
+      const updated = readAppearanceFromEditor();
+      renderAppearancePreview(updated);
+    });
+  }
+}
+
+function readAppearanceFromEditor(): CharacterBodyAppearance {
+  const base = structuredClone(
+    state.availableCharacters.find((character) => character.id === state.selectedCharacterId)?.appearance.body ?? defaultAppearanceBody(),
+  );
+
+  for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
+    const key = input.dataset.appearanceKey as keyof CharacterBodyAppearance;
+    const min = Number(input.dataset.min ?? 0);
+    const max = Number(input.dataset.max ?? 999);
+    const value = clamp(Number(input.value || base[key]), min, max);
+    base[key] = Math.round(value);
+    input.value = String(base[key]);
+  }
+
+  return base;
+}
+
+async function saveSelectedCharacterAppearance(): Promise<void> {
+  if (!state.api || !state.token || !state.selectedCharacterId) return;
+  const character = state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
+  if (!character) return;
+
+  setLoginBusy(true, "保存外观中...");
+  loginError.textContent = "";
+  try {
+    const body = readAppearanceFromEditor();
+    const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, { body });
+    const index = state.availableCharacters.findIndex((item) => item.id === updated.character.id);
+    if (index >= 0) {
+      state.availableCharacters[index] = updated.character;
+    }
+    renderCharacterList(state.availableCharacters);
+    renderAppearanceEditor(updated.character);
+  } catch (error) {
+    loginError.textContent = errorToString(error);
+  } finally {
+    setLoginBusy(false);
+  }
+}
+
+function defaultAppearanceBody(): CharacterBodyAppearance {
+  return {
+    height: 50,
+    frontShoulderWidth: 24,
+    sideWidth: 12,
+    chestWidth: 20,
+    waistWidth: 16,
+    hipWidth: 20,
+    torsoHeight: 20,
+    upperArmWidth: 4,
+    upperArmLength: 11,
+    forearmWidth: 4,
+    forearmLength: 10,
+    thighWidth: 5,
+    thighLength: 12,
+    calfWidth: 4,
+    calfLength: 11,
+    chestDepth: 10,
+    waistDepth: 9,
+    hipDepth: 10,
+  };
 }
 
 async function createCharacterAndRefresh(): Promise<void> {

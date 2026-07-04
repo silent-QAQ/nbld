@@ -140,6 +140,74 @@ input {
   gap: 8px;
 }
 
+.appearance-editor {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.appearance-editor h3 {
+  margin: 0 0 12px;
+}
+
+.appearance-preview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.appearance-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.appearance-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.silhouette {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 120px;
+}
+
+.segment {
+  background: #d9b35f;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  height: 10px;
+}
+
+.segment.head {
+  height: 14px;
+  border-radius: 999px;
+}
+
+.segment.legs {
+  background: #8fb6ff;
+}
+
+.appearance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.appearance-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .character-entry {
   width: 100%;
   margin-top: 0;

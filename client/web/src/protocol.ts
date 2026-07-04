@@ -109,6 +109,31 @@ export type CharacterEquipment = {
   visibleArmor: VisibleArmor;
 };
 
+export type CharacterBodyAppearance = {
+  height: number;
+  frontShoulderWidth: number;
+  sideWidth: number;
+  chestWidth: number;
+  waistWidth: number;
+  hipWidth: number;
+  torsoHeight: number;
+  upperArmWidth: number;
+  upperArmLength: number;
+  forearmWidth: number;
+  forearmLength: number;
+  thighWidth: number;
+  thighLength: number;
+  calfWidth: number;
+  calfLength: number;
+  chestDepth: number;
+  waistDepth: number;
+  hipDepth: number;
+};
+
+export type CharacterAppearance = {
+  body: CharacterBodyAppearance;
+};
+
 export type CharacterSummary = {
   id: string;
   name: string;
@@ -118,6 +143,7 @@ export type CharacterSummary = {
   warehouse: ItemContainer;
   position: CharacterPosition;
   equipment: CharacterEquipment;
+  appearance: CharacterAppearance;
   deletedAt?: string;
   purgeAt?: string;
   createdAt: string;
