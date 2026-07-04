@@ -1,0 +1,1 @@
+*/15 * * * * cd /nbld && NBLD_GIT_HTTPS_PROXY=http://127.0.0.1:7890 /nbld/scripts/git_auto_sync.sh >> /nbld/.nbld-git-sync.log 2>&1

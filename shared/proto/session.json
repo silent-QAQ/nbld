@@ -1,0 +1,330 @@
+{
+  "module": "session",
+  "version": 2,
+  "endpoints": [
+    {
+      "name": "healthz",
+      "method": "GET",
+      "path": "/healthz",
+      "response": {
+        "status": "string",
+        "instanceId": "string",
+        "startedAt": "rfc3339"
+      }
+    },
+    {
+      "name": "guest_login",
+      "method": "POST",
+      "path": "/api/v1/session/guest",
+      "request": {
+        "deviceId": "string"
+      },
+      "response": {
+        "playerId": "string",
+        "token": "string",
+        "serverTime": "rfc3339"
+      }
+    },
+    {
+      "name": "register",
+      "method": "POST",
+      "path": "/api/v1/session/register",
+      "request": {
+        "email": "string",
+        "username": "string",
+        "password": "string",
+        "confirmPassword": "string"
+      },
+      "response": {
+        "accountId": "string",
+        "email": "string",
+        "username": "string",
+        "serverTime": "rfc3339"
+      }
+    },
+    {
+      "name": "login",
+      "method": "POST",
+      "path": "/api/v1/session/login",
+      "request": {
+        "email": "string",
+        "password": "string"
+      },
+      "response": {
+        "accountId": "string",
+        "email": "string",
+        "username": "string",
+        "token": "string",
+        "serverTime": "rfc3339"
+      }
+    },
+    {
+      "name": "list_characters",
+      "method": "GET",
+      "path": "/api/v1/characters?token={token}",
+      "response": {
+        "activeLimit": "int",
+        "deletedLimit": "int",
+        "active": [
+          {
+            "id": "string",
+            "name": "string",
+            "stats": "characterStats",
+            "inventory": "itemContainer",
+            "warehouse": "itemContainer",
+            "position": "characterPosition",
+            "equipment": "characterEquipment",
+            "createdAt": "rfc3339",
+            "updatedAt": "rfc3339"
+          }
+        ],
+        "deleted": [
+          {
+            "id": "string",
+            "name": "string",
+            "stats": "characterStats",
+            "inventory": "itemContainer",
+            "warehouse": "itemContainer",
+            "position": "characterPosition",
+            "equipment": "characterEquipment",
+            "deletedAt": "rfc3339",
+            "purgeAt": "rfc3339",
+            "createdAt": "rfc3339",
+            "updatedAt": "rfc3339"
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_character",
+      "method": "POST",
+      "path": "/api/v1/characters/create",
+      "request": {
+        "token": "string",
+        "name": "string"
+      },
+      "response": {
+        "character": "characterSummary"
+      }
+    },
+    {
+      "name": "update_character_stats",
+      "method": "POST",
+      "path": "/api/v1/characters/stats",
+      "request": {
+        "token": "string",
+        "characterId": "string",
+        "stats": "characterStats"
+      },
+      "response": {
+        "character": "characterSummary"
+      }
+    },
+    {
+      "name": "update_character_inventory",
+      "method": "POST",
+      "path": "/api/v1/characters/inventory",
+      "request": {
+        "token": "string",
+        "characterId": "string",
+        "inventory": "itemContainer"
+      },
+      "response": {
+        "character": "characterSummary"
+      }
+    },
+    {
+      "name": "update_character_warehouse",
+      "method": "POST",
+      "path": "/api/v1/characters/warehouse",
+      "request": {
+        "token": "string",
+        "characterId": "string",
+        "warehouse": "itemContainer"
+      },
+      "response": {
+        "character": "characterSummary"
+      }
+    },
+    {
+      "name": "update_character_equipment",
+      "method": "POST",
+      "path": "/api/v1/characters/equipment",
+      "request": {
+        "token": "string",
+        "characterId": "string",
+        "equipment": "characterEquipment"
+      },
+      "response": {
+        "character": "characterSummary"
+      }
+    },
+    {
+      "name": "delete_character",
+      "method": "POST",
+      "path": "/api/v1/characters/delete",
+      "request": {
+        "token": "string",
+        "characterId": "string"
+      },
+      "response": {
+        "character": "characterSummary"
+      }
+    },
+    {
+      "name": "enter_world",
+      "method": "POST",
+      "path": "/api/v1/world/enter",
+      "request": {
+        "token": "string",
+        "characterId": "string"
+      },
+      "response": {
+        "playerId": "string",
+        "characterId": "string",
+        "characterName": "string",
+        "worldId": "string",
+        "mapId": "string",
+        "position": {
+          "x": "float64",
+          "y": "float64"
+        }
+      }
+    },
+    {
+      "name": "leave_world",
+      "method": "POST",
+      "path": "/api/v1/world/leave",
+      "request": {
+        "token": "string"
+      },
+      "response": {
+        "playerId": "string",
+        "characterId": "string",
+        "status": "left_world"
+      }
+    },
+    {
+      "name": "get_world_state",
+      "method": "GET",
+      "path": "/api/v1/world/state?token={token}",
+      "response": {
+        "worldId": "string",
+        "mapId": "string",
+        "playerId": "string",
+        "characterId": "string",
+        "characterName": "string",
+        "position": {
+          "x": "float64",
+          "y": "float64"
+        },
+        "biome": "string",
+        "seed": "int64",
+        "players": [
+          {
+            "playerId": "string",
+            "characterId": "string",
+            "characterName": "string",
+            "mapId": "string",
+            "position": {
+              "x": "float64",
+              "y": "float64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "move_player",
+      "method": "POST",
+      "path": "/api/v1/world/move",
+      "request": {
+        "token": "string",
+        "position": {
+          "x": "float64",
+          "y": "float64"
+        }
+      },
+      "response": {
+        "playerId": "string",
+        "characterId": "string",
+        "mapId": "string",
+        "position": {
+          "x": "float64",
+          "y": "float64"
+        }
+      }
+    },
+    {
+      "name": "world_events",
+      "method": "GET",
+      "path": "/api/v1/world/events?token={token}",
+      "response": {
+        "contentType": "text/event-stream",
+        "events": [
+          {
+            "type": "connected | player_moved",
+            "playerId": "string",
+            "characterId": "string",
+            "characterName": "string",
+            "mapId": "string",
+            "position": {
+              "x": "float64",
+              "y": "float64"
+            },
+            "occurredAt": "rfc3339"
+          }
+        ]
+      }
+    },
+    {
+      "name": "world_ws",
+      "method": "GET",
+      "path": "/ws/world",
+      "request": {
+        "firstMessage": {
+          "type": "auth",
+          "token": "string"
+        },
+        "messages": [
+          {
+            "type": "move",
+            "position": {
+              "x": "float64",
+              "y": "float64"
+            }
+          }
+        ]
+      },
+      "response": {
+        "messages": [
+          {
+            "type": "auth_ok | player_moved | map_transition | error",
+            "playerId": "string",
+            "characterId": "string",
+            "characterName": "string",
+            "worldId": "string",
+            "mapId": "string",
+            "position": {
+              "x": "float64",
+              "y": "float64"
+            },
+            "players": [
+              {
+                "playerId": "string",
+                "characterId": "string",
+                "characterName": "string",
+                "mapId": "string",
+                "position": {
+                  "x": "float64",
+                  "y": "float64"
+                }
+              }
+            ],
+            "error": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

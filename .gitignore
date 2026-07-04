@@ -1,0 +1,10 @@
+.nbld-gateway
+.nbld-*.log
+
+server/data/
+server/data_backup/
+
+rust/chunkgen/target/
+
+.DS_Store
+Thumbs.db
