@@ -34,6 +34,7 @@ namespace NBLD.World
         private float _lastChunkRefreshAt = -999f;
         private Vector3 _lastSentPosition;
         private string _lastSocketError = "-";
+        private bool _connectStarted;
 
         public string StatusSummary => $"Status: {_status}    Map: {(_mapId ?? "-")}\nPlayer: {(_playerId ?? "-")}    Socket: {CompactSocketStatus()}";
         public Vector3 PlayerPosition => playerTransform != null ? playerTransform.position : Vector3.zero;
@@ -45,28 +46,17 @@ namespace NBLD.World
         private async void Start()
         {
             _httpClient = new HttpSessionClient(httpBaseUrl);
-            _status = "Logging in";
+            _status = "Waiting for login";
             EnsureWorldVisuals();
             EnsureSpawnPoint();
             ConfigurePlayerPresentation();
-
-            try
-            {
-                await ConnectAsync();
-            }
-            catch (Exception ex)
-            {
-                _status = "Connection failed";
-                Debug.LogError($"NBLD bootstrap failed: {ex}");
-            }
         }
 
         private async Task ConnectAsync()
         {
-            var login = await _httpClient.GuestLoginAsync(SystemInfo.deviceUniqueIdentifier);
             _status = "Entering world";
-            _token = login.token;
-            var enterWorld = await _httpClient.EnterWorldAsync(login.token);
+            _token = PlayerSessionState.Token;
+            var enterWorld = await _httpClient.EnterWorldAsync(PlayerSessionState.Token, PlayerSessionState.CharacterId);
 
             _playerId = enterWorld.playerId;
             _mapId = enterWorld.mapId;
@@ -84,7 +74,7 @@ namespace NBLD.World
             _wsClient = new WorldWebSocketClient(BuildWorldWsUrl());
             _wsClient.MessageReceived += HandleServerMessage;
             _wsClient.ErrorReceived += HandleSocketError;
-            await _wsClient.ConnectAsync(login.token);
+            await _wsClient.ConnectAsync(PlayerSessionState.Token);
             _connected = true;
             _status = "Connected";
             BindCamera();
@@ -107,6 +97,21 @@ namespace NBLD.World
 
         private async void Update()
         {
+            if (!_connectStarted && !_connected && PlayerSessionState.IsReadyToEnterWorld)
+            {
+                _connectStarted = true;
+                try
+                {
+                    await ConnectAsync();
+                }
+                catch (Exception ex)
+                {
+                    _status = "Connection failed";
+                    _connectStarted = false;
+                    Debug.LogError($"NBLD bootstrap failed: {ex}");
+                }
+            }
+
             if (!_connected || playerTransform == null)
             {
                 return;

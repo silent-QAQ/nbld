@@ -25,6 +25,32 @@ const TARGET_VISIBLE_TILES_Y = 22.5;
 const PLAYER_RENDER_WIDTH_PX = 28;
 const PLAYER_RENDER_HEIGHT_PX = 58;
 const PLAYER_COLLISION_SIZE_TILES = 1;
+const COLLISION_EPSILON = 0.0001;
+
+const BLOCKING_BLOCKS = new Set<string>([
+  "mountain_rock",
+  "cliff_rock",
+  "glacier_rock",
+  "rock",
+]);
+
+const BLOCKING_DECORATIONS = new Set<string>([
+  "basalt_rock",
+  "dead_tree",
+  "desert_rock",
+  "flat_stone",
+  "granite_boulder",
+  "large_stone",
+  "mossy_rock",
+  "sandstone_rock",
+  "sharp_rock",
+  "slate_rock",
+  "small_stone",
+  "tree_conifer",
+  "tree_deciduous",
+  "tree_jungle",
+  "weathered_stone",
+]);
 
 type ChunkRender = {
   snapshot: ChunkSnapshot;
@@ -293,8 +319,9 @@ function updatePlayer(deltaSeconds: number, now: number): void {
     const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
       ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
       : PLAYER_WALK_SPEED_TILES_PER_SECOND;
-    state.player.x += (dx / length) * speed * deltaSeconds;
-    state.player.y += (dy / length) * speed * deltaSeconds;
+    const deltaX = (dx / length) * speed * deltaSeconds;
+    const deltaY = (dy / length) * speed * deltaSeconds;
+    state.player = movePlayerWithCollision(state.player, deltaX, deltaY);
 
     if (now - state.lastMoveSendAt > MOVE_SEND_INTERVAL_MS) {
       sendMove();
@@ -558,11 +585,133 @@ function worldToChunk(value: number): number {
   return Math.floor(value / CHUNK_SIZE);
 }
 
+function movePlayerWithCollision(position: Position, deltaX: number, deltaY: number): Position {
+  let next = position;
+  if (deltaX !== 0) {
+    next = { ...next, x: resolveAxisCollision(next, deltaX, "x") };
+  }
+  if (deltaY !== 0) {
+    next = { ...next, y: resolveAxisCollision(next, deltaY, "y") };
+  }
+  return next;
+}
+
+function resolveAxisCollision(position: Position, delta: number, axis: "x" | "y"): number {
+  const proposed = { ...position, [axis]: position[axis] + delta };
+  if (!collidesAtPosition(proposed)) {
+    return proposed[axis];
+  }
+
+  const bounds = getCollisionBounds(proposed);
+  const minTileX = Math.floor(bounds.minX + COLLISION_EPSILON);
+  const maxTileX = Math.floor(bounds.maxX - COLLISION_EPSILON);
+  const minTileY = Math.floor(bounds.minY + COLLISION_EPSILON);
+  const maxTileY = Math.floor(bounds.maxY - COLLISION_EPSILON);
+  const half = PLAYER_COLLISION_SIZE_TILES / 2;
+
+  if (axis === "x") {
+    if (delta > 0) {
+      let clamped = proposed.x;
+      for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+        for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+          if (isTileBlocked(tileX, tileY)) {
+            clamped = Math.min(clamped, tileX - half);
+          }
+        }
+      }
+      return clamped;
+    }
+
+    let clamped = proposed.x;
+    for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+      for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+        if (isTileBlocked(tileX, tileY)) {
+          clamped = Math.max(clamped, tileX + 1 + half);
+        }
+      }
+    }
+    return clamped;
+  }
+
+  if (delta > 0) {
+    let clamped = proposed.y;
+    for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+      for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+        if (isTileBlocked(tileX, tileY)) {
+          clamped = Math.min(clamped, tileY - half);
+        }
+      }
+    }
+    return clamped;
+  }
+
+  let clamped = proposed.y;
+  for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+    for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+      if (isTileBlocked(tileX, tileY)) {
+        clamped = Math.max(clamped, tileY + 1 + half);
+      }
+    }
+  }
+  return clamped;
+}
+
+function collidesAtPosition(position: Position): boolean {
+  const bounds = getCollisionBounds(position);
+  const minTileX = Math.floor(bounds.minX + COLLISION_EPSILON);
+  const maxTileX = Math.floor(bounds.maxX - COLLISION_EPSILON);
+  const minTileY = Math.floor(bounds.minY + COLLISION_EPSILON);
+  const maxTileY = Math.floor(bounds.maxY - COLLISION_EPSILON);
+
+  for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+    for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+      if (isTileBlocked(tileX, tileY)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function getCollisionBounds(position: Position): { minX: number; maxX: number; minY: number; maxY: number } {
+  const half = PLAYER_COLLISION_SIZE_TILES / 2;
+  return {
+    minX: position.x - half,
+    maxX: position.x + half,
+    minY: position.y - half,
+    maxY: position.y + half,
+  };
+}
+
 function positionToOccupiedTile(position: Position): { x: number; y: number } {
   return {
     x: Math.floor(position.x),
     y: Math.floor(position.y),
   };
+}
+
+function isTileBlocked(tileX: number, tileY: number): boolean {
+  const chunkX = worldToChunk(tileX);
+  const chunkY = worldToChunk(tileY);
+  const chunk = state.chunks.get(`${state.mapId}:${chunkX}:${chunkY}`);
+  if (!chunk) {
+    return false;
+  }
+
+  const localX = modFloor(tileX, CHUNK_SIZE);
+  const localY = modFloor(tileY, CHUNK_SIZE);
+  const tile = chunk.snapshot.tiles[localY * CHUNK_SIZE + localX];
+  if (!tile) {
+    return false;
+  }
+
+  if (BLOCKING_BLOCKS.has(tile.block || "")) {
+    return true;
+  }
+  if (BLOCKING_DECORATIONS.has(tile.decoration || "")) {
+    return true;
+  }
+  return false;
 }
 
 function modFloor(value: number, modulo: number): number {

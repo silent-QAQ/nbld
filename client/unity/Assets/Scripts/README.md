@@ -1,10 +1,12 @@
-# 历史团结引擎脚本接入说明
+# 团结客户端接入说明
 
-当前目录提供的是历史团结引擎原型脚本骨架，保留用于 H5 客户端迁移参考，不再作为当前接入方案：
+当前目录已支持最小邮箱登录、注册、角色自动创建与进世界链路：
 
 - `Protocol/SessionModels.cs`
 - `Network/HttpSessionClient.cs`
 - `Network/WorldWebSocketClient.cs`
+- `World/LoginScreenController.cs`
+- `World/PlayerSessionState.cs`
 - `World/FollowCamera.cs`
 - `World/ConnectionStatusOverlay.cs`
 - `World/SimpleWorldVisuals.cs`
@@ -12,12 +14,17 @@
 - `World/DebugCommandConsole.cs`
 - `World/WorldBootstrap.cs`
 
-## 历史接入步骤
+## 接入步骤
 
 1. 在团结引擎中创建一个空场景
 2. 创建玩家对象并绑定 `Transform`
-3. 新建空对象，挂载 `WorldBootstrap`
-4. 在 Inspector 中填写：
+3. 新建空对象，挂载 `LoginScreenController`
+4. 再新建一个空对象，挂载 `WorldBootstrap`
+5. 在 Inspector 中填写：
+   - `LoginScreenController`
+     - `Http Base Url`：例如 `http://127.0.0.1:6363`
+     - `Default Character Name`：首次自动建角名，留空则使用用户名
+   - `WorldBootstrap`
    - `Http Base Url`：本地团结引擎实际要访问的服务地址，例如 `http://127.0.0.1:6363` 或 `https://你的域名`
    - `Ws Url Override`：通常留空，脚本会根据 `Http Base Url` 自动拼出 `/ws/world`
    - `Player Transform`：玩家对象
@@ -28,17 +35,15 @@
    - `World Bounds`：仅在启用边界限制时生效
    - `Move Tiles Per Second`：默认 `2`
    - `Player Size In Tiles`：默认 `0.5`
-5. 先运行 `bash scripts/dev_stack.sh`
-6. 回到 Play 模式验证登录、进世界与移动同步
-7. 若需要基础调试 UI，可在任意对象上挂 `ConnectionStatusOverlay` 并把 `Bootstrap` 拖进去；它会显示连接状态、Socket 状态和当前玩家坐标
-8. 若需要调试指令，可在任意对象上挂 `DebugCommandConsole` 并把 `Bootstrap` 拖进去
+6. 先运行 `bash scripts/dev_stack.sh`
+7. 配置服务端登录环境：
+   - `NBLD_DATABASE_URL`
+   - 可选 `NBLD_REDIS_URL`
+8. 回到 Play 模式，先在登录框注册或登录，再自动读取角色并进入世界
+9. 若需要基础调试 UI，可在任意对象上挂 `ConnectionStatusOverlay` 并把 `Bootstrap` 拖进去；它会显示连接状态、Socket 状态和当前玩家坐标
+10. 若需要调试指令，可在任意对象上挂 `DebugCommandConsole` 并把 `Bootstrap` 拖进去
 
-## 当前状态
-
-- 当前客户端主线已切换为 `H5 + TypeScript`
-- 本目录仅保留作协议、渲染占位和交互逻辑参考
-
-## 历史原型边界
+## 当前边界
 
 - 当前仓库未在本机创建团结引擎工程
 - 当前脚本未实现其他玩家实体生成
@@ -51,6 +56,7 @@
 - 若配置了 `ChunkWorldRenderer`，客户端会轮询 `/api/v1/world/chunks` 并渲染附近区块占位
 - 当前 `ChunkWorldRenderer` 已切到对象池复用，不再每次刷新整块销毁重建
 - 默认镜头会抬高并带轻微俯视倾斜，视野约覆盖 `120x90` 格调试范围
+- 当前登录界面使用即时 GUI 实现，便于快速联调；后续可替换为正式 UGUI 界面
 - 调试命令：
   - `/tp x y`：传送到指定坐标
   - `/chunklight`：切换区块边界高亮
