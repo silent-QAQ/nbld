@@ -564,7 +564,7 @@
             </div>
             <div class="field">
               <label for="targetParam">选择器参数</label>
-              <input id="targetParam" placeholder="n=张三 / id=1001 / p=1,2,0 / r=3">
+              <input id="targetParam" placeholder="n=张三 / p=1,2,0 / @slo+o(r=5,ir=3) / @slo+o(r=5,ir=3,ag=90,c=70)">
             </div>
             <div class="field full">
               <label for="targetSelector">目标选择器表达式</label>
@@ -724,7 +724,7 @@
       ["@zp", "@zp 指向坐标"],
       ["@bj", "@bj 多边形边界"],
       ["@fw", "@fw 多边形范围"],
-      ["@o", "@单坐标+o 圆/扇形"],
+      ["@o", "@单坐标+o 圆/扇/环/扇环"],
       ["@el", "@单坐标/单坐标+o 椭圆"]
     ];
 
@@ -1228,7 +1228,7 @@
       const param = $("targetParam").value.trim();
       if (!param) return base;
       if (["@bj", "@fw"].includes(base)) return `${base}=(${param})`;
-      if (base === "@o") return `${param}+o`;
+      if (base === "@o") return param.includes("+o") ? param : `${param}+o`;
       if (base === "@el") return param.includes("+o") ? param : `${param}+o`;
       return `${base}(${param})`;
     }
@@ -1584,10 +1584,41 @@
       if (["@bj", "@fw"].includes(step.targeter) && !/^\@(bj|fw)=\(.+\)$/.test(selector)) {
         issues.push({ line, level: "bad", text: `${step.targeter} 范围选择器必须使用 =(...)` });
       }
-      if (["@o", "@el"].includes(step.targeter) && !selector.includes("+o(")) {
-        issues.push({ line, level: "bad", text: `${step.targeter} 范围选择器必须包含 +o(...)` });
+      if (["@o", "@el"].includes(step.targeter)) {
+        if (!selector.includes("+o(")) {
+          issues.push({ line, level: "bad", text: `${step.targeter} 范围选择器必须包含 +o(...)` });
+        } else {
+          const params = parseRangeSelectorParams(selector);
+          const outerRadius = number(params.r);
+          const innerRadius = params.ir === undefined ? null : number(params.ir);
+          const hasArcStart = params.ag !== undefined;
+          const hasArcWidth = params.c !== undefined || params.ctc !== undefined;
+          if (outerRadius <= 0) issues.push({ line, level: "bad", text: `${step.targeter} 圆/扇/环范围必须配置 r 外半径` });
+          if (innerRadius !== null && (innerRadius < 0 || innerRadius >= outerRadius)) {
+            issues.push({ line, level: "bad", text: `${step.targeter} 环形内半径 ir 必须大于等于 0 且小于 r` });
+          }
+          if (hasArcStart !== hasArcWidth) {
+            issues.push({ line, level: "bad", text: `${step.targeter} 扇形/扇环必须同时配置 ag 与 c 或 ctc` });
+          }
+          if (hasArcWidth) {
+            const arcWidth = params.c !== undefined ? number(params.c) : number(params.ctc);
+            if (arcWidth <= 0 || arcWidth > 360) issues.push({ line, level: "bad", text: `${step.targeter} 扇形/扇环角度宽度必须在 0 到 360 之间` });
+          }
+        }
       }
       return issues;
+    }
+
+    function parseRangeSelectorParams(selector) {
+      const match = selector.match(/\+o\(([^)]*)\)/);
+      if (!match) return {};
+      return match[1].split(",").reduce((params, part) => {
+        const [rawKey, ...rawValue] = part.split("=");
+        const key = (rawKey || "").trim();
+        const value = rawValue.join("=").trim();
+        if (key) params[key] = value;
+        return params;
+      }, {});
     }
 
     function validateMechanic(mechanic, line) {

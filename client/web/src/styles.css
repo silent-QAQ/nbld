@@ -120,6 +120,19 @@ input {
   border-top: 1px solid var(--line);
 }
 
+.character-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.character-header strong {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .character-list {
   margin-top: 12px;
   display: flex;
@@ -134,6 +147,34 @@ input {
   background: rgba(0, 0, 0, 0.18);
   color: var(--text);
   border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.character-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.character-meta strong {
+  font-size: 15px;
+}
+
+.character-meta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.character-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.character-actions button {
+  margin-top: 0;
 }
 
 .login-panel .error {
