@@ -320,6 +320,18 @@
       gap: 8px;
     }
 
+    .mechanic-filter {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .mechanic-filter button.active {
+      color: #fff;
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
     .mechanic-button {
       display: grid;
       align-content: center;
@@ -591,7 +603,9 @@
 
         <div class="card">
           <h3>机制效果</h3>
+          <div class="mechanic-filter" id="mechanicFilter"></div>
           <div class="mechanic-grid" id="mechanicButtons"></div>
+          <div class="line-preview" id="mechanicHelp"></div>
           <div class="grid" id="mechanicParams"></div>
           <div class="toolbar">
             <button id="applyMechanic" class="primary">应用到当前步骤</button>
@@ -755,248 +769,212 @@
       ["gauntlet", "护手"]
     ];
 
+    const mechanicCategories = [
+      ["all", "全部"],
+      ["damage", "伤害"],
+      ["shape", "形状"],
+      ["motion", "位移"],
+      ["state", "状态"],
+      ["entity", "实体"],
+      ["logic", "逻辑"],
+      ["meta", "技能组"]
+    ];
+
     const mechanics = [
-      {
-        id: "damage",
-        title: "伤害",
-        hint: "Damage",
-        params: [
-          ["damage_type", "类型", "select", "physical", [["physical", "物理"], ["magical", "法术"]]],
-          ["ratio", "倍率", "number", "1.2"],
-          ["flat", "固定值", "number", "0"],
-          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]],
-          ["extra_damage", "追加伤害", "select", "false", [["false", "否"], ["true", "是"]]],
-          ["trigger_hit_event", "触发命中事件", "select", "true", [["true", "是"], ["false", "否"]]]
-        ]
-      },
-      {
-        id: "projectile",
-        title: "投射物",
-        hint: "Projectile",
-        params: [
-          ["projectile_id", "投射物", "text", "frost_star"],
-          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
-          ["speed", "速度", "number", "12"],
-          ["range", "射程", "number", "10"],
-          ["ratio", "伤害倍率", "number", "0.9"],
-          ["collision_radius", "碰撞半径", "number", "0.25"],
-          ["max_pierce", "穿透数", "number", "0"],
-          ["pattern", "形态", "select", "single", [["single", "单发"], ["spread", "散射"], ["homing", "追踪"]]],
-          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
-        ]
-      },
-      {
-        id: "ray",
-        title: "射线",
-        hint: "Ray",
-        params: [
-          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
-          ["length", "长度", "number", "8"],
-          ["width", "宽度", "number", "0.5"],
-          ["ratio", "伤害倍率", "number", "1.0"],
-          ["tick", "跳频", "number", "0"],
-          ["max_targets", "目标上限", "number", "5"],
-          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
-        ]
-      },
-      {
-        id: "area",
-        title: "区域",
-        hint: "Area",
-        params: [
-          ["shape", "形状", "select", "circle", [["circle", "圆形"], ["rect", "矩形"], ["sector", "扇形"]]],
-          ["radius", "半径", "number", "3"],
-          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
-          ["ratio", "伤害倍率", "number", "0.6"],
-          ["duration", "持续", "number", "4"],
-          ["tick", "跳频", "number", "1"],
-          ["max_targets", "目标上限", "number", "8"]
-        ]
-      },
-      {
-        id: "aura",
-        title: "光环",
-        hint: "Aura",
-        params: [
-          ["aura_id", "光环", "text", "war_aura"],
-          ["radius", "半径", "number", "4"],
-          ["duration", "持续", "number", "6"],
-          ["tick", "跳频", "number", "0.5"],
-          ["team", "阵营", "select", "ally", [["ally", "友方"], ["enemy", "敌方"], ["both", "全部"]]],
-          ["effect_mode", "效果模式", "select", "attribute", [["attribute", "属性"], ["status", "状态"], ["resource", "资源"]]],
-          ["value", "强度", "number", "0.1"]
-        ]
-      },
-      {
-        id: "move",
-        title: "移动",
-        hint: "Move",
-        params: [
-          ["mode", "模式", "select", "dash", [["dash", "冲刺"], ["blink", "瞬移"], ["pull", "拉拽"], ["knockback", "击退"]]],
-          ["distance", "距离", "number", "3"],
-          ["duration", "耗时", "number", "0.15"]
-        ]
-      },
-      {
-        id: "summon",
-        title: "召唤",
-        hint: "Summon",
-        params: [
-          ["summon_id", "召唤物", "text", "shadow_guard"],
-          ["kind", "类型", "select", "unit", [["unit", "单位"], ["totem", "图腾"], ["trap", "陷阱"]]],
-          ["count", "数量", "number", "1"],
-          ["duration", "持续", "number", "12"],
-          ["max_count", "上限", "number", "1"],
-          ["inherit_attack", "继承攻击", "number", "0.35"]
-        ]
-      },
-      {
-        id: "status",
-        title: "状态",
-        hint: "Status",
-        params: [
-          ["status_id", "状态", "text", "slow"],
-          ["operation", "操作", "select", "apply", [["apply", "添加"], ["remove", "移除"], ["cleanse", "净化"]]],
-          ["value", "强度", "number", "0.2"],
-          ["duration", "持续", "number", "2"],
-          ["stack_limit", "层数上限", "number", "1"]
-        ]
-      },
-      {
-        id: "dot",
-        title: "持续伤害",
-        hint: "DoT",
-        params: [
-          ["dot_id", "持续伤害", "text", "burning"],
-          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
-          ["ratio", "每跳倍率", "number", "0.18"],
-          ["duration", "持续", "number", "4"],
-          ["tick", "跳频", "number", "1"],
-          ["stack_mode", "叠加模式", "select", "refresh", [["refresh", "刷新"], ["stack", "叠层"], ["independent", "独立"]]]
-        ]
-      },
-      {
-        id: "heal",
-        title: "治疗",
-        hint: "Heal",
-        params: [
-          ["ratio", "法攻倍率", "number", "0.8"],
-          ["flat", "固定值", "number", "0"],
-          ["can_crit", "治疗暴击", "select", "false", [["false", "否"], ["true", "是"]]],
-          ["overheal_to_shield", "溢出转护盾", "select", "false", [["false", "否"], ["true", "是"]]]
-        ]
-      },
-      {
-        id: "shield",
-        title: "护盾",
-        hint: "Shield",
-        params: [
-          ["shield_id", "护盾", "text", "guard_shield"],
-          ["ratio", "倍率", "number", "0.6"],
-          ["flat", "固定值", "number", "0"],
-          ["duration", "持续", "number", "4"],
-          ["damage_type", "吸收类型", "select", "both", [["physical", "物理"], ["magical", "法术"], ["both", "全部"]]]
-        ]
-      },
-      {
-        id: "control",
-        title: "控制",
-        hint: "Control",
-        params: [
-          ["control", "类型", "select", "freeze", [["freeze", "冻结"], ["stun", "眩晕"], ["root", "定身"], ["silence", "沉默"], ["interrupt", "打断"]]],
-          ["duration", "持续", "number", "1.5"]
-        ]
-      },
-      {
-        id: "resource",
-        title: "资源",
-        hint: "Resource",
-        params: [
-          ["resource", "资源", "select", "mana", [["hp", "生命"], ["mana", "法力"], ["stamina", "耐力"]]],
-          ["operation", "操作", "select", "restore", [["restore", "回复"], ["drain", "削减"], ["cost", "消耗"]]],
-          ["value", "比例", "number", "0.1"]
-        ]
-      },
-      {
-        id: "attribute",
-        title: "属性修改",
-        hint: "Attribute",
-        params: [
-          ["attribute", "属性", "select", "physical_attack", [["physical_attack", "物理攻击"], ["magic_attack", "法术攻击"], ["physical_defense", "物理防御"], ["magic_defense", "法术防御"], ["move_speed", "移速"], ["damage_bonus", "伤害加成"], ["damage_immunity", "伤害免疫"]]],
-          ["mode", "模式", "select", "add", [["add", "加法"], ["mul", "乘法"], ["override", "覆盖"]]],
-          ["value", "数值", "number", "0.1"],
-          ["duration", "持续", "number", "6"]
-        ]
-      },
-      {
-        id: "stack",
-        title: "层数",
-        hint: "Stack",
-        params: [
-          ["stack_id", "层数", "select", "frost", [["frost", "寒霜"], ["burn", "灼烧"], ["armor_break", "破甲"]]],
-          ["operation", "操作", "select", "add", [["add", "叠加"], ["consume", "消耗"], ["detonate", "引爆"], ["spread", "扩散"]]],
-          ["count", "数量", "number", "1"],
-          ["radius", "扩散半径", "number", "0"]
-        ]
-      },
-      {
-        id: "trap",
-        title: "陷阱",
-        hint: "Trap",
-        params: [
-          ["trap_id", "陷阱", "text", "spike_trap"],
-          ["trigger_radius", "触发半径", "number", "1.2"],
-          ["arm_time", "布置时间", "number", "0.35"],
-          ["duration", "持续", "number", "10"],
-          ["trigger_limit", "触发次数", "number", "1"],
-          ["effect_ref", "触发技能", "text", "skill_trap_spike"]
-        ]
-      },
-      {
-        id: "cooldown",
-        title: "冷却",
-        hint: "Cooldown",
-        params: [
-          ["target_skill", "目标技能", "text", "skill_spear_dash_001"],
-          ["operation", "操作", "select", "reduce", [["reduce", "缩减"], ["reset", "重置"], ["lock", "禁用"]]],
-          ["value", "数值", "number", "0.2"]
-        ]
-      },
-      {
-        id: "combo",
-        title: "连击窗口",
-        hint: "Combo",
-        params: [
-          ["combo_id", "连击", "text", "spear_chain"],
-          ["operation", "操作", "select", "open", [["open", "开启"], ["advance", "推进"], ["reset", "重置"], ["close", "关闭"]]],
-          ["duration", "窗口", "number", "1.2"],
-          ["max_stage", "最大段数", "number", "3"]
-        ]
-      },
-      {
-        id: "meta",
-        title: "技能组",
-        hint: "MetaSkill",
-        params: [
-          ["skill_ref", "调用技能", "text", "skill_spear_followup_001"],
-          ["mode", "模式", "select", "async", [["sync", "同步"], ["async", "异步"], ["queued", "排队"]]],
-          ["max_depth", "最大深度", "number", "1"]
-        ]
-      },
-      {
-        id: "event",
-        title: "事件",
-        hint: "Event",
-        params: [
-          ["event_id", "事件", "text", "pojun_execute"],
-          ["payload", "参数", "text", ""]
-        ]
-      }
+      mechanic("damage", "伤害", "Damage", "damage", "对目标造成一次即时伤害，是所有武器主动技能的基础输出单元。", ["current", "hit", "line", "cone", "circle"], [
+        ["damage_type", "类型", "select", "physical", [["physical", "物理"], ["magical", "法术"]]],
+        ["ratio", "倍率", "number", "1.2"],
+        ["flat", "固定值", "number", "0"],
+        ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]],
+        ["extra_damage", "追加伤害", "select", "false", [["false", "否"], ["true", "是"]]],
+        ["trigger_hit_event", "触发命中事件", "select", "true", [["true", "是"], ["false", "否"]]]
+      ]),
+      mechanic("dot", "持续伤害", "DoT", "damage", "挂载持续伤害；适合灼烧、毒、流血，不建议用高频区域伤害模拟。", ["hit", "circle", "nearEnemies"], [
+        ["dot_id", "持续伤害", "text", "burning"],
+        ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
+        ["ratio", "每跳倍率", "number", "0.18"],
+        ["duration", "持续", "number", "4"],
+        ["tick", "跳频", "number", "1"],
+        ["stack_mode", "叠加模式", "select", "refresh", [["refresh", "刷新"], ["stack", "叠层"], ["independent", "独立"]]]
+      ]),
+      mechanic("heal", "治疗", "Heal", "damage", "对友方或自身回复生命，默认按法术攻击计算。", ["self", "nearAllies", "current"], [
+        ["ratio", "法攻倍率", "number", "0.8"],
+        ["flat", "固定值", "number", "0"],
+        ["can_crit", "治疗暴击", "select", "false", [["false", "否"], ["true", "是"]]],
+        ["overheal_to_shield", "溢出转护盾", "select", "false", [["false", "否"], ["true", "是"]]]
+      ]),
+      mechanic("projectile", "投射物", "Projectile", "shape", "生成 2D 投射物；命中后可造成伤害、穿透或追踪。", ["self", "point", "current"], [
+        ["projectile_id", "投射物", "text", "frost_star"],
+        ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
+        ["speed", "速度", "number", "12"],
+        ["range", "射程", "number", "10"],
+        ["ratio", "伤害倍率", "number", "0.9"],
+        ["collision_radius", "碰撞半径", "number", "0.25"],
+        ["max_pierce", "穿透数", "number", "0"],
+        ["pattern", "形态", "select", "single", [["single", "单发"], ["spread", "散射"], ["homing", "追踪"], ["boomerang", "回旋"]]],
+        ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
+      ]),
+      mechanic("modify_projectile", "修改投射物", "ModifyProjectile", "shape", "修改已生成投射物的速度、转向、穿透或分裂，用于天赋强化投射类技能。", ["self", "current"], [
+        ["projectile_tag", "投射物标签", "text", "frost_star"],
+        ["field", "修改字段", "select", "speed", [["speed", "速度"], ["range", "射程"], ["max_pierce", "穿透"], ["split_count", "分裂数"], ["homing_strength", "追踪强度"]]],
+        ["mode", "模式", "select", "add", [["add", "加法"], ["mul", "乘法"], ["set", "设定"]]],
+        ["value", "数值", "number", "1"]
+      ]),
+      mechanic("ray", "射线", "Ray", "shape", "生成瞬时或持续射线；适合光束、穿刺、锁定引导。", ["line", "current"], [
+        ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
+        ["length", "长度", "number", "8"],
+        ["width", "宽度", "number", "0.5"],
+        ["ratio", "伤害倍率", "number", "1.0"],
+        ["tick", "跳频", "number", "0"],
+        ["max_targets", "目标上限", "number", "5"],
+        ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
+      ]),
+      mechanic("area", "区域", "Area", "shape", "生成持续区域；区域本身负责筛选，实际伤害和状态也可拆成技能组。", ["point", "circle", "self"], [
+        ["shape", "形状", "select", "circle", [["circle", "圆形"], ["rect", "矩形"], ["sector", "扇形"], ["line", "线形"]]],
+        ["radius", "半径", "number", "3"],
+        ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
+        ["ratio", "伤害倍率", "number", "0.6"],
+        ["duration", "持续", "number", "4"],
+        ["tick", "跳频", "number", "1"],
+        ["max_targets", "目标上限", "number", "8"]
+      ]),
+      mechanic("aura", "光环", "Aura", "shape", "以施法者、召唤物或区域为中心周期影响目标。", ["self", "owner", "point"], [
+        ["aura_id", "光环", "text", "war_aura"],
+        ["radius", "半径", "number", "4"],
+        ["duration", "持续", "number", "6"],
+        ["tick", "跳频", "number", "0.5"],
+        ["team", "阵营", "select", "ally", [["ally", "友方"], ["enemy", "敌方"], ["both", "全部"]]],
+        ["effect_mode", "效果模式", "select", "attribute", [["attribute", "属性"], ["status", "状态"], ["resource", "资源"], ["meta", "调用技能组"]]],
+        ["value", "强度", "number", "0.1"]
+      ]),
+      mechanic("orbit", "环绕物", "Orbital", "shape", "生成围绕施法者旋转的碰撞体，适合护体剑气、旋刃、元素球。", ["self"], [
+        ["orbital_id", "环绕物", "text", "blade_orbit"],
+        ["count", "数量", "number", "3"],
+        ["radius", "轨道半径", "number", "1.6"],
+        ["duration", "持续", "number", "5"],
+        ["tick", "命中间隔", "number", "0.5"],
+        ["ratio", "伤害倍率", "number", "0.25"]
+      ]),
+      mechanic("move", "移动", "Move", "motion", "移动施法者或目标；dash/blink/pull/knockback 都走同一个服务端执行器。", ["self", "hit", "current"], [
+        ["mode", "模式", "select", "dash", [["dash", "冲刺"], ["blink", "瞬移"], ["pull", "拉拽"], ["knockback", "击退"], ["leap", "跳跃"]]],
+        ["distance", "距离", "number", "3"],
+        ["duration", "耗时", "number", "0.15"],
+        ["collision", "碰撞处理", "select", "stop", [["stop", "遇阻停止"], ["slide", "沿墙滑动"], ["ignore", "忽略碰撞"]]]
+      ]),
+      mechanic("velocity", "速度修改", "Velocity", "motion", "直接修改单位速度向量，适合击飞、加速、减速推拉。", ["self", "hit", "nearEnemies"], [
+        ["mode", "方向", "select", "forward", [["forward", "向前"], ["backward", "向后"], ["towards", "朝目标"], ["away", "远离目标"], ["vector", "指定向量"]]],
+        ["speed", "速度", "number", "8"],
+        ["duration", "持续", "number", "0.25"],
+        ["damping", "阻尼", "number", "0.2"]
+      ]),
+      mechanic("force", "力场", "Force", "motion", "对范围内目标施加吸引、排斥、旋涡力。", ["circle", "point", "self"], [
+        ["mode", "模式", "select", "pull", [["pull", "吸引"], ["push", "排斥"], ["vortex", "旋涡"]]],
+        ["radius", "半径", "number", "3"],
+        ["strength", "强度", "number", "6"],
+        ["duration", "持续", "number", "1"],
+        ["tick", "跳频", "number", "0.1"]
+      ]),
+      mechanic("status", "状态", "Status", "state", "添加、移除或净化状态；Buff/Debuff 都归入状态系统。", ["self", "hit", "nearAllies", "nearEnemies"], [
+        ["status_id", "状态", "text", "slow"],
+        ["operation", "操作", "select", "apply", [["apply", "添加"], ["remove", "移除"], ["cleanse", "净化"]]],
+        ["value", "强度", "number", "0.2"],
+        ["duration", "持续", "number", "2"],
+        ["stack_limit", "层数上限", "number", "1"]
+      ]),
+      mechanic("control", "控制", "Control", "state", "施加硬控或软控，必须受韧性/免控规则影响。", ["hit", "current", "circle", "nearEnemies"], [
+        ["control", "类型", "select", "freeze", [["freeze", "冻结"], ["stun", "眩晕"], ["root", "定身"], ["silence", "沉默"], ["interrupt", "打断"], ["airborne", "浮空"]]],
+        ["duration", "持续", "number", "1.5"],
+        ["break_on_damage", "受击解除", "select", "false", [["false", "否"], ["true", "是"]]]
+      ]),
+      mechanic("shield", "护盾", "Shield", "state", "给目标添加可被伤害消耗的护盾。", ["self", "nearAllies", "current"], [
+        ["shield_id", "护盾", "text", "guard_shield"],
+        ["ratio", "倍率", "number", "0.6"],
+        ["flat", "固定值", "number", "0"],
+        ["duration", "持续", "number", "4"],
+        ["damage_type", "吸收类型", "select", "both", [["physical", "物理"], ["magical", "法术"], ["both", "全部"]]]
+      ]),
+      mechanic("immunity", "免疫", "Immunity", "state", "短时间免疫指定伤害、控制或追加伤害，用于翻滚、格挡、霸体窗口。", ["self", "nearAllies"], [
+        ["immune_type", "免疫类型", "select", "control", [["damage", "伤害"], ["control", "控制"], ["extra_damage", "追加伤害"], ["all", "全部"]]],
+        ["duration", "持续", "number", "0.8"],
+        ["value", "强度", "number", "1"]
+      ]),
+      mechanic("dispel", "驱散", "Dispel", "state", "按标签移除状态，适合净化、破盾、解除增益。", ["self", "hit", "nearAllies", "nearEnemies"], [
+        ["dispel_type", "驱散类型", "select", "debuff", [["buff", "增益"], ["debuff", "减益"], ["control", "控制"], ["shield", "护盾"]]],
+        ["count", "数量", "number", "1"],
+        ["priority", "优先级", "select", "newest", [["newest", "最新"], ["oldest", "最旧"], ["strongest", "最强"], ["random", "随机"]]]
+      ]),
+      mechanic("resource", "资源", "Resource", "state", "修改生命、法力、耐力；非伤害型扣血也走这里。", ["self", "hit", "nearAllies"], [
+        ["resource", "资源", "select", "mana", [["hp", "生命"], ["mana", "法力"], ["stamina", "耐力"]]],
+        ["operation", "操作", "select", "restore", [["restore", "回复"], ["drain", "削减"], ["cost", "消耗"], ["set", "设定"]]],
+        ["value", "比例", "number", "0.1"]
+      ]),
+      mechanic("attribute", "属性修改", "Attribute", "state", "临时修改属性，属性名必须来自属性系统。", ["self", "hit", "nearAllies", "nearEnemies"], [
+        ["attribute", "属性", "select", "physical_attack", [["physical_attack", "物理攻击"], ["magic_attack", "法术攻击"], ["physical_defense", "物理防御"], ["magic_defense", "法术防御"], ["move_speed", "移速"], ["damage_bonus", "伤害加成"], ["damage_immunity", "伤害免疫"], ["crit_resist", "暴击抵抗"]]],
+        ["mode", "模式", "select", "add", [["add", "加法"], ["mul", "乘法"], ["override", "覆盖"]]],
+        ["value", "数值", "number", "0.1"],
+        ["duration", "持续", "number", "6"]
+      ]),
+      mechanic("stack", "层数", "Stack", "state", "处理可被条件读取的层数。", ["self", "hit", "nearEnemies"], [
+        ["stack_id", "层数", "select", "frost", [["frost", "寒霜"], ["burn", "灼烧"], ["armor_break", "破甲"], ["bleed", "流血"]]],
+        ["operation", "操作", "select", "add", [["add", "叠加"], ["consume", "消耗"], ["detonate", "引爆"], ["spread", "扩散"], ["set", "设定"]]],
+        ["count", "数量", "number", "1"],
+        ["radius", "扩散半径", "number", "0"]
+      ]),
+      mechanic("summon", "召唤", "Summon", "entity", "召唤单位、图腾或陷阱实体。", ["point", "self"], [
+        ["summon_id", "召唤物", "text", "shadow_guard"],
+        ["kind", "类型", "select", "unit", [["unit", "单位"], ["totem", "图腾"], ["trap", "陷阱"]]],
+        ["count", "数量", "number", "1"],
+        ["duration", "持续", "number", "12"],
+        ["max_count", "上限", "number", "1"],
+        ["inherit_attack", "继承攻击", "number", "0.35"]
+      ]),
+      mechanic("trap", "陷阱", "Trap", "entity", "布置触发器实体，触发后调用指定技能组。", ["point", "self"], [
+        ["trap_id", "陷阱", "text", "spike_trap"],
+        ["trigger_radius", "触发半径", "number", "1.2"],
+        ["arm_time", "布置时间", "number", "0.35"],
+        ["duration", "持续", "number", "10"],
+        ["trigger_limit", "触发次数", "number", "1"],
+        ["effect_ref", "触发技能", "text", "skill_trap_spike"]
+      ]),
+      mechanic("marker", "标记点", "Marker", "entity", "在场上放置临时标记，供后续技能组寻址。", ["point", "hit", "self"], [
+        ["marker_id", "标记", "text", "spear_mark"],
+        ["duration", "持续", "number", "5"],
+        ["max_count", "上限", "number", "3"],
+        ["attach", "附着", "select", "world", [["world", "地面"], ["target", "目标"], ["caster", "施法者"]]]
+      ]),
+      mechanic("cooldown", "冷却", "Cooldown", "logic", "修改技能冷却。", ["self"], [
+        ["target_skill", "目标技能", "text", "skill_spear_dash_001"],
+        ["operation", "操作", "select", "reduce", [["reduce", "缩减"], ["reset", "重置"], ["lock", "禁用"], ["add", "延长"]]],
+        ["value", "数值", "number", "0.2"]
+      ]),
+      mechanic("combo", "连击窗口", "Combo", "logic", "开启、推进或关闭连击窗口。", ["self"], [
+        ["combo_id", "连击", "text", "spear_chain"],
+        ["operation", "操作", "select", "open", [["open", "开启"], ["advance", "推进"], ["reset", "重置"], ["close", "关闭"]]],
+        ["duration", "窗口", "number", "1.2"],
+        ["max_stage", "最大段数", "number", "3"]
+      ]),
+      mechanic("chain", "连锁", "Chain", "logic", "在目标之间传递效果，接近 MythicMobs 链式技能但限制为 2D 可控范围。", ["hit", "current", "nearEnemies"], [
+        ["chain_id", "连锁", "text", "lightning_chain"],
+        ["jumps", "跳数", "number", "3"],
+        ["radius", "跳跃半径", "number", "4"],
+        ["falloff", "衰减", "number", "0.2"],
+        ["effect_ref", "每跳技能", "text", "skill_chain_hit"]
+      ]),
+      mechanic("event", "事件", "Event", "logic", "广播战斗事件，只做通知，不直接改数值。", ["self", "hit"], [
+        ["event_id", "事件", "text", "pojun_execute"],
+        ["payload", "参数", "text", ""]
+      ]),
+      mechanic("meta", "技能组", "MetaSkill", "meta", "调用另一个技能组，是复杂组合的核心入口。", ["self", "hit", "point", "circle"], [
+        ["skill_ref", "调用技能", "text", "skill_spear_followup_001"],
+        ["mode", "模式", "select", "async", [["sync", "同步"], ["async", "异步"], ["queued", "排队"]]],
+        ["max_depth", "最大深度", "number", "1"]
+      ])
     ];
 
     const state = {
       selectedStepId: null,
       selectedMechanic: "damage",
+      mechanicCategory: "all",
       mechanicParams: {},
       outputTab: "all",
       steps: [
@@ -1065,6 +1043,20 @@
       return `${prefix}_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
     }
 
+    function mechanic(id, title, hint, category, description, targeters, params, options = {}) {
+      return {
+        id,
+        title,
+        hint,
+        category,
+        description,
+        targeters,
+        params,
+        safe: options.safe ?? true,
+        server: options.server ?? true
+      };
+    }
+
     function init() {
       fillSelect($("skillType"), skillTypes, "melee");
       fillSelect($("globalTrigger"), triggers, "onCast");
@@ -1074,6 +1066,7 @@
       fillSelect($("conditionType"), conditionTypes.map(condition => [condition.id, condition.label]), "target_hp_ratio");
       renderTagChips("weaponTags", weapons, ["spear"]);
       renderTagChips("offhandTags", offhands, []);
+      renderMechanicFilter();
       renderMechanicButtons();
       bindEvents();
       syncConditionEditor();
@@ -1094,7 +1087,10 @@
     }
 
     function renderMechanicButtons() {
-      $("mechanicButtons").innerHTML = mechanics.map(mechanic => {
+      const visibleMechanics = state.mechanicCategory === "all"
+        ? mechanics
+        : mechanics.filter(mechanic => mechanic.category === state.mechanicCategory);
+      $("mechanicButtons").innerHTML = visibleMechanics.map(mechanic => {
         return `<button class="mechanic-button" data-mechanic="${escape(mechanic.id)}"><strong>${escape(mechanic.title)}</strong><span>${escape(mechanic.hint)}</span></button>`;
       }).join("");
       $("mechanicButtons").addEventListener("click", event => {
@@ -1104,6 +1100,20 @@
         const mechanic = currentMechanic();
         state.mechanicParams = defaultsFor(mechanic);
         render();
+      });
+    }
+
+    function renderMechanicFilter() {
+      $("mechanicFilter").innerHTML = mechanicCategories.map(([id, label]) => {
+        return `<button data-mechanic-category="${escape(id)}"${id === state.mechanicCategory ? ' class="active"' : ""}>${escape(label)}</button>`;
+      }).join("");
+      $("mechanicFilter").addEventListener("click", event => {
+        const button = event.target.closest("[data-mechanic-category]");
+        if (!button) return;
+        state.mechanicCategory = button.dataset.mechanicCategory;
+        renderMechanicFilter();
+        renderMechanicButtons();
+        renderMechanicParams();
       });
     }
 
@@ -1355,8 +1365,12 @@
 
     function renderMechanicParams() {
       const mechanic = currentMechanic();
+      $("mechanicHelp").textContent = `${mechanic.title} · ${mechanic.hint} · 推荐目标器: ${mechanic.targeters.map(targeterLabel).join(", ")} · ${mechanic.description}`;
       document.querySelectorAll("[data-mechanic]").forEach(button => {
         button.classList.toggle("active", button.dataset.mechanic === mechanic.id);
+      });
+      document.querySelectorAll("[data-mechanic-category]").forEach(button => {
+        button.classList.toggle("active", button.dataset.mechanicCategory === state.mechanicCategory);
       });
       if (!Object.keys(state.mechanicParams).length) state.mechanicParams = defaultsFor(mechanic);
       $("mechanicParams").innerHTML = mechanic.params.map(([key, label, type, fallback, options]) => {
@@ -1494,6 +1508,10 @@
       if (["damage", "status", "control", "resource", "stack"].includes(step.mechanic.id) && step.targeter === "self" && step.mechanic.id === "damage") {
         issues.push({ line, level: "warn", text: "伤害机制目标为自身" });
       }
+      const mechanicInfo = mechanics.find(item => item.id === step.mechanic.id);
+      if (mechanicInfo && !mechanicInfo.targeters.includes(step.targeter)) {
+        issues.push({ line, level: "warn", text: `${mechanicLabel(step.mechanic.id)}通常不建议使用目标器 @${step.targeter}` });
+      }
       validateMechanic(step.mechanic, line).forEach(issue => issues.push(issue));
       step.conditions.forEach(condition => {
         validateCondition(condition, line).forEach(issue => issues.push(issue));
@@ -1503,7 +1521,7 @@
 
     function validateMechanic(mechanic, line) {
       const issues = [];
-      const numericFields = ["ratio", "flat", "duration", "tick", "range", "radius", "width", "length", "speed", "distance", "value", "count", "max_count", "max_targets"];
+      const numericFields = ["ratio", "flat", "duration", "tick", "range", "radius", "width", "length", "speed", "distance", "value", "count", "max_count", "max_targets", "strength", "jumps", "falloff", "collision_radius", "trigger_radius", "trigger_limit", "max_stage"];
       numericFields.forEach(field => {
         if (field in mechanic && number(mechanic[field]) < 0) issues.push({ line, level: "bad", text: `${mechanic.id}.${field} 不能为负数` });
       });
@@ -1518,6 +1536,12 @@
       if (mechanic.id === "ray" && (number(mechanic.length) <= 0 || number(mechanic.width) <= 0)) issues.push({ line, level: "bad", text: "射线长度和宽度必须大于 0" });
       if (mechanic.id === "summon" && number(mechanic.count) > number(mechanic.max_count)) issues.push({ line, level: "bad", text: "召唤数量不能大于召唤上限" });
       if (mechanic.id === "trap" && !mechanic.effect_ref) issues.push({ line, level: "bad", text: "陷阱必须配置触发技能" });
+      if (mechanic.id === "chain" && !mechanic.effect_ref) issues.push({ line, level: "bad", text: "连锁必须配置每跳技能" });
+      if (mechanic.id === "chain" && number(mechanic.jumps) < 1) issues.push({ line, level: "bad", text: "连锁跳数至少为 1" });
+      if (mechanic.id === "marker" && !mechanic.marker_id) issues.push({ line, level: "bad", text: "标记点必须配置标记 ID" });
+      if (mechanic.id === "orbit" && number(mechanic.count) < 1) issues.push({ line, level: "bad", text: "环绕物数量至少为 1" });
+      if (mechanic.id === "force" && number(mechanic.tick) <= 0) issues.push({ line, level: "bad", text: "力场必须配置跳频" });
+      if (mechanic.id === "modify_projectile" && !mechanic.projectile_tag) issues.push({ line, level: "bad", text: "修改投射物必须配置投射物标签" });
       if (mechanic.id === "cooldown" && !mechanic.target_skill) issues.push({ line, level: "bad", text: "冷却机制必须配置目标技能" });
       if (mechanic.id === "meta" && !mechanic.skill_ref) issues.push({ line, level: "bad", text: "技能组机制必须配置调用技能" });
       return issues;
