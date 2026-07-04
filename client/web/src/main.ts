@@ -258,7 +258,7 @@ backToLoginButton.addEventListener("click", () => {
 });
 
 app.querySelector<HTMLButtonElement>("#createCharacterButton")!.addEventListener("click", () => {
-  void createCharacterAndRefresh();
+  void openCreateCharacterWithAppearance();
 });
 
 logoutButton.addEventListener("click", () => {
@@ -421,7 +421,6 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     const enterButton = document.createElement("button");
     enterButton.textContent = "进入世界";
     enterButton.addEventListener("click", () => {
-      renderAppearanceEditor(character);
       void enterWorldWithCharacter(character);
     });
 
@@ -465,6 +464,23 @@ function renderAppearanceEditor(character: CharacterSummary): void {
   renderPaletteControls(state.appearanceDraft.palette);
   renderLayerControls();
   renderPixelTools();
+}
+
+async function openCreateCharacterWithAppearance(): Promise<void> {
+  const draftCharacter: CharacterSummary = {
+    id: "draft",
+    name: characterNameInput.value.trim() || state.accountUsername || "Hero",
+    version: 0,
+    stats: {} as never,
+    inventory: { items: [] },
+    warehouse: { items: [] },
+    position: { worldId: "", mapId: "", x: 0, y: 0 },
+    equipment: { visibleArmor: {} },
+    appearance: defaultAppearance(),
+    createdAt: "",
+    updatedAt: "",
+  };
+  renderAppearanceEditor(draftCharacter);
 }
 
 function renderAppearancePreview(appearance: CharacterAppearance): void {
@@ -825,19 +841,26 @@ function copyCurrentLayerToSibling(rows: string[]): void {
 async function saveSelectedCharacterAppearance(): Promise<void> {
   if (!state.api || !state.token || !state.selectedCharacterId) return;
   const character = state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
-  if (!character) return;
 
   setLoginBusy(true, "保存外观中...");
   loginError.textContent = "";
   try {
     const appearance = readAppearanceFromEditor();
-    const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, appearance);
-    const index = state.availableCharacters.findIndex((item) => item.id === updated.character.id);
-    if (index >= 0) {
-      state.availableCharacters[index] = updated.character;
+    if (!character || character.id === "draft") {
+      const name = characterNameInput.value.trim() || state.accountUsername || "Hero";
+      const created = await state.api.createCharacter(state.token, name);
+      const updated = await state.api.updateCharacterAppearance(state.token, created.character.id, appearance);
+      await loadCharacters();
+      renderAppearanceEditor(updated.character);
+    } else {
+      const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, appearance);
+      const index = state.availableCharacters.findIndex((item) => item.id === updated.character.id);
+      if (index >= 0) {
+        state.availableCharacters[index] = updated.character;
+      }
+      renderCharacterList(state.availableCharacters);
+      renderAppearanceEditor(updated.character);
     }
-    renderCharacterList(state.availableCharacters);
-    renderAppearanceEditor(updated.character);
   } catch (error) {
     loginError.textContent = errorToString(error);
   } finally {
