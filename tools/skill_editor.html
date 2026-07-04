@@ -254,6 +254,11 @@
       box-shadow: inset 4px 0 0 var(--accent);
     }
 
+    .builder-card .skill-line {
+      box-shadow: none;
+      background: #fbfcf8;
+    }
+
     .line-head {
       display: flex;
       gap: 8px;
@@ -753,17 +758,20 @@
     ];
 
     const conditionOptions = [
-      "命中目标",
-      "目标减速",
-      "目标灼烧",
-      "目标冻结",
-      "寒霜层数>=4",
-      "灼烧层数>=4",
-      "副手为轻盾",
-      "副手为法典",
-      "已激活破军核心",
-      "已激活流影核心",
-      "已激活镇岳核心"
+      ["has_hit_target", "命中目标", "bool"],
+      ["target_hp_ratio", "目标血量比例", "number"],
+      ["self_hp_ratio", "自身血量比例", "number"],
+      ["target_stack", "目标层数", "stack"],
+      ["combo_hit_count", "连击命中数", "number"],
+      ["hit_target_count", "命中目标数", "number"],
+      ["distance_to_target", "目标距离", "number"],
+      ["current_mana_ratio", "当前法力比例", "number"],
+      ["current_stamina_ratio", "当前耐力比例", "number"],
+      ["offhand_type", "副手类型", "enum"],
+      ["talent_active", "天赋已激活", "enum"],
+      ["target_has_debuff", "目标存在减益", "enum"],
+      ["target_has_control", "目标处于控制", "enum"],
+      ["random_seed_bucket", "随机桶", "number"]
     ];
 
     const weapons = [
@@ -792,18 +800,22 @@
         title: "物理伤害",
         hint: "DealDamage",
         params: [
-          ["ratio", "倍率", "number", "1.35"]
+          ["ratio", "倍率", "number", "1.35"],
+          ["flat", "固定值", "number", "0"],
+          ["canCrit", "可暴击", "select", "true", ["true", "false"]]
         ],
-        build: p => `造成物理伤害${num(p.ratio, 1.35)}`
+        build: p => ({ text: `造成物理伤害${num(p.ratio, 1.35)}`, type: "DealDamage", damage_type: "physical", base_ratio: numeric(p.ratio), flat_damage: numeric(p.flat), can_crit: p.canCrit !== "false" })
       },
       {
         id: "magic_damage",
         title: "法术伤害",
         hint: "DealDamage",
         params: [
-          ["ratio", "倍率", "number", "0.90"]
+          ["ratio", "倍率", "number", "0.90"],
+          ["flat", "固定值", "number", "0"],
+          ["canCrit", "可暴击", "select", "true", ["true", "false"]]
         ],
-        build: p => `造成法术伤害${num(p.ratio, 0.9)}`
+        build: p => ({ text: `造成法术伤害${num(p.ratio, 0.9)}`, type: "DealDamage", damage_type: "magical", base_ratio: numeric(p.ratio), flat_damage: numeric(p.flat), can_crit: p.canCrit !== "false" })
       },
       {
         id: "extra_damage",
@@ -812,7 +824,7 @@
         params: [
           ["ratio", "倍率", "number", "0.80"]
         ],
-        build: p => `造成追加伤害${num(p.ratio, 0.8)}`
+        build: p => ({ text: `造成追加伤害${num(p.ratio, 0.8)}`, type: "DealExtraDamage", extra_ratio: numeric(p.ratio) })
       },
       {
         id: "slow",
@@ -822,7 +834,7 @@
           ["value", "强度", "number", "0.20"],
           ["duration", "持续", "number", "2.0"]
         ],
-        build: p => `附加减速${num(p.value, 0.2)}@${num(p.duration, 2)}`
+        build: p => ({ text: `附加减速${num(p.value, 0.2)}@${num(p.duration, 2)}`, type: "ApplyDebuff", debuff_id: "slow", param_1: numeric(p.value), duration: numeric(p.duration) })
       },
       {
         id: "freeze",
@@ -831,7 +843,7 @@
         params: [
           ["duration", "持续", "number", "1.5"]
         ],
-        build: p => `附加冻结@${num(p.duration, 1.5)}`
+        build: p => ({ text: `附加冻结@${num(p.duration, 1.5)}`, type: "ApplyControl", control_type: "freeze", control_duration: numeric(p.duration) })
       },
       {
         id: "shield",
@@ -841,7 +853,7 @@
           ["ratio", "比例", "number", "0.06"],
           ["duration", "持续", "number", "4.0"]
         ],
-        build: p => `获得护盾${num(p.ratio, 0.06)}@${num(p.duration, 4)}`
+        build: p => ({ text: `获得护盾${num(p.ratio, 0.06)}@${num(p.duration, 4)}`, type: "ApplyShield", shield_ratio: numeric(p.ratio), duration: numeric(p.duration) })
       },
       {
         id: "move",
@@ -851,7 +863,7 @@
           ["direction", "方向", "select", "前移", ["前移", "后撤"]],
           ["distance", "距离", "number", "3.5"]
         ],
-        build: p => `自身${p.direction || "前移"}${num(p.distance, 3.5)}`
+        build: p => ({ text: `自身${p.direction || "前移"}${num(p.distance, 3.5)}`, type: "MoveCaster", move_direction: p.direction === "后撤" ? "backward" : "forward", move_distance: numeric(p.distance) })
       },
       {
         id: "aura",
@@ -862,7 +874,7 @@
           ["radius", "半径", "number", "4.0"],
           ["duration", "持续", "number", "8.0"]
         ],
-        build: p => `开启光环${p.name || "战意"}半径${num(p.radius, 4)}@${num(p.duration, 8)}`
+        build: p => ({ text: `开启光环${p.name || "战意"}半径${num(p.radius, 4)}@${num(p.duration, 8)}`, type: "ApplyAura", aura_id: sanitizeId(p.name || "战意"), radius: numeric(p.radius), duration: numeric(p.duration) })
       },
       {
         id: "ray",
@@ -873,7 +885,7 @@
           ["width", "宽度", "number", "0.5"],
           ["ratio", "伤害", "number", "1.1"]
         ],
-        build: p => `发射射线长度${num(p.length, 8)}宽度${num(p.width, 0.5)}伤害${num(p.ratio, 1.1)}`
+        build: p => ({ text: `发射射线长度${num(p.length, 8)}宽度${num(p.width, 0.5)}伤害${num(p.ratio, 1.1)}`, type: "CastRay", length: numeric(p.length), width: numeric(p.width), base_ratio: numeric(p.ratio), damage_type: "magical" })
       },
       {
         id: "projectile",
@@ -885,7 +897,7 @@
           ["range", "射程", "number", "10.0"],
           ["ratio", "伤害", "number", "0.9"]
         ],
-        build: p => `发射投射物${p.name || "寒星"}速度${num(p.speed, 12)}射程${num(p.range, 10)}伤害${num(p.ratio, 0.9)}`
+        build: p => ({ text: `发射投射物${p.name || "寒星"}速度${num(p.speed, 12)}射程${num(p.range, 10)}伤害${num(p.ratio, 0.9)}`, type: "SpawnProjectile", projectile_id: sanitizeId(p.name || "寒星"), projectile_speed: numeric(p.speed), range: numeric(p.range), base_ratio: numeric(p.ratio) })
       },
       {
         id: "summon",
@@ -896,7 +908,7 @@
           ["name", "名称", "text", "影卫"],
           ["duration", "持续", "number", "12.0"]
         ],
-        build: p => `召唤${p.kind || "单位"}${p.name || "影卫"}@${num(p.duration, 12)}`
+        build: p => ({ text: `召唤${p.kind || "单位"}${p.name || "影卫"}@${num(p.duration, 12)}`, type: p.kind === "单位" ? "SummonUnit" : "SummonTotem", summon_id: sanitizeId(p.name || "影卫"), duration: numeric(p.duration), summon_kind: p.kind || "单位" })
       },
       {
         id: "attribute",
@@ -907,7 +919,7 @@
           ["value", "数值", "number", "0.10"],
           ["duration", "持续", "number", "6.0"]
         ],
-        build: p => `修改属性${p.attr || "物理攻击"}+${num(p.value, 0.1)}@${num(p.duration, 6)}`
+        build: p => ({ text: `修改属性${p.attr || "物理攻击"}+${num(p.value, 0.1)}@${num(p.duration, 6)}`, type: "ModifyAttribute", attribute_type: attrId(p.attr || "物理攻击"), modify_mode: "add", modify_value: numeric(p.value), duration: numeric(p.duration) })
       },
       {
         id: "cooldown",
@@ -917,7 +929,7 @@
           ["target", "目标技能", "text", "突进穿刺"],
           ["value", "比例", "number", "0.20"]
         ],
-        build: p => `${p.target || "突进穿刺"}冷却缩减${num(p.value, 0.2)}`
+        build: p => ({ text: `${p.target || "突进穿刺"}冷却缩减${num(p.value, 0.2)}`, type: "Modifier", target_name: p.target || "突进穿刺", modify_field: "cooldown", modify_mode: "mul", modify_value: -numeric(p.value) })
       },
       {
         id: "stack",
@@ -927,7 +939,7 @@
           ["name", "层数", "select", "寒霜", ["寒霜", "灼烧", "破甲"]],
           ["count", "数量", "number", "1"]
         ],
-        build: p => `叠加${p.name || "寒霜"}${num(p.count, 1)}`
+        build: p => ({ text: `叠加${p.name || "寒霜"}${num(p.count, 1)}`, type: "AddStack", stack_id: stackId(p.name || "寒霜"), stack_count: numeric(p.count) })
       }
     ];
 
@@ -987,7 +999,10 @@
           conditions: [],
           hp: "",
           chance: 1,
-          effect: "造成物理伤害1.35"
+          effects: [
+            { id: uid("eff"), text: "造成物理伤害1.35", type: "DealDamage", damage_type: "physical", base_ratio: 1.35, flat_damage: 0, can_crit: true }
+          ],
+          modifiers: []
         },
         {
           id: uid("line"),
@@ -995,10 +1010,15 @@
           name: "破军追击",
           target: "命中目标",
           trigger: "命中时",
-          conditions: ["已激活破军核心"],
+          conditions: [
+            { id: uid("cond"), type: "talent_active", label: "已激活破军核心", operator: "eq", value: 1, param: "tianqu_pojun_core" }
+          ],
           hp: "目标<0.35",
           chance: 1,
-          effect: "造成追加伤害0.8"
+          effects: [
+            { id: uid("eff"), text: "造成追加伤害0.8", type: "DealExtraDamage", extra_ratio: 0.8 }
+          ],
+          modifiers: []
         }
       ]
     };
@@ -1029,9 +1049,9 @@
       fillSelect($("targetDefault"), targetSelectors, "前方直线");
       fillSelect($("targetSelector"), targetSelectors, "");
       fillSelect($("triggerType"), triggerTypes, "");
+      fillSelect($("conditionType"), conditionOptions.map(([value, label]) => [value, label]), "combo_hit_count");
       renderTagChips("weaponTags", weapons, ["spear"]);
       renderTagChips("offhandTags", offhands, []);
-      renderConditionChips();
       renderEffectButtons();
       bindEvents();
       render();
@@ -1052,19 +1072,6 @@
       container.addEventListener("change", render);
     }
 
-    function renderConditionChips() {
-      const container = $("conditionChips");
-      container.innerHTML = conditionOptions.map(condition => {
-        return `<label class="chip"><input type="checkbox" value="${escapeHtml(condition)}"> ${escapeHtml(condition)}</label>`;
-      }).join("");
-      container.addEventListener("change", () => {
-        const line = selectedLine();
-        if (!line) return;
-        line.conditions = checkedValues("conditionChips");
-        render();
-      });
-    }
-
     function renderEffectButtons() {
       const container = $("effectButtons");
       container.innerHTML = effectTemplates.map(template => {
@@ -1083,9 +1090,6 @@
         template.params.forEach(param => {
           state.effectParams[param[0]] = param[3];
         });
-        if (line) {
-          line.effect = template.build(state.effectParams);
-        }
         render();
       });
     }
@@ -1095,6 +1099,7 @@
         "skillId",
         "skillName",
         "slotType",
+        "skillType",
         "rarity",
         "cooldown",
         "staminaCost",
@@ -1112,7 +1117,27 @@
       $("resetDemo").addEventListener("click", resetDemo);
       $("applyLineText").addEventListener("click", applyLineText);
       $("syncFromControls").addEventListener("click", syncFromControls);
-      $("addCondition").addEventListener("click", addCustomCondition);
+      $("addCondition").addEventListener("click", addQuantCondition);
+      $("clearConditions").addEventListener("click", () => {
+        const line = selectedLine();
+        if (!line) return;
+        line.conditions = [];
+        render();
+      });
+      $("addEffectBlock").addEventListener("click", addEffectBlock);
+      $("clearEffects").addEventListener("click", () => {
+        const line = selectedLine();
+        if (!line) return;
+        line.effects = [];
+        render();
+      });
+      $("addModifierBlock").addEventListener("click", addModifierBlock);
+      $("clearModifiers").addEventListener("click", () => {
+        const line = selectedLine();
+        if (!line) return;
+        line.modifiers = [];
+        render();
+      });
 
       ["lineContext", "lineName", "targetSelector", "triggerType", "hpRequirement", "procChance"].forEach(id => {
         $(id).addEventListener("input", updateSelectedFromControls);
@@ -1146,7 +1171,10 @@
         conditions: [],
         hp: "",
         chance: 1,
-        effect: "造成物理伤害1.0"
+        effects: [
+          { id: uid("eff"), text: "造成物理伤害1.0", type: "DealDamage", damage_type: "physical", base_ratio: 1, flat_damage: 0, can_crit: true }
+        ],
+        modifiers: []
       };
       state.lines.push(line);
       state.selectedLineId = line.id;
@@ -1189,14 +1217,42 @@
       render();
     }
 
-    function addCustomCondition() {
-      const value = $("customCondition").value.trim();
+    function addQuantCondition() {
       const line = selectedLine();
-      if (!value || !line) return;
-      if (!line.conditions.includes(value)) {
-        line.conditions.push(value);
-      }
-      $("customCondition").value = "";
+      if (!line) return;
+      const type = $("conditionType").value;
+      const entry = conditionOptions.find(item => item[0] === type);
+      const label = entry ? entry[1] : type;
+      line.conditions.push({
+        id: uid("cond"),
+        type,
+        label,
+        operator: $("conditionOperator").value,
+        value: numeric($("conditionValue").value),
+        param: $("conditionParam").value.trim()
+      });
+      render();
+    }
+
+    function addEffectBlock() {
+      const line = selectedLine();
+      if (!line) return;
+      const template = currentEffectTemplate();
+      const built = template.build(state.effectParams);
+      line.effects.push({ id: uid("eff"), ...built });
+      render();
+    }
+
+    function addModifierBlock() {
+      const line = selectedLine();
+      if (!line) return;
+      line.modifiers.push({
+        id: uid("mod"),
+        target_name: $("modifierTarget").value.trim() || $("skillName").value.trim(),
+        modify_field: $("modifierField").value,
+        modify_mode: $("modifierMode").value,
+        modify_value: parseModifierValue($("modifierValue").value)
+      });
       render();
     }
 
@@ -1238,11 +1294,6 @@
       container.querySelectorAll("[data-effect-param]").forEach(input => {
         input.addEventListener("input", () => {
           state.effectParams[input.dataset.effectParam] = input.value;
-          const line = selectedLine();
-          if (line) {
-            line.effect = template.build(state.effectParams);
-            line.rawText = buildSkillLineText(line);
-          }
           render();
         });
       });
@@ -1293,10 +1344,9 @@
       $("hpRequirement").value = line.hp || "";
       $("procChance").value = line.chance ?? 1;
       $("lineText").value = line.rawText || buildSkillLineText(line);
-
-      $("conditionChips").querySelectorAll("input").forEach(input => {
-        input.checked = line.conditions.includes(input.value);
-      });
+      renderQuantConditionList(line);
+      renderEffectBlockList(line);
+      renderModifierBlockList(line);
     }
 
     function linePills(line) {
@@ -1304,7 +1354,9 @@
       const pills = [
         `<span class="pill">${escapeHtml(contextLabel(line.context))}</span>`,
         line.target ? `<span class="pill">目标 ${escapeHtml(line.target)}</span>` : `<span class="pill warn">默认目标</span>`,
-        line.effect ? `<span class="pill">${escapeHtml(effectKind(line.effect))}</span>` : `<span class="pill bad">缺少效果</span>`
+        line.effects.length ? `<span class="pill">${line.effects.length} 个效果</span>` : `<span class="pill bad">缺少效果</span>`,
+        line.conditions.length ? `<span class="pill">${line.conditions.length} 个条件</span>` : `<span class="pill warn">无条件</span>`,
+        line.modifiers.length ? `<span class="pill">${line.modifiers.length} 个联动</span>` : `<span class="pill">无联动</span>`
       ];
       warnings.forEach(warning => pills.push(`<span class="pill ${warning.level}">${escapeHtml(warning.text)}</span>`));
       return pills;
@@ -1314,10 +1366,11 @@
       const parts = [line.name || $("skillName").value || "未命名技能"];
       if (line.target) parts.push(`目标=${line.target}`);
       if (line.trigger && line.context !== "main_timeline") parts.push(`触发=${line.trigger}`);
-      line.conditions.forEach(condition => parts.push(`条件=${condition}`));
+      line.conditions.forEach(condition => parts.push(`条件=${conditionToText(condition)}`));
       if (line.hp) parts.push(`血量=${line.hp}`);
       if (line.chance !== "" && line.chance !== undefined && Number(line.chance) !== 1) parts.push(`几率=${line.chance}`);
-      if (line.effect) parts.push(`效果=${line.effect}`);
+      line.effects.forEach(effect => parts.push(`效果=${effect.text}`));
+      line.modifiers.forEach(modifier => parts.push(`联动=${modifierToText(modifier)}`));
       return parts.join(" ");
     }
 
@@ -1330,7 +1383,8 @@
         conditions: [],
         hp: "",
         chance: 1,
-        effect: ""
+        effects: [],
+        modifiers: []
       };
 
       for (const token of tokens) {
@@ -1339,11 +1393,85 @@
         else if (token.startsWith("条件=")) parsed.conditions.push(token.slice(3));
         else if (token.startsWith("血量=")) parsed.hp = token.slice(3);
         else if (token.startsWith("几率=")) parsed.chance = clampChance(token.slice(3));
-        else if (token.startsWith("效果=")) parsed.effect = token.slice(3);
+        else if (token.startsWith("效果=")) parsed.effects.push(effectFromText(token.slice(3)));
+        else if (token.startsWith("联动=")) parsed.modifiers.push(modifierFromText(token.slice(3)));
         else if (!parsed.name) parsed.name = token;
       }
 
       return parsed;
+    }
+
+    function renderQuantConditionList(line) {
+      $("quantConditionList").innerHTML = line.conditions.map(condition => {
+        return `<article class="skill-line">
+          <div class="line-head">
+            <div class="line-title">${escapeHtml(conditionToText(condition))}</div>
+            <div class="line-actions"><button data-remove-condition="${escapeHtml(condition.id)}">×</button></div>
+          </div>
+        </article>`;
+      }).join("");
+      $("quantConditionList").querySelectorAll("[data-remove-condition]").forEach(button => {
+        button.addEventListener("click", () => {
+          line.conditions = line.conditions.filter(condition => condition.id !== button.dataset.removeCondition);
+          render();
+        });
+      });
+    }
+
+    function renderEffectBlockList(line) {
+      $("effectBlockList").innerHTML = line.effects.map(effect => {
+        return `<article class="skill-line">
+          <div class="line-head">
+            <div class="line-title">${escapeHtml(effect.text)} · ${escapeHtml(effect.type)}</div>
+            <div class="line-actions"><button data-remove-effect="${escapeHtml(effect.id)}">×</button></div>
+          </div>
+        </article>`;
+      }).join("");
+      $("effectBlockList").querySelectorAll("[data-remove-effect]").forEach(button => {
+        button.addEventListener("click", () => {
+          line.effects = line.effects.filter(effect => effect.id !== button.dataset.removeEffect);
+          render();
+        });
+      });
+    }
+
+    function renderModifierBlockList(line) {
+      $("modifierBlockList").innerHTML = line.modifiers.map(modifier => {
+        return `<article class="skill-line">
+          <div class="line-head">
+            <div class="line-title">${escapeHtml(modifierToText(modifier))}</div>
+            <div class="line-actions"><button data-remove-modifier="${escapeHtml(modifier.id)}">×</button></div>
+          </div>
+        </article>`;
+      }).join("");
+      $("modifierBlockList").querySelectorAll("[data-remove-modifier]").forEach(button => {
+        button.addEventListener("click", () => {
+          line.modifiers = line.modifiers.filter(modifier => modifier.id !== button.dataset.removeModifier);
+          render();
+        });
+      });
+    }
+
+    function conditionToText(condition) {
+      if (typeof condition === "string") return condition;
+      const param = condition.param ? `${condition.param}` : "";
+      return `${condition.label || condition.type}${param ? `:${param}` : ""}${operatorText(condition.operator)}${condition.value}`;
+    }
+
+    function modifierToText(modifier) {
+      return `${modifier.target_name || "当前技能"}.${modifier.modify_field} ${modifier.modify_mode} ${modifier.modify_value}`;
+    }
+
+    function effectFromText(text) {
+      return { id: uid("eff"), text, ...compileEffectPart(text) };
+    }
+
+    function modifierFromText(text) {
+      return { id: uid("mod"), target_name: "当前技能", modify_field: "custom", modify_mode: "override", modify_value: text };
+    }
+
+    function operatorText(operator) {
+      return { gte: ">=", lte: "<=", gt: ">", lt: "<", eq: "=" }[operator] || "=";
     }
 
     function compile() {
@@ -1353,6 +1481,7 @@
         skill_desc: $("skillDesc").value.trim(),
         rarity: $("rarity").value,
         slot_type: $("slotType").value,
+        skill_type: $("skillType").value,
         weapon_tags: checkedValues("weaponTags"),
         offhand_tags: checkedValues("offhandTags"),
         cooldown: numeric($("cooldown").value),
@@ -1369,9 +1498,8 @@
       state.lines.forEach((line, index) => {
         validateLine(line).forEach(issue => issues.push({ line: index + 1, ...issue }));
         const groupId = compileConditions(line, skill.skill_id, index, conditions);
-        const effectResult = compileEffect(line, skill, index, groupId);
-        if (effectResult.kind === "modifier") modifiers.push(effectResult.data);
-        else if (Array.isArray(effectResult.data)) effects.push(...effectResult.data);
+        effects.push(...compileEffects(line, skill, index, groupId));
+        modifiers.push(...compileModifiers(line, skill, index, groupId));
       });
 
       return {
@@ -1400,22 +1528,7 @@
       }
 
       line.conditions.forEach(condition => {
-        const mapped = conditionMap[condition];
-        if (mapped) {
-          records.push({
-            condition_type: mapped[0],
-            param_1: mapped[1] ?? "",
-            param_2: mapped[2] ?? "",
-            logic_operator: "and"
-          });
-        } else {
-          records.push({
-            condition_type: "custom_condition",
-            param_1: condition,
-            param_2: "",
-            logic_operator: "and"
-          });
-        }
+        records.push(conditionToRecord(condition));
       });
 
       if (line.hp) {
@@ -1440,10 +1553,8 @@
       return groupId;
     }
 
-    function compileEffect(line, skill, index, conditionGroupId) {
-      const effectId = `ef_${skill.skill_id}_${index + 1}`;
+    function compileEffects(line, skill, index, conditionGroupId) {
       const base = {
-        effect_id: effectId,
         skill_id: skill.skill_id,
         trigger_timing: line.context === "main_timeline" ? "timeline" : (triggerMap[line.trigger] || ""),
         target_selector: targetMap[line.target] || skill.default_target_type,
@@ -1451,23 +1562,13 @@
         proc_chance: clampChance(line.chance)
       };
 
-      const effect = line.effect || "";
-      if (isModifierEffect(effect) || line.context === "modifier_line") {
-        return {
-          kind: "modifier",
-          data: compileModifier(line, skill, index, conditionGroupId)
-        };
-      }
-
-      const compiled = [];
-      splitCompositeEffect(effect).forEach((part, partIndex) => {
-        compiled.push({
+      return line.effects.flatMap((effect, effectIndex) => {
+        return splitCompositeEffect(effect.text).map((part, partIndex) => ({
           ...base,
-          effect_id: partIndex === 0 ? effectId : `${effectId}_${partIndex + 1}`,
-          ...compileEffectPart(part)
-        });
+          effect_id: `ef_${skill.skill_id}_${index + 1}_${effectIndex + 1}_${partIndex + 1}`,
+          ...("type" in effect && part === effect.text ? effectToRecord(effect) : compileEffectPart(part))
+        }));
       });
-      return { kind: "effect", data: compiled };
     }
 
     function compileEffectPart(effect) {
@@ -1514,6 +1615,38 @@
       return { effect_type: "UnknownEffect", raw_effect: effect };
     }
 
+    function effectToRecord(effect) {
+      const { id, text, type, ...rest } = effect;
+      return { effect_type: type, ...rest };
+    }
+
+    function conditionToRecord(condition) {
+      if (typeof condition === "string") {
+        const mapped = conditionMap[condition];
+        if (mapped) {
+          return {
+            condition_type: mapped[0],
+            param_1: mapped[1] ?? "",
+            param_2: mapped[2] ?? "",
+            logic_operator: "and"
+          };
+        }
+        return {
+          condition_type: "custom_condition",
+          param_1: condition,
+          param_2: "",
+          logic_operator: "and"
+        };
+      }
+      return {
+        condition_type: condition.type,
+        param_1: condition.param || "",
+        param_2: condition.value,
+        compare_operator: condition.operator,
+        logic_operator: "and"
+      };
+    }
+
     function splitCompositeEffect(effect) {
       return String(effect || "").split("并").map(part => part.trim()).filter(Boolean);
     }
@@ -1522,46 +1655,25 @@
       return /冷却缩减|范围[+]|可穿透|伤害加成/.test(effect || "");
     }
 
-    function compileModifier(line, skill, index, conditionGroupId) {
-      const effect = line.effect || "";
-      let targetName = line.name || skill.skill_name;
-      let field = "unknown";
-      let mode = "override";
-      let value = true;
-      let match;
-
-      if ((match = effect.match(/^(.+)冷却缩减([0-9.]+)/))) {
-        targetName = match[1];
-        field = "cooldown";
-        mode = "mul";
-        value = -numeric(match[2]);
-      } else if ((match = effect.match(/^(.+)范围\+([0-9.]+)/))) {
-        targetName = match[1];
-        field = "radius";
-        mode = "mul";
-        value = numeric(match[2]);
-      } else if ((match = effect.match(/^(.+)可穿透$/))) {
-        targetName = match[1];
-        field = "can_pierce";
-        mode = "override";
-        value = true;
-      } else if ((match = effect.match(/^伤害加成([0-9.]+)/))) {
-        field = "damage_bonus";
-        mode = "add";
-        value = numeric(match[1]);
-      }
-
-      return {
-        modifier_id: `mod_${skill.skill_id}_${index + 1}`,
+    function compileModifiers(line, skill, index, conditionGroupId) {
+      const modifierEffects = line.effects.filter(effect => effect.type === "Modifier").map(effect => ({
+        id: effect.id,
+        target_name: effect.target_name,
+        modify_field: effect.modify_field,
+        modify_mode: effect.modify_mode,
+        modify_value: effect.modify_value
+      }));
+      return [...line.modifiers, ...modifierEffects].map((modifier, modifierIndex) => ({
+        modifier_id: `mod_${skill.skill_id}_${index + 1}_${modifierIndex + 1}`,
         source_type: "skill_line",
         source_id: `sl_${skill.skill_id}_${index + 1}`,
-        target_skill_id: skillIdFromName(targetName, skill),
-        modify_field: field,
-        modify_mode: mode,
-        modify_value: value,
+        target_skill_id: skillIdFromName(modifier.target_name, skill),
+        modify_field: modifier.modify_field,
+        modify_mode: modifier.modify_mode,
+        modify_value: modifier.modify_value,
         proc_chance: clampChance(line.chance),
         apply_condition_group_id: conditionGroupId
-      };
+      }));
     }
 
     function parseHp(value) {
@@ -1603,11 +1715,16 @@
     function validateLine(line) {
       const issues = [];
       if (!line.name) issues.push({ level: "bad", text: "缺少名称" });
-      if (!line.effect) issues.push({ level: "bad", text: "缺少效果" });
+      if (!line.effects.length && !line.modifiers.length) issues.push({ level: "bad", text: "缺少效果或联动" });
       if (line.context === "main_timeline" && line.trigger) issues.push({ level: "bad", text: "主动作线禁止触发器" });
       if (Number(line.chance) < 0 || Number(line.chance) > 1) issues.push({ level: "bad", text: "几率越界" });
       if (line.hp && parseHp(line.hp).type === "invalid_hp_requirement") issues.push({ level: "warn", text: "血量表达式异常" });
-      if (!line.target && /伤害|减速|冻结|击退|拉拽/.test(line.effect || "")) issues.push({ level: "warn", text: "使用默认目标" });
+      if (!line.target && line.effects.some(effect => /伤害|减速|冻结|击退|拉拽/.test(effect.text || ""))) issues.push({ level: "warn", text: "使用默认目标" });
+      line.conditions.forEach(condition => {
+        if (typeof condition !== "string" && condition.value === "" && condition.type !== "has_hit_target") {
+          issues.push({ level: "warn", text: "条件缺少数值" });
+        }
+      });
       return issues;
     }
 
