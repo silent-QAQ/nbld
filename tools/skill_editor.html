@@ -563,6 +563,18 @@
               <select id="targeter"></select>
             </div>
             <div class="field">
+              <label for="targetPreset">复合形状</label>
+              <select id="targetPreset"></select>
+            </div>
+            <div class="field">
+              <label for="targetAnchor">主坐标</label>
+              <select id="targetAnchor"></select>
+            </div>
+            <div class="field">
+              <label for="targetPoints">辅坐标/点列</label>
+              <input id="targetPoints" placeholder="@zp 或 @slo/@zp/@pl(p=4,4,0)">
+            </div>
+            <div class="field">
               <label for="targetParam">选择器参数</label>
               <input id="targetParam" placeholder="n=张三 / p=1,2,0 / @slo+o(r=5,ir=3) / @slo+o(r=5,ir=3,ag=90,c=70)">
             </div>
@@ -574,9 +586,26 @@
               <label for="targetRange">最远距离</label>
               <input id="targetRange" type="number" min="0" step="0.1" value="4">
             </div>
-            <input id="targetRadius" type="hidden" value="0">
-            <input id="targetAngle" type="hidden" value="0">
-            <input id="targetWidth" type="hidden" value="0">
+            <div class="field">
+              <label for="targetRadius">外半径 r</label>
+              <input id="targetRadius" type="number" min="0" step="0.1" value="0">
+            </div>
+            <div class="field">
+              <label for="targetInnerRadius">内半径 ir</label>
+              <input id="targetInnerRadius" type="number" min="0" step="0.1" value="0">
+            </div>
+            <div class="field">
+              <label for="targetAngle">起始角 ag</label>
+              <input id="targetAngle" type="number" step="1" value="0">
+            </div>
+            <div class="field">
+              <label for="targetArc">角宽 c</label>
+              <input id="targetArc" type="number" min="0" max="360" step="1" value="90">
+            </div>
+            <div class="field">
+              <label for="targetWidth">边界宽 w</label>
+              <input id="targetWidth" type="number" min="0" step="0.1" value="0">
+            </div>
             <div class="field">
               <label for="maxTargets">锚点上限</label>
               <input id="maxTargets" type="number" min="1" step="1" value="1">
@@ -726,6 +755,26 @@
       ["@fw", "@fw 多边形范围"],
       ["@o", "@单坐标+o 圆/扇/环/扇环"],
       ["@el", "@单坐标/单坐标+o 椭圆"]
+    ];
+
+    const targetPresets = [
+      { id: "", label: "手动配置" },
+      { id: "circle", label: "圆形", targeter: "@o", radius: 3, max_targets: 8 },
+      { id: "sector", label: "扇形", targeter: "@o", radius: 4, angle: 0, arc: 90, max_targets: 8 },
+      { id: "ring", label: "环形", targeter: "@o", radius: 5, inner_radius: 3, max_targets: 8 },
+      { id: "fanring", label: "扇环", targeter: "@o", radius: 5, inner_radius: 3, angle: 90, arc: 70, max_targets: 8 },
+      { id: "ellipse", label: "椭圆", targeter: "@el", radius: 2, range: 12, max_targets: 8 },
+      { id: "polygon", label: "多边形范围", targeter: "@fw", max_targets: 8 },
+      { id: "border", label: "多边形边界", targeter: "@bj", width: 0.4, max_targets: 8 }
+    ];
+
+    const targetAnchors = [
+      ["@slo", "自身坐标"],
+      ["@tlo", "指向目标坐标"],
+      ["@tglo", "触发目标坐标"],
+      ["@owlo", "主人坐标"],
+      ["@zp", "指向坐标"],
+      ["@pl(p=0,0,0)", "指定坐标"]
     ];
 
     const conditionScopes = [
@@ -1087,6 +1136,8 @@
       fillSelect($("globalTrigger"), triggers, "onCast");
       fillSelect($("stepTrigger"), triggers, "onCast");
       fillSelect($("targeter"), targeters, "@s");
+      fillSelect($("targetPreset"), targetPresets.map(preset => [preset.id, preset.label]), "");
+      fillSelect($("targetAnchor"), targetAnchors, "@slo");
       fillSelect($("conditionScope"), conditionScopes, "target");
       fillSelect($("conditionType"), conditionTypes.map(condition => [condition.id, condition.label]), "target_hp_ratio");
       renderTagChips("weaponTags", weapons, ["spear"]);
@@ -1158,13 +1209,16 @@
       $("addCondition").addEventListener("click", addCondition);
       $("clearConditions").addEventListener("click", clearConditions);
 
-      ["stepName", "stepTrigger", "targeter", "targetRange", "targetRadius", "targetAngle", "targetWidth", "maxTargets", "chance", "delay", "repeat", "interval"].forEach(id => {
+      ["stepName", "stepTrigger", "targeter", "targetRange", "maxTargets", "chance", "delay", "repeat", "interval"].forEach(id => {
         $(id).addEventListener("input", updateSelectedStep);
       });
       $("targeter").addEventListener("change", () => {
         writeTargeterParams(defaultTargeterParams($("targeter").value));
         $("targetSelector").value = buildTargetSelector();
         updateSelectedStep();
+      });
+      ["targetPreset", "targetAnchor", "targetPoints", "targetRadius", "targetInnerRadius", "targetAngle", "targetArc", "targetWidth"].forEach(id => {
+        $(id).addEventListener("input", buildCompositeTarget);
       });
       $("targetParam").addEventListener("input", () => {
         $("targetSelector").value = buildTargetSelector();
@@ -1224,8 +1278,40 @@
     }
 
     function buildTargetSelector() {
-      const base = $("targeter").value;
-      const param = $("targetParam").value.trim();
+      return targetSelectorFrom($("targeter").value, $("targetParam").value.trim());
+    }
+
+    function buildCompositeTarget() {
+      const preset = targetPresets.find(item => item.id === $("targetPreset").value);
+      if (!preset || !preset.id) return;
+      $("targeter").value = preset.targeter;
+      if (document.activeElement === $("targetPreset")) writeCompositeDefaults(preset);
+      const param = compositeTargetParam(preset.id);
+      $("targetParam").value = param;
+      $("targetSelector").value = targetSelectorFrom(preset.targeter, param);
+      updateSelectedStep();
+    }
+
+    function compositeTargetParam(type) {
+      const a = $("targetAnchor").value;
+      const p = $("targetPoints").value.trim() || "@slo/@zp/@pl(p=4,4,0)";
+      const r = Math.max(0, number($("targetRadius").value));
+      const ir = Math.max(0, number($("targetInnerRadius").value));
+      const ag = number($("targetAngle").value);
+      const c = Math.max(0, Math.min(360, number($("targetArc").value)));
+      const w = Math.max(0, number($("targetWidth").value));
+      if (type === "polygon") return p;
+      if (type === "border") return `${p}${w > 0 ? `;w=${w}` : ""}`;
+      if (type === "ellipse") return `${a}/${$("targetPoints").value.trim() || "@zp"}+o(r=${r})`;
+      return `${a}+o(${[
+        `r=${r}`,
+        ["ring", "fanring"].includes(type) ? `ir=${ir}` : "",
+        ["sector", "fanring"].includes(type) ? `ag=${ag}` : "",
+        ["sector", "fanring"].includes(type) ? `c=${c}` : ""
+      ].filter(Boolean).join(",")})`;
+    }
+
+    function targetSelectorFrom(base, param) {
       if (!param) return base;
       if (["@bj", "@fw"].includes(base)) return `${base}=(${param})`;
       if (base === "@o") return param.includes("+o") ? param : `${param}+o`;
@@ -1237,7 +1323,9 @@
       return {
         range: Math.max(0, number($("targetRange").value)),
         radius: Math.max(0, number($("targetRadius").value)),
+        inner_radius: Math.max(0, number($("targetInnerRadius").value)),
         angle: Math.max(0, number($("targetAngle").value)),
+        arc: Math.max(0, number($("targetArc").value)),
         width: Math.max(0, number($("targetWidth").value)),
         max_targets: Math.max(1, Math.floor(number($("maxTargets").value)))
       };
@@ -1246,7 +1334,9 @@
     function writeTargeterParams(params) {
       $("targetRange").value = params.range;
       $("targetRadius").value = params.radius;
+      $("targetInnerRadius").value = params.inner_radius || 0;
       $("targetAngle").value = params.angle;
+      $("targetArc").value = params.arc || 90;
       $("targetWidth").value = params.width;
       $("maxTargets").value = params.max_targets;
     }
@@ -1332,6 +1422,16 @@
       render();
     }
 
+    function applyTargetPreset() {
+      const preset = targetPresets.find(item => item.id === $("targetPreset").value);
+      if (!preset || !preset.id) return;
+      $("targeter").value = preset.targeter;
+      $("targetParam").value = preset.param;
+      writeTargeterParams({ ...defaultTargeterParams(preset.targeter), ...(preset.params || {}) });
+      $("targetSelector").value = buildTargetSelector();
+      updateSelectedStep();
+    }
+
     function applyMechanicToStep() {
       const step = selectedStep();
       if (!step) return;
@@ -1410,6 +1510,7 @@
       $("targeter").value = step.targeter;
       $("targetParam").value = step.target_param || "";
       $("targetSelector").value = step.target_selector || step.targeter || "@s";
+      $("targetPreset").value = matchedTargetPreset(step);
       writeTargeterParams(normalizedTargeterParams(step));
       $("chance").value = step.chance;
       $("delay").value = step.delay;
@@ -1734,6 +1835,12 @@
 
     function targeterText(step) {
       return step.target_selector || step.targeter || "@s";
+    }
+
+    function matchedTargetPreset(step) {
+      const selector = targeterText(step);
+      const preset = targetPresets.find(item => item.id && item.targeter === step.targeter && targetSelectorFrom(item.targeter, item.param) === selector);
+      return preset ? preset.id : "";
     }
 
     function inferredConditionScope(type) {

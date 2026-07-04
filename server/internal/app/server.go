@@ -626,6 +626,8 @@ func (s *Server) handleEnterWorld(w http.ResponseWriter, r *http.Request) {
 		AccountID:     session.AccountID,
 		CharacterID:   character.ID,
 		CharacterName: character.Name,
+		Appearance:    character.Appearance,
+		Equipment:     character.Equipment,
 		Token:         session.Token,
 		WorldID:       worldID,
 		MapID:         mapID,
@@ -808,6 +810,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		MapID:         session.MapID,
 		Position:      session.Position,
 		OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+		Appearance:    toProtocolAppearance(session.Appearance),
+		Equipment:     toProtocolEquipment(session.Equipment),
 	})
 
 	s.ws.broadcast(session.WorldID, protocol.WSServerMessage{
@@ -818,6 +822,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		WorldID:       session.WorldID,
 		MapID:         session.MapID,
 		Position:      session.Position,
+		Appearance:    toProtocolAppearance(session.Appearance),
+		Equipment:     toProtocolEquipment(session.Equipment),
 	})
 
 	if transitioned {
@@ -1253,6 +1259,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 		WorldID:       session.WorldID,
 		MapID:         session.MapID,
 		Position:      session.Position,
+		Appearance:    toProtocolAppearance(session.Appearance),
+		Equipment:     toProtocolEquipment(session.Equipment),
 		Players:       s.state.listWorldPlayers(session.WorldID),
 	}
 
@@ -1308,6 +1316,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			WorldID:       updated.WorldID,
 			MapID:         updated.MapID,
 			Position:      updated.Position,
+			Appearance:    toProtocolAppearance(updated.Appearance),
+			Equipment:     toProtocolEquipment(updated.Equipment),
 		}
 
 		s.events.broadcast(protocol.WorldEvent{
@@ -1318,6 +1328,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			MapID:         updated.MapID,
 			Position:      updated.Position,
 			OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+			Appearance:    toProtocolAppearance(updated.Appearance),
+			Equipment:     toProtocolEquipment(updated.Equipment),
 		})
 		s.ws.broadcast(updated.WorldID, broadcast)
 
@@ -1540,6 +1552,53 @@ func toProtocolItems(items []ItemStack) []protocol.ItemStack {
 		})
 	}
 	return out
+}
+
+func toProtocolAppearance(appearance CharacterAppearance) protocol.CharacterAppearance {
+	return protocol.CharacterAppearance{
+		Body: protocol.CharacterBodyAppearance{
+			Height:             appearance.Body.Height,
+			FrontShoulderWidth: appearance.Body.FrontShoulderWidth,
+			SideWidth:          appearance.Body.SideWidth,
+			ChestWidth:         appearance.Body.ChestWidth,
+			WaistWidth:         appearance.Body.WaistWidth,
+			HipWidth:           appearance.Body.HipWidth,
+			TorsoHeight:        appearance.Body.TorsoHeight,
+			UpperArmWidth:      appearance.Body.UpperArmWidth,
+			UpperArmLength:     appearance.Body.UpperArmLength,
+			ForearmWidth:       appearance.Body.ForearmWidth,
+			ForearmLength:      appearance.Body.ForearmLength,
+			ThighWidth:         appearance.Body.ThighWidth,
+			ThighLength:        appearance.Body.ThighLength,
+			CalfWidth:          appearance.Body.CalfWidth,
+			CalfLength:         appearance.Body.CalfLength,
+			ChestDepth:         appearance.Body.ChestDepth,
+			WaistDepth:         appearance.Body.WaistDepth,
+			HipDepth:           appearance.Body.HipDepth,
+		},
+	}
+}
+
+func toProtocolEquipment(equipment CharacterEquipment) protocol.CharacterEquipment {
+	return protocol.CharacterEquipment{
+		MainHand:    equipment.MainHand,
+		OffHand:     equipment.OffHand,
+		Helmet:      equipment.Helmet,
+		Chest:       equipment.Chest,
+		Pants:       equipment.Pants,
+		Shoes:       equipment.Shoes,
+		Shoulders:   equipment.Shoulders,
+		Cloak:       equipment.Cloak,
+		LeftBracer:  equipment.LeftBracer,
+		RightBracer: equipment.RightBracer,
+		VisibleArmor: protocol.VisibleArmor{
+			Helmet:    equipment.VisibleArmor.Helmet,
+			Chest:     equipment.VisibleArmor.Chest,
+			Pants:     equipment.VisibleArmor.Pants,
+			Shoes:     equipment.VisibleArmor.Shoes,
+			Shoulders: equipment.VisibleArmor.Shoulders,
+		},
+	}
 }
 
 func (s *Server) loadCharacterForWorld(ctx context.Context, accountID, characterID string) (Character, error) {

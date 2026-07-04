@@ -172,6 +172,8 @@ type WorldPlayer struct {
 	CharacterName string   `json:"characterName,omitempty"`
 	MapID         string   `json:"mapId,omitempty"`
 	Position      Position `json:"position"`
+	Appearance    CharacterAppearance `json:"appearance"`
+	Equipment     CharacterEquipment  `json:"equipment"`
 }
 
 type WorldEvent struct {
@@ -182,6 +184,8 @@ type WorldEvent struct {
 	MapID         string   `json:"mapId,omitempty"`
 	Position      Position `json:"position"`
 	OccurredAt    string   `json:"occurredAt"`
+	Appearance    CharacterAppearance `json:"appearance,omitempty"`
+	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
 }
 
 type WSClientMessage struct {
@@ -199,6 +203,8 @@ type WSServerMessage struct {
 	MapID         string        `json:"mapId,omitempty"`
 	Position      Position      `json:"position,omitempty"`
 	Players       []WorldPlayer `json:"players,omitempty"`
+	Appearance    CharacterAppearance `json:"appearance,omitempty"`
+	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
 	Error         string        `json:"error,omitempty"`
 }
 

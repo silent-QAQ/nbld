@@ -167,6 +167,8 @@ export type WorldPlayer = {
   characterName?: string;
   mapId?: string;
   position: Position;
+  appearance?: CharacterAppearance;
+  equipment?: CharacterEquipment;
 };
 
 export type WSServerMessage = {

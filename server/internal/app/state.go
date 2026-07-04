@@ -12,6 +12,8 @@ type sessionState struct {
 	AccountID     string
 	CharacterID   string
 	CharacterName string
+	Appearance    CharacterAppearance
+	Equipment     CharacterEquipment
 	Token         string
 	WorldID       string
 	MapID         string
@@ -101,6 +103,8 @@ func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
 			CharacterName: session.CharacterName,
 			MapID:         session.MapID,
 			Position:      session.Position,
+			Appearance:    toProtocolAppearance(session.Appearance),
+			Equipment:     toProtocolEquipment(session.Equipment),
 		})
 	}
 
