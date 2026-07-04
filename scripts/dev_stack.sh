@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/scripts/nbld_env.sh"
 SERVER_PID=""
 INSTANCE_ID="dev-$(date -u +%Y%m%d%H%M%S)-$$"
 READY=0
@@ -19,7 +20,11 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$ROOT_DIR/server"
-NBLD_INSTANCE_ID="$INSTANCE_ID" NBLD_GATEWAY_ADDR="$LISTEN_ADDR" go run ./cmd/gateway &
+NBLD_INSTANCE_ID="$INSTANCE_ID" \
+  NBLD_GATEWAY_ADDR="$LISTEN_ADDR" \
+  NBLD_DATABASE_URL="$NBLD_DATABASE_URL" \
+  NBLD_REDIS_URL="$NBLD_REDIS_URL" \
+  go run ./cmd/gateway &
 SERVER_PID="$!"
 
 for _ in $(seq 1 20); do

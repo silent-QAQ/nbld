@@ -110,28 +110,31 @@ app.innerHTML = `
     <section class="modal login-panel" id="loginModal">
       <div class="auth-page">
         <h1>NBLD H5 客户端</h1>
-        <p>使用邮箱登录进入游戏。</p>
+        <p>使用邮箱和密码登录进入游戏。</p>
         <label for="baseUrl">服务端地址</label>
         <input id="baseUrl" spellcheck="false" />
-        <label for="emailInput">邮箱</label>
-        <input id="emailInput" spellcheck="false" />
-        <label for="passwordInput">密码</label>
-        <input id="passwordInput" type="password" />
+        <label for="loginEmailInput">邮箱</label>
+        <input id="loginEmailInput" autocomplete="email" inputmode="email" spellcheck="false" />
+        <label for="loginPasswordInput">密码</label>
+        <input id="loginPasswordInput" autocomplete="current-password" type="password" />
         <div class="login-actions">
           <button id="loginButton">邮箱登录</button>
           <button id="openRegisterButton" class="secondary">前往注册</button>
         </div>
       </div>
-      <div class="error" id="loginError"></div>
     </section>
     <section class="modal login-panel hidden" id="registerModal">
       <div class="auth-page">
         <h1>注册账号</h1>
         <p>创建账号后返回选角。</p>
-        <label for="usernameInput">用户名</label>
-        <input id="usernameInput" spellcheck="false" />
-        <label for="confirmPasswordInput">再次输入密码</label>
-        <input id="confirmPasswordInput" type="password" />
+        <label for="registerEmailInput">邮箱</label>
+        <input id="registerEmailInput" autocomplete="email" inputmode="email" spellcheck="false" />
+        <label for="registerUsernameInput">用户名</label>
+        <input id="registerUsernameInput" autocomplete="username" spellcheck="false" />
+        <label for="registerPasswordInput">密码</label>
+        <input id="registerPasswordInput" autocomplete="new-password" type="password" />
+        <label for="registerConfirmPasswordInput">再次输入密码</label>
+        <input id="registerConfirmPasswordInput" autocomplete="new-password" type="password" />
         <div class="login-actions">
           <button id="registerButton">注册账号</button>
           <button id="backToLoginButton" class="secondary">返回登录</button>
@@ -139,7 +142,7 @@ app.innerHTML = `
       </div>
     </section>
     <section class="modal login-panel hidden" id="characterModal">
-      <div class="character-panel">
+      <div class="character-panel" id="characterPanel">
         <div class="character-header">
           <strong id="accountSummary">未登录</strong>
           <button id="logoutButton" class="secondary">退出登录</button>
@@ -152,7 +155,7 @@ app.innerHTML = `
       </div>
     </section>
     <section class="modal login-panel hidden" id="appearanceModal">
-      <div class="appearance-editor">
+      <div class="appearance-editor" id="appearanceEditor">
         <h3>角色外观编辑</h3>
         <div class="appearance-preview" id="appearancePreview"></div>
         <div class="appearance-grid" id="appearanceGrid"></div>
@@ -166,6 +169,7 @@ app.innerHTML = `
         </div>
       </div>
     </section>
+    <div class="error toast-error" id="loginError"></div>
     <section class="hud hidden"></section>
     <section class="debug-panel hidden"></section>
     <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
@@ -184,10 +188,12 @@ const openRegisterButton = app.querySelector<HTMLButtonElement>("#openRegisterBu
 const registerButton = app.querySelector<HTMLButtonElement>("#registerButton")!;
 const backToLoginButton = app.querySelector<HTMLButtonElement>("#backToLoginButton")!;
 const baseUrlInput = app.querySelector<HTMLInputElement>("#baseUrl")!;
-const emailInput = app.querySelector<HTMLInputElement>("#emailInput")!;
-const usernameInput = app.querySelector<HTMLInputElement>("#usernameInput")!;
-const passwordInput = app.querySelector<HTMLInputElement>("#passwordInput")!;
-const confirmPasswordInput = app.querySelector<HTMLInputElement>("#confirmPasswordInput")!;
+const loginEmailInput = app.querySelector<HTMLInputElement>("#loginEmailInput")!;
+const loginPasswordInput = app.querySelector<HTMLInputElement>("#loginPasswordInput")!;
+const registerEmailInput = app.querySelector<HTMLInputElement>("#registerEmailInput")!;
+const registerUsernameInput = app.querySelector<HTMLInputElement>("#registerUsernameInput")!;
+const registerPasswordInput = app.querySelector<HTMLInputElement>("#registerPasswordInput")!;
+const registerConfirmPasswordInput = app.querySelector<HTMLInputElement>("#registerConfirmPasswordInput")!;
 const characterNameInput = app.querySelector<HTMLInputElement>("#characterNameInput")!;
 const characterPanel = app.querySelector<HTMLElement>("#characterPanel")!;
 const characterList = app.querySelector<HTMLElement>("#characterList")!;
@@ -244,8 +250,10 @@ loginButton.addEventListener("click", () => {
 });
 
 openRegisterButton.addEventListener("click", () => {
+  registerEmailInput.value = registerEmailInput.value || loginEmailInput.value.trim();
   loginModal.classList.add("hidden");
   registerModal.classList.remove("hidden");
+  registerEmailInput.focus();
 });
 
 registerButton.addEventListener("click", () => {
@@ -253,8 +261,10 @@ registerButton.addEventListener("click", () => {
 });
 
 backToLoginButton.addEventListener("click", () => {
+  loginEmailInput.value = loginEmailInput.value || registerEmailInput.value.trim();
   registerModal.classList.add("hidden");
   loginModal.classList.remove("hidden");
+  loginEmailInput.focus();
 });
 
 app.querySelector<HTMLButtonElement>("#createCharacterButton")!.addEventListener("click", () => {
@@ -305,7 +315,7 @@ async function loginWithEmail(): Promise<void> {
 
   try {
     const api = await prepareApi();
-    const login = await api.login(emailInput.value.trim(), passwordInput.value);
+    const login = await api.login(loginEmailInput.value.trim(), loginPasswordInput.value);
     applyLogin(login);
     await loadCharacters();
   } catch (error) {
@@ -324,13 +334,13 @@ async function registerWithEmail(): Promise<void> {
   try {
     const api = await prepareApi();
     const register = await api.register(
-      emailInput.value.trim(),
-      usernameInput.value.trim(),
-      passwordInput.value,
-      confirmPasswordInput.value,
+      registerEmailInput.value.trim(),
+      registerUsernameInput.value.trim(),
+      registerPasswordInput.value,
+      registerConfirmPasswordInput.value,
     );
     applyRegister(register);
-    const login = await api.login(emailInput.value.trim(), passwordInput.value);
+    const login = await api.login(registerEmailInput.value.trim(), registerPasswordInput.value);
     applyLogin(login);
     await loadCharacters();
   } catch (error) {
@@ -1021,8 +1031,9 @@ function restoreSessionFromStorage(): void {
     state.characterName = parsed.characterName ?? "";
 
     if (state.token) {
-      emailInput.value = state.accountEmail;
-      usernameInput.value = state.accountUsername;
+      loginEmailInput.value = state.accountEmail;
+      registerEmailInput.value = state.accountEmail;
+      registerUsernameInput.value = state.accountUsername;
       characterPanel.classList.remove("hidden");
       accountSummary.textContent = `${state.accountUsername || state.accountEmail} (${state.accountId})`;
       void prepareApi().then(() => loadCharacters()).catch((error) => {
@@ -1061,6 +1072,12 @@ function logoutToLogin(): void {
   state.lastChunkKey = "";
 
   localStorage.removeItem("nbld_session");
+  loginEmailInput.value = state.accountEmail;
+  loginPasswordInput.value = "";
+  registerEmailInput.value = "";
+  registerUsernameInput.value = "";
+  registerPasswordInput.value = "";
+  registerConfirmPasswordInput.value = "";
   loginModal.classList.remove("hidden");
   registerModal.classList.add("hidden");
   characterModal.classList.add("hidden");

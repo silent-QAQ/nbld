@@ -1,5 +1,6 @@
 .nbld-gateway
 .nbld-*.log
+.nbld-*.pid
 
 server/data/
 server/data_backup/

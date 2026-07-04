@@ -332,10 +332,19 @@ input {
   margin-top: 0;
 }
 
-.login-panel .error {
+.toast-error {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 300px);
+  z-index: 30;
+  width: min(560px, calc(100vw - 32px));
   min-height: 20px;
-  margin-top: 10px;
+  transform: translateX(-50%);
   color: #ff8b7f;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
 }
 
 .hud {

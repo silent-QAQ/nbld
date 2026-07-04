@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/scripts/nbld_env.sh"
 LISTEN_PORT="${NBLD_GATEWAY_PORT:-6363}"
 LISTEN_ADDR="${NBLD_GATEWAY_ADDR:-:6363}"
 CHECK_BASE_URL="${NBLD_CHECK_BASE_URL:-http://127.0.0.1:6363}"
@@ -17,13 +18,17 @@ fi
 
 cd "$ROOT_DIR/server"
 LOG_FILE="${ROOT_DIR}/.nbld-server.log"
+PID_FILE="${ROOT_DIR}/.nbld-gateway.pid"
 go build -o "$ROOT_DIR/.nbld-gateway" ./cmd/gateway
-nohup env \
+setsid env \
   NBLD_INSTANCE_ID="$INSTANCE_ID" \
   NBLD_GATEWAY_ADDR="$LISTEN_ADDR" \
+  NBLD_DATABASE_URL="$NBLD_DATABASE_URL" \
+  NBLD_REDIS_URL="$NBLD_REDIS_URL" \
   NBLD_RUST_CHUNKGEN_BIN="$RUST_CHUNKGEN_BIN" \
-  "$ROOT_DIR/.nbld-gateway" >"$LOG_FILE" 2>&1 &
+  "$ROOT_DIR/.nbld-gateway" >"$LOG_FILE" 2>&1 < /dev/null &
 SERVER_PID=$!
+printf '%s\n' "$SERVER_PID" >"$PID_FILE"
 
 cleanup() {
   if [[ "${1:-}" != "keep" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -67,4 +72,6 @@ if [[ "${1:-}" == "--hold" ]]; then
 fi
 
 trap - EXIT
+disown "$SERVER_PID" 2>/dev/null || true
 echo "log file: $LOG_FILE"
+echo "pid file: $PID_FILE"
