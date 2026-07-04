@@ -1,6 +1,7 @@
 package app
 
 import (
+	"sort"
 	"sync"
 
 	"nbld/server/internal/protocol"
@@ -104,6 +105,20 @@ func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
 	}
 
 	return players
+}
+
+func (s *stateStore) listSessions() []sessionState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make([]sessionState, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		out = append(out, session)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Token < out[j].Token
+	})
+	return out
 }
 
 func (s *stateStore) getSessionByPlayerID(playerID string) (sessionState, bool) {

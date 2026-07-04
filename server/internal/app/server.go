@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -140,6 +140,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccountCharacters)
 	mux.HandleFunc("/api/admin/characters/", s.handleAdminCharacter)
 	mux.HandleFunc("/api/admin/audit-logs", s.handleAdminAuditLogs)
+	mux.HandleFunc("/api/admin/sessions", s.handleAdminSessions)
 	mux.HandleFunc("/api/admin/login", s.handleAdminLogin)
 	mux.HandleFunc("/api/admin/force-logout", s.handleAdminForceLogout)
 	mux.HandleFunc("/admin", s.handleAdminPage)
@@ -990,6 +991,50 @@ func (s *Server) handleAdminAuditLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAdmin(w, r) {
+		return
+	}
+
+	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	sessions := s.state.listSessions()
+	resp := protocol.AdminSessionsResponse{
+		Sessions: make([]protocol.AdminSessionSummary, 0, len(sessions)),
+	}
+
+	for _, session := range sessions {
+		if query != "" {
+			haystack := strings.ToLower(strings.Join([]string{
+				session.Token,
+				session.AccountID,
+				session.CharacterID,
+				session.CharacterName,
+				session.WorldID,
+				session.MapID,
+			}, " "))
+			if !strings.Contains(haystack, query) {
+				continue
+			}
+		}
+
+		resp.Sessions = append(resp.Sessions, protocol.AdminSessionSummary{
+			Token:         session.Token,
+			AccountID:     session.AccountID,
+			CharacterID:   session.CharacterID,
+			CharacterName: session.CharacterName,
+			WorldID:       session.WorldID,
+			MapID:         session.MapID,
+			LastSeenAt:    time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1316,15 +1361,28 @@ func (s *Server) requireAccountSession(w http.ResponseWriter, token string) (ses
 
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	expected := os.Getenv("NBLD_ADMIN_TOKEN")
+	if expected != "" && r.Header.Get("X-Admin-Token") == expected {
+		return true
+	}
+	if cookie, err := r.Cookie("nbld_admin_session"); err == nil && cookie.Value != "" {
+		return true
+	}
 	if expected == "" {
 		http.Error(w, "admin token not configured", http.StatusServiceUnavailable)
 		return false
 	}
-	if r.Header.Get("X-Admin-Token") != expected {
-		http.Error(w, "admin token invalid", http.StatusUnauthorized)
-		return false
+	http.Error(w, "admin token invalid", http.StatusUnauthorized)
+	return false
+}
+
+func (s *Server) requireAdminPage(w http.ResponseWriter, r *http.Request) bool {
+	if cookie, err := r.Cookie("nbld_admin_session"); err == nil && cookie.Value != "" {
+		return true
 	}
-	return true
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = io.WriteString(w, `<html><body style="font-family:sans-serif;padding:24px"><h2>Admin Login Required</h2><p>POST /api/admin/login with username and password first.</p></body></html>`)
+	return false
 }
 
 func toProtocolCharacters(characters []Character) []protocol.CharacterSummary {
@@ -1337,8 +1395,9 @@ func toProtocolCharacters(characters []Character) []protocol.CharacterSummary {
 
 func toProtocolCharacter(character Character) protocol.CharacterSummary {
 	summary := protocol.CharacterSummary{
-		ID:   character.ID,
-		Name: character.Name,
+		ID:      character.ID,
+		Name:    character.Name,
+		Version: character.Version,
 		Stats: protocol.CharacterStats{
 			Base: protocol.CharacterBaseStats{
 				Health:    character.Stats.Base.Health,

@@ -97,6 +97,20 @@ type AdminAccountCharactersResponse struct {
 	Characters []CharacterSummary `json:"characters"`
 }
 
+type AdminSessionSummary struct {
+	Token         string `json:"token"`
+	AccountID     string `json:"accountId"`
+	CharacterID   string `json:"characterId,omitempty"`
+	CharacterName string `json:"characterName,omitempty"`
+	WorldID       string `json:"worldId,omitempty"`
+	MapID         string `json:"mapId,omitempty"`
+	LastSeenAt    string `json:"lastSeenAt"`
+}
+
+type AdminSessionsResponse struct {
+	Sessions []AdminSessionSummary `json:"sessions"`
+}
+
 type EnterWorldRequest struct {
 	Token       string `json:"token"`
 	CharacterID string `json:"characterId,omitempty"`
@@ -258,6 +272,7 @@ type CharacterEquipment struct {
 type CharacterSummary struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`
+	Version   int64              `json:"version"`
 	Stats     CharacterStats     `json:"stats"`
 	Inventory ItemContainer      `json:"inventory"`
 	Warehouse ItemContainer      `json:"warehouse"`

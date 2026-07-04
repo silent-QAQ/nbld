@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NBLD Admin</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --panel: rgba(255,255,255,0.92);
+      --line: #d9cfbf;
+      --ink: #1e2a2f;
+      --accent: #9a3412;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, #f8d9a8, transparent 30%),
+        radial-gradient(circle at bottom right, #c6d8d3, transparent 35%),
+        var(--bg);
+    }
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: 42px;
+      letter-spacing: -0.04em;
+    }
+    .hero p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 360px 420px;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 20px 40px rgba(40, 36, 30, 0.08);
+      backdrop-filter: blur(10px);
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+    .list, .detail, .logs {
+      max-height: 70vh;
+      overflow: auto;
+    }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      background: rgba(255,255,255,0.72);
+    }
+    .item:hover { border-color: var(--accent); }
+    .item strong { display: block; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    input, button {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      font: inherit;
+    }
+    button {
+      background: var(--ink);
+      color: white;
+      cursor: pointer;
+    }
+    button.alt {
+      background: white;
+      color: var(--ink);
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fffdf8;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12px;
+    }
+    .login {
+      max-width: 420px;
+      margin: 10vh auto 0;
+    }
+    .hidden { display: none; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="login" class="shell login">
+    <div class="panel">
+      <h2>管理员登录</h2>
+      <div class="toolbar" style="flex-direction:column">
+        <input id="admin-user" placeholder="用户名">
+        <input id="admin-pass" placeholder="密码" type="password">
+        <button id="login-btn">登录</button>
+      </div>
+      <div id="login-msg" class="muted"></div>
+    </div>
+  </div>
+
+  <div id="app" class="shell hidden">
+    <div class="hero">
+      <div>
+        <h1>NBLD Admin Console</h1>
+        <p>账号、角色、审计、会话管理</p>
+      </div>
+      <div class="toolbar">
+        <input id="search-input" placeholder="搜索账号 / 角色 / 会话">
+        <button class="alt" id="refresh-btn">刷新</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>账号</h2>
+        <div id="accounts" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>在线会话</h2>
+        <div id="sessions" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>角色详情</h2>
+        <div id="characters" class="list"></div>
+        <div id="character-detail" class="detail"></div>
+      </section>
+
+      <section class="panel">
+        <h2>最近审计</h2>
+        <div id="logs" class="logs"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const loginWrap = document.getElementById('login');
+    const appWrap = document.getElementById('app');
+    const loginMsg = document.getElementById('login-msg');
+    const accountsEl = document.getElementById('accounts');
+    const sessionsEl = document.getElementById('sessions');
+    const charactersEl = document.getElementById('characters');
+    const characterDetailEl = document.getElementById('character-detail');
+    const logsEl = document.getElementById('logs');
+    const searchInput = document.getElementById('search-input');
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const text = await res.text();
+      return text ? JSON.parse(text) : {};
+    }
+
+    async function login() {
+      try {
+        await api('/api/admin/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: document.getElementById('admin-user').value,
+            password: document.getElementById('admin-pass').value
+          })
+        });
+        loginWrap.classList.add('hidden');
+        appWrap.classList.remove('hidden');
+        await loadDashboard();
+      } catch (err) {
+        loginMsg.textContent = err.message;
+      }
+    }
+
+    async function loadAccounts() {
+      const data = await api('/api/admin/accounts');
+      accountsEl.innerHTML = '';
+      const q = searchInput.value.trim().toLowerCase();
+      data.accounts.forEach(account => {
+        if (q && !`${account.username} ${account.email} ${account.id}`.toLowerCase().includes(q)) return;
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.innerHTML = `<strong>${account.username}</strong><span class="muted">${account.email}</span><span class="muted">角色数: ${account.activeCharacterCount}</span>`;
+        el.onclick = () => loadCharacters(account.id);
+        accountsEl.appendChild(el);
+      });
+    }
+
+    async function loadSessions() {
+      const q = searchInput.value.trim();
+      const data = await api(`/api/admin/sessions${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+      sessionsEl.innerHTML = '';
+      data.sessions.forEach(session => {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.innerHTML = `
+          <strong>${session.characterName || '未选角色'}</strong>
+          <span class="muted">${session.accountId}</span>
+          <span class="muted">${session.worldId || '-'} / ${session.mapId || '-'}</span>
+          <span class="muted">${session.token.slice(0, 12)}...</span>
+        `;
+        const btn = document.createElement('button');
+        btn.textContent = '强制下线';
+        btn.style.marginTop = '8px';
+        btn.onclick = async (e) => {
+          e.stopPropagation();
+          await api(`/api/admin/force-logout?token=${encodeURIComponent(session.token)}`, { method: 'POST' });
+          await loadSessions();
+          await loadLogs();
+        };
+        el.appendChild(btn);
+        sessionsEl.appendChild(el);
+      });
+    }
+
+    async function loadCharacters(accountId) {
+      const data = await api(`/api/admin/accounts/${accountId}/characters`);
+      charactersEl.innerHTML = '';
+      characterDetailEl.innerHTML = '';
+      data.characters.forEach(character => {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.innerHTML = `<strong>${character.name}</strong><span class="muted">${character.id}</span><span class="muted">版本: ${character.version ?? '-'}</span>`;
+        el.onclick = async () => {
+          const detail = await api(`/api/admin/characters/${character.id}`);
+          characterDetailEl.innerHTML = `<pre>${JSON.stringify(detail.character, null, 2)}</pre>`;
+          await loadLogs('character', character.id);
+        };
+        charactersEl.appendChild(el);
+      });
+    }
+
+    async function loadLogs(targetType = '', targetId = '') {
+      const query = targetType && targetId ? `?targetType=${encodeURIComponent(targetType)}&targetId=${encodeURIComponent(targetId)}` : '';
+      const data = await api(`/api/admin/audit-logs${query}`);
+      logsEl.innerHTML = '';
+      data.logs.forEach(log => {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.innerHTML = `<strong>${log.action}</strong><span class="muted">${log.targetType}:${log.targetId}</span><span class="muted">${log.createdAt}</span><pre>${JSON.stringify(log.payload, null, 2)}</pre>`;
+        logsEl.appendChild(el);
+      });
+    }
+
+    async function loadDashboard() {
+      await Promise.all([loadAccounts(), loadSessions(), loadLogs()]);
+    }
+
+    document.getElementById('login-btn').onclick = login;
+    document.getElementById('refresh-btn').onclick = loadDashboard;
+    searchInput.oninput = () => loadDashboard();
+  </script>
+</body>
+</html>
