@@ -628,6 +628,10 @@
               <label for="conditionParam">参数</label>
               <input id="conditionParam" placeholder="frost / buckler / tianqu_pojun_core">
             </div>
+            <div class="field full">
+              <label>条件说明</label>
+              <div class="line-preview" id="conditionHelp"></div>
+            </div>
           </div>
           <div class="toolbar">
             <button id="addCondition">添加条件</button>
@@ -711,22 +715,24 @@
     ];
 
     const conditionTypes = [
-      ["target_hp_ratio", "目标血量比例", "ratio"],
-      ["self_hp_ratio", "自身血量比例", "ratio"],
-      ["mana_ratio", "法力比例", "ratio"],
-      ["stamina_ratio", "耐力比例", "ratio"],
-      ["distance", "目标距离", "distance"],
-      ["target_count", "目标数量", "count"],
-      ["hit_count", "连续命中数", "count"],
-      ["stack", "目标层数", "stack"],
-      ["has_status", "目标状态", "status"],
-      ["offhand", "副手类型", "tag"],
-      ["talent", "天赋激活", "tag"],
-      ["cooldown_ready", "技能冷却完成", "skill"],
-      ["facing_angle", "朝向角度", "angle"],
-      ["line_of_sight", "视线无遮挡", "bool"],
-      ["terrain_tag", "地形标签", "tag"],
-      ["state_tag", "状态标签", "tag"]
+      { id: "target_hp_ratio", label: "目标血量比例", scope: "target", valueType: "ratio", min: 0, max: 1, step: 0.01, defaultValue: 0.35, operators: ["lte", "lt", "gte", "gt"], paramRequired: false, hint: "判断当前目标生命百分比，常用于斩杀、低血追击。" },
+      { id: "caster_hp_ratio", label: "施法者血量比例", scope: "caster", valueType: "ratio", min: 0, max: 1, step: 0.01, defaultValue: 0.5, operators: ["lte", "lt", "gte", "gt"], paramRequired: false, hint: "判断施法者生命百分比，常用于濒死反击和防御被动。" },
+      { id: "mana_ratio", label: "法力比例", scope: "caster", valueType: "ratio", min: 0, max: 1, step: 0.01, defaultValue: 0.2, operators: ["gte", "gt", "lte", "lt"], paramRequired: false, hint: "判断施法者当前法力比例。" },
+      { id: "stamina_ratio", label: "耐力比例", scope: "caster", valueType: "ratio", min: 0, max: 1, step: 0.01, defaultValue: 0.2, operators: ["gte", "gt", "lte", "lt"], paramRequired: false, hint: "判断施法者当前耐力比例。" },
+      { id: "distance", label: "目标距离", scope: "target", valueType: "distance", min: 0, max: 30, step: 0.1, defaultValue: 4, operators: ["lte", "lt", "gte", "gt"], paramRequired: false, hint: "判断施法者与目标的 2D 平面距离。" },
+      { id: "target_count", label: "目标数量", scope: "skill", valueType: "count", min: 0, max: 20, step: 1, defaultValue: 1, operators: ["gte", "gt", "lte", "lt", "eq"], paramRequired: false, hint: "判断本次目标器选中的目标数量。" },
+      { id: "hit_count", label: "连续命中数", scope: "skill", valueType: "count", min: 0, max: 50, step: 1, defaultValue: 3, operators: ["gte", "gt", "eq"], paramRequired: false, hint: "判断当前技能组或连击窗口内的连续命中次数。" },
+      { id: "stack", label: "指定层数", scope: "target", valueType: "count", min: 0, max: 99, step: 1, defaultValue: 1, operators: ["gte", "gt", "lte", "lt", "eq"], paramRequired: true, paramHint: "frost / burn / armor_break", hint: "判断目标身上某类层数。" },
+      { id: "has_status", label: "持有状态", scope: "target", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: true, paramHint: "slow / freeze / shielded", hint: "判断目标是否持有指定状态。" },
+      { id: "offhand", label: "副手类型", scope: "caster", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: true, paramHint: "buckler / grimoire / gauntlet", hint: "判断施法者当前副手标签。" },
+      { id: "talent", label: "天赋激活", scope: "skill", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: true, paramHint: "tianqu_pojun_core", hint: "判断指定天赋节点是否激活。" },
+      { id: "cooldown_ready", label: "技能冷却完成", scope: "skill", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: true, paramHint: "skill_spear_dash_001", hint: "判断另一个技能是否处于可释放状态。" },
+      { id: "facing_angle", label: "朝向夹角", scope: "target", valueType: "angle", min: 0, max: 180, step: 1, defaultValue: 60, operators: ["lte", "lt", "gte", "gt"], paramRequired: false, hint: "判断目标是否位于施法者朝向夹角内。" },
+      { id: "line_of_sight", label: "视线无遮挡", scope: "world", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: false, hint: "2D 射线检测是否被墙体或障碍阻挡。" },
+      { id: "terrain_tag", label: "地形标签", scope: "world", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: true, paramHint: "water / grass / lava", hint: "判断目标点或施法者所在地形标签。" },
+      { id: "state_tag", label: "战斗状态标签", scope: "caster", valueType: "bool", min: 0, max: 1, step: 1, defaultValue: 1, operators: ["eq", "neq"], paramRequired: true, paramHint: "guarding / channeling / airborne", hint: "判断施法者或目标当前战斗状态标签。" },
+      { id: "resource_value", label: "资源绝对值", scope: "caster", valueType: "number", min: 0, max: 9999, step: 1, defaultValue: 10, operators: ["gte", "gt", "lte", "lt"], paramRequired: true, paramHint: "hp / mana / stamina", hint: "判断生命、法力或耐力的绝对数值。" },
+      { id: "random", label: "随机判定", scope: "skill", valueType: "ratio", min: 0, max: 1, step: 0.01, defaultValue: 0.5, operators: ["lte", "lt"], paramRequired: false, hint: "独立随机值判定；常规概率仍优先使用触发几率字段。" }
     ];
 
     const weapons = [
@@ -758,7 +764,9 @@
           ["damage_type", "类型", "select", "physical", [["physical", "物理"], ["magical", "法术"]]],
           ["ratio", "倍率", "number", "1.2"],
           ["flat", "固定值", "number", "0"],
-          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
+          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]],
+          ["extra_damage", "追加伤害", "select", "false", [["false", "否"], ["true", "是"]]],
+          ["trigger_hit_event", "触发命中事件", "select", "true", [["true", "是"], ["false", "否"]]]
         ]
       },
       {
@@ -767,10 +775,14 @@
         hint: "Projectile",
         params: [
           ["projectile_id", "投射物", "text", "frost_star"],
+          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
           ["speed", "速度", "number", "12"],
           ["range", "射程", "number", "10"],
           ["ratio", "伤害倍率", "number", "0.9"],
-          ["pattern", "形态", "select", "single", [["single", "单发"], ["spread", "散射"], ["homing", "追踪"]]]
+          ["collision_radius", "碰撞半径", "number", "0.25"],
+          ["max_pierce", "穿透数", "number", "0"],
+          ["pattern", "形态", "select", "single", [["single", "单发"], ["spread", "散射"], ["homing", "追踪"]]],
+          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
         ]
       },
       {
@@ -778,10 +790,13 @@
         title: "射线",
         hint: "Ray",
         params: [
+          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
           ["length", "长度", "number", "8"],
           ["width", "宽度", "number", "0.5"],
           ["ratio", "伤害倍率", "number", "1.0"],
-          ["tick", "跳频", "number", "0"]
+          ["tick", "跳频", "number", "0"],
+          ["max_targets", "目标上限", "number", "5"],
+          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
         ]
       },
       {
@@ -791,8 +806,11 @@
         params: [
           ["shape", "形状", "select", "circle", [["circle", "圆形"], ["rect", "矩形"], ["sector", "扇形"]]],
           ["radius", "半径", "number", "3"],
+          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
+          ["ratio", "伤害倍率", "number", "0.6"],
           ["duration", "持续", "number", "4"],
-          ["tick", "跳频", "number", "1"]
+          ["tick", "跳频", "number", "1"],
+          ["max_targets", "目标上限", "number", "8"]
         ]
       },
       {
@@ -803,7 +821,10 @@
           ["aura_id", "光环", "text", "war_aura"],
           ["radius", "半径", "number", "4"],
           ["duration", "持续", "number", "6"],
-          ["team", "阵营", "select", "ally", [["ally", "友方"], ["enemy", "敌方"], ["both", "全部"]]]
+          ["tick", "跳频", "number", "0.5"],
+          ["team", "阵营", "select", "ally", [["ally", "友方"], ["enemy", "敌方"], ["both", "全部"]]],
+          ["effect_mode", "效果模式", "select", "attribute", [["attribute", "属性"], ["status", "状态"], ["resource", "资源"]]],
+          ["value", "强度", "number", "0.1"]
         ]
       },
       {
@@ -823,8 +844,10 @@
         params: [
           ["summon_id", "召唤物", "text", "shadow_guard"],
           ["kind", "类型", "select", "unit", [["unit", "单位"], ["totem", "图腾"], ["trap", "陷阱"]]],
+          ["count", "数量", "number", "1"],
           ["duration", "持续", "number", "12"],
-          ["max_count", "上限", "number", "1"]
+          ["max_count", "上限", "number", "1"],
+          ["inherit_attack", "继承攻击", "number", "0.35"]
         ]
       },
       {
@@ -835,7 +858,44 @@
           ["status_id", "状态", "text", "slow"],
           ["operation", "操作", "select", "apply", [["apply", "添加"], ["remove", "移除"], ["cleanse", "净化"]]],
           ["value", "强度", "number", "0.2"],
-          ["duration", "持续", "number", "2"]
+          ["duration", "持续", "number", "2"],
+          ["stack_limit", "层数上限", "number", "1"]
+        ]
+      },
+      {
+        id: "dot",
+        title: "持续伤害",
+        hint: "DoT",
+        params: [
+          ["dot_id", "持续伤害", "text", "burning"],
+          ["damage_type", "伤害类型", "select", "magical", [["physical", "物理"], ["magical", "法术"]]],
+          ["ratio", "每跳倍率", "number", "0.18"],
+          ["duration", "持续", "number", "4"],
+          ["tick", "跳频", "number", "1"],
+          ["stack_mode", "叠加模式", "select", "refresh", [["refresh", "刷新"], ["stack", "叠层"], ["independent", "独立"]]]
+        ]
+      },
+      {
+        id: "heal",
+        title: "治疗",
+        hint: "Heal",
+        params: [
+          ["ratio", "法攻倍率", "number", "0.8"],
+          ["flat", "固定值", "number", "0"],
+          ["can_crit", "治疗暴击", "select", "false", [["false", "否"], ["true", "是"]]],
+          ["overheal_to_shield", "溢出转护盾", "select", "false", [["false", "否"], ["true", "是"]]]
+        ]
+      },
+      {
+        id: "shield",
+        title: "护盾",
+        hint: "Shield",
+        params: [
+          ["shield_id", "护盾", "text", "guard_shield"],
+          ["ratio", "倍率", "number", "0.6"],
+          ["flat", "固定值", "number", "0"],
+          ["duration", "持续", "number", "4"],
+          ["damage_type", "吸收类型", "select", "both", [["physical", "物理"], ["magical", "法术"], ["both", "全部"]]]
         ]
       },
       {
@@ -880,6 +940,19 @@
         ]
       },
       {
+        id: "trap",
+        title: "陷阱",
+        hint: "Trap",
+        params: [
+          ["trap_id", "陷阱", "text", "spike_trap"],
+          ["trigger_radius", "触发半径", "number", "1.2"],
+          ["arm_time", "布置时间", "number", "0.35"],
+          ["duration", "持续", "number", "10"],
+          ["trigger_limit", "触发次数", "number", "1"],
+          ["effect_ref", "触发技能", "text", "skill_trap_spike"]
+        ]
+      },
+      {
         id: "cooldown",
         title: "冷却",
         hint: "Cooldown",
@@ -887,6 +960,17 @@
           ["target_skill", "目标技能", "text", "skill_spear_dash_001"],
           ["operation", "操作", "select", "reduce", [["reduce", "缩减"], ["reset", "重置"], ["lock", "禁用"]]],
           ["value", "数值", "number", "0.2"]
+        ]
+      },
+      {
+        id: "combo",
+        title: "连击窗口",
+        hint: "Combo",
+        params: [
+          ["combo_id", "连击", "text", "spear_chain"],
+          ["operation", "操作", "select", "open", [["open", "开启"], ["advance", "推进"], ["reset", "重置"], ["close", "关闭"]]],
+          ["duration", "窗口", "number", "1.2"],
+          ["max_stage", "最大段数", "number", "3"]
         ]
       },
       {
@@ -987,11 +1071,12 @@
       fillSelect($("stepTrigger"), triggers, "onCast");
       fillSelect($("targeter"), targeters, "line");
       fillSelect($("conditionScope"), conditionScopes, "target");
-      fillSelect($("conditionType"), conditionTypes.map(([id, label]) => [id, label]), "target_hp_ratio");
+      fillSelect($("conditionType"), conditionTypes.map(condition => [condition.id, condition.label]), "target_hp_ratio");
       renderTagChips("weaponTags", weapons, ["spear"]);
       renderTagChips("offhandTags", offhands, []);
       renderMechanicButtons();
       bindEvents();
+      syncConditionEditor();
       render();
     }
 
@@ -1045,6 +1130,11 @@
         writeTargeterParams(defaultTargeterParams($("targeter").value));
         updateSelectedStep();
       });
+      $("conditionType").addEventListener("change", syncConditionEditor);
+      $("conditionScope").addEventListener("change", renderOutput);
+      $("conditionOperator").addEventListener("change", renderOutput);
+      $("conditionValue").addEventListener("input", renderOutput);
+      $("conditionParam").addEventListener("input", renderOutput);
 
       document.querySelector(".tabs").addEventListener("click", event => {
         const button = event.target.closest("[data-tab]");
@@ -1100,6 +1190,30 @@
       $("targetAngle").value = params.angle;
       $("targetWidth").value = params.width;
       $("maxTargets").value = params.max_targets;
+    }
+
+    function conditionMeta(id) {
+      return conditionTypes.find(condition => condition.id === id) || conditionTypes[0];
+    }
+
+    function syncConditionEditor() {
+      const meta = conditionMeta($("conditionType").value);
+      $("conditionScope").value = meta.scope;
+      fillSelect($("conditionOperator"), meta.operators.map(operator => [operator, operatorSymbol(operator)]), meta.operators[0]);
+      $("conditionValue").type = "number";
+      $("conditionValue").min = meta.min;
+      $("conditionValue").max = meta.max;
+      $("conditionValue").step = meta.step;
+      $("conditionValue").value = meta.defaultValue;
+      $("conditionParam").placeholder = meta.paramHint || "可选参数";
+      $("conditionHelp").textContent = `${meta.label} · ${meta.valueType} · ${meta.hint}${meta.paramRequired ? " · 必须填写参数" : ""}`;
+      renderOutput();
+    }
+
+    function normalizeConditionValue(value, meta) {
+      const parsed = number(value);
+      if (meta.valueType === "count") return Math.floor(Math.max(meta.min, Math.min(meta.max, parsed)));
+      return Math.max(meta.min, Math.min(meta.max, parsed));
     }
 
     function addStep() {
@@ -1166,12 +1280,13 @@
     function addCondition() {
       const step = selectedStep();
       if (!step) return;
+      const meta = conditionMeta($("conditionType").value);
       step.conditions.push({
         id: uid("cond"),
         scope: $("conditionScope").value,
         type: $("conditionType").value,
         operator: $("conditionOperator").value,
-        value: number($("conditionValue").value),
+        value: normalizeConditionValue($("conditionValue").value, meta),
         param: $("conditionParam").value.trim()
       });
       render();
@@ -1249,7 +1364,7 @@
         if (type === "select") {
           return `<div class="field"><label>${escape(label)}</label><select data-param="${escape(key)}">${options.map(([v, l]) => `<option value="${escape(v)}"${String(v) === String(value) ? " selected" : ""}>${escape(l)}</option>`).join("")}</select></div>`;
         }
-        return `<div class="field"><label>${escape(label)}</label><input data-param="${escape(key)}" type="${type}" step="0.01" value="${escape(value)}"></div>`;
+        return `<div class="field"><label>${escape(label)}</label><input data-param="${escape(key)}" type="${type}" ${type === "number" ? `step="${numberStepFor(key)}" min="0"` : ""} value="${escape(value)}"></div>`;
       }).join("");
       document.querySelectorAll("[data-param]").forEach(input => {
         input.addEventListener("input", () => {
@@ -1262,7 +1377,7 @@
     function renderConditions() {
       const step = selectedStep();
       $("conditionList").innerHTML = step.conditions.map(condition => {
-        return `<div class="mini-item"><span>${escape(conditionText(condition))}</span><button data-remove-condition="${escape(condition.id)}">×</button></div>`;
+        return `<div class="mini-item"><span>${escape(conditionReadable(condition))} · ${escape(conditionText(condition))}</span><button data-remove-condition="${escape(condition.id)}">×</button></div>`;
       }).join("");
       document.querySelectorAll("[data-remove-condition]").forEach(button => {
         button.addEventListener("click", () => {
@@ -1291,10 +1406,12 @@
       const steps = [];
       const mechanicsOut = [];
       const conditionsOut = [];
+      const conditionGroupsOut = [];
       const issues = [];
 
       state.steps.forEach((step, index) => {
         const stepId = `step_${skill.skill_id}_${index + 1}`;
+        const conditionGroupId = step.conditions.length ? `cg_${skill.skill_id}_${index + 1}` : "";
         validateStep(step, index + 1).forEach(issue => issues.push(issue));
         steps.push({
           step_id: stepId,
@@ -1305,7 +1422,8 @@
           chance: step.chance,
           delay: step.delay,
           repeat: step.repeat,
-          interval: step.interval || 0
+          interval: step.interval || 0,
+          condition_group_id: conditionGroupId
         });
         const mechanicParams = Object.fromEntries(Object.entries(step.mechanic).filter(([key]) => key !== "id"));
         mechanicsOut.push({
@@ -1315,9 +1433,18 @@
           mechanic_type: step.mechanic.id,
           mechanic_params: mechanicParams
         });
+        if (conditionGroupId) {
+          conditionGroupsOut.push({
+            condition_group_id: conditionGroupId,
+            step_id: stepId,
+            skill_id: skill.skill_id,
+            logic: "AND"
+          });
+        }
         step.conditions.forEach((condition, conditionIndex) => {
           conditionsOut.push({
             condition_id: `cond_${skill.skill_id}_${index + 1}_${conditionIndex + 1}`,
+            condition_group_id: conditionGroupId,
             step_id: stepId,
             skill_id: skill.skill_id,
             condition_scope: condition.scope || inferredConditionScope(condition.type),
@@ -1333,6 +1460,7 @@
         skill,
         skill_steps: steps,
         skill_mechanics: mechanicsOut,
+        skill_condition_groups: conditionGroupsOut,
         skill_conditions: conditionsOut,
         skill_text: state.steps.map(stepText),
         issues
@@ -1366,6 +1494,44 @@
       if (["damage", "status", "control", "resource", "stack"].includes(step.mechanic.id) && step.targeter === "self" && step.mechanic.id === "damage") {
         issues.push({ line, level: "warn", text: "伤害机制目标为自身" });
       }
+      validateMechanic(step.mechanic, line).forEach(issue => issues.push(issue));
+      step.conditions.forEach(condition => {
+        validateCondition(condition, line).forEach(issue => issues.push(issue));
+      });
+      return issues;
+    }
+
+    function validateMechanic(mechanic, line) {
+      const issues = [];
+      const numericFields = ["ratio", "flat", "duration", "tick", "range", "radius", "width", "length", "speed", "distance", "value", "count", "max_count", "max_targets"];
+      numericFields.forEach(field => {
+        if (field in mechanic && number(mechanic[field]) < 0) issues.push({ line, level: "bad", text: `${mechanic.id}.${field} 不能为负数` });
+      });
+      if (["area", "aura", "dot"].includes(mechanic.id) && number(mechanic.duration) <= 0) {
+        issues.push({ line, level: "bad", text: `${mechanicLabel(mechanic.id)}必须配置持续时间` });
+      }
+      if (["area", "aura", "dot"].includes(mechanic.id) && number(mechanic.tick) <= 0) {
+        issues.push({ line, level: "bad", text: `${mechanicLabel(mechanic.id)}必须配置跳频` });
+      }
+      if (mechanic.id === "projectile" && number(mechanic.speed) <= 0) issues.push({ line, level: "bad", text: "投射物速度必须大于 0" });
+      if (mechanic.id === "projectile" && number(mechanic.range) <= 0) issues.push({ line, level: "bad", text: "投射物射程必须大于 0" });
+      if (mechanic.id === "ray" && (number(mechanic.length) <= 0 || number(mechanic.width) <= 0)) issues.push({ line, level: "bad", text: "射线长度和宽度必须大于 0" });
+      if (mechanic.id === "summon" && number(mechanic.count) > number(mechanic.max_count)) issues.push({ line, level: "bad", text: "召唤数量不能大于召唤上限" });
+      if (mechanic.id === "trap" && !mechanic.effect_ref) issues.push({ line, level: "bad", text: "陷阱必须配置触发技能" });
+      if (mechanic.id === "cooldown" && !mechanic.target_skill) issues.push({ line, level: "bad", text: "冷却机制必须配置目标技能" });
+      if (mechanic.id === "meta" && !mechanic.skill_ref) issues.push({ line, level: "bad", text: "技能组机制必须配置调用技能" });
+      return issues;
+    }
+
+    function validateCondition(condition, line) {
+      const issues = [];
+      const knownMeta = conditionTypes.find(item => item.id === condition.type);
+      const meta = knownMeta || conditionTypes[0];
+      if (!knownMeta) issues.push({ line, level: "bad", text: `未知条件 ${condition.type}` });
+      if (!conditionScopes.some(([scope]) => scope === condition.scope)) issues.push({ line, level: "bad", text: `未知条件作用域 ${condition.scope}` });
+      if (!meta.operators.includes(condition.operator)) issues.push({ line, level: "bad", text: `${condition.type} 不支持比较符 ${condition.operator}` });
+      if (condition.value < meta.min || condition.value > meta.max) issues.push({ line, level: "bad", text: `${condition.type} 数值超出范围 ${meta.min}-${meta.max}` });
+      if (meta.paramRequired && !condition.param) issues.push({ line, level: "bad", text: `${condition.type} 必须填写参数` });
       return issues;
     }
 
@@ -1378,7 +1544,10 @@
         all: result,
         steps: result.skill_steps,
         mechanics: result.skill_mechanics,
-        conditions: result.skill_conditions,
+        conditions: {
+          groups: result.skill_condition_groups,
+          conditions: result.skill_conditions
+        },
         text: result.skill_text
       }[state.outputTab] || result;
       $("output").textContent = Array.isArray(payload) && state.outputTab === "text"
@@ -1413,6 +1582,13 @@
       return `${condition.scope || inferredConditionScope(condition.type)}.${condition.type}${param}${operatorSymbol(condition.operator)}${condition.value}`;
     }
 
+    function conditionReadable(condition) {
+      const meta = conditionMeta(condition.type);
+      const scopeLabel = (conditionScopes.find(([scope]) => scope === (condition.scope || meta.scope)) || [condition.scope, condition.scope])[1];
+      const param = condition.param ? `(${condition.param})` : "";
+      return `${scopeLabel}.${meta.label}${param}`;
+    }
+
     function normalizedTargeterParams(step) {
       const params = { ...defaultTargeterParams(step.targeter), ...(step.targeter_params || {}) };
       return {
@@ -1442,10 +1618,7 @@
     }
 
     function inferredConditionScope(type) {
-      if (type.startsWith("target_") || ["distance", "stack", "has_status"].includes(type)) return "target";
-      if (type.startsWith("self_") || ["mana_ratio", "stamina_ratio", "offhand"].includes(type)) return "caster";
-      if (["talent", "cooldown_ready", "hit_count"].includes(type)) return "skill";
-      return "world";
+      return conditionMeta(type).scope || "target";
     }
 
     function normalizedParams(params) {
@@ -1474,6 +1647,12 @@
     function number(value) {
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function numberStepFor(key) {
+      if (["count", "max_count", "max_targets", "max_stage", "trigger_limit", "max_depth", "max_pierce"].includes(key)) return "1";
+      if (["duration", "delay", "interval", "tick", "arm_time"].includes(key)) return "0.05";
+      return "0.01";
     }
 
     function clamp01(value) {
