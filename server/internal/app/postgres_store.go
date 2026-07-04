@@ -2,18 +2,16 @@ package app
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-//go:embed sql/schema.sql
-var postgresSchema string
 
 type postgresAccountStore struct {
 	pool *pgxpool.Pool
@@ -40,8 +38,11 @@ func newPostgresAccountStore(ctx context.Context, databaseURL string) (*postgres
 }
 
 func (s *postgresAccountStore) ensureSchema(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, postgresSchema)
-	return err
+	return runMigrations(ctx, s.pool)
+}
+
+func (s *postgresAccountStore) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
 }
 
 func (s *postgresAccountStore) Close() error {
@@ -104,6 +105,16 @@ func (s *postgresAccountStore) PurgeExpiredDeletedCharacters(ctx context.Context
 		   AND deleted_at IS NOT NULL
 		   AND purge_at <= NOW()`,
 		accountID,
+	)
+	return err
+}
+
+func (s *postgresAccountStore) PurgeExpiredDeletedCharactersAll(ctx context.Context) error {
+	_, err := s.pool.Exec(
+		ctx,
+		`DELETE FROM characters
+		 WHERE deleted_at IS NOT NULL
+		   AND purge_at <= NOW()`,
 	)
 	return err
 }
@@ -354,6 +365,7 @@ func (s *postgresAccountStore) SaveCharacter(ctx context.Context, accountID stri
 		     warehouse = $5,
 		     position = $6,
 		     equipment = $7,
+		     version = version + 1,
 		     updated_at = NOW()
 		 WHERE account_id = $1
 		   AND id = $2
@@ -373,6 +385,180 @@ func (s *postgresAccountStore) SaveCharacter(ctx context.Context, accountID stri
 		return ErrCharacterNotFound
 	}
 	return nil
+}
+
+func (s *postgresAccountStore) SaveSession(ctx context.Context, session SessionRecord) error {
+	metadata, err := json.Marshal(session.Metadata)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.pool.Exec(
+		ctx,
+		`INSERT INTO account_sessions (
+			token, account_id, character_id, last_seen_at, expires_at, metadata
+		) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (token) DO UPDATE
+		SET account_id = EXCLUDED.account_id,
+		    character_id = EXCLUDED.character_id,
+		    last_seen_at = EXCLUDED.last_seen_at,
+		    expires_at = EXCLUDED.expires_at,
+		    metadata = EXCLUDED.metadata`,
+		session.Token,
+		session.AccountID,
+		nullableString(session.CharacterID),
+		session.LastSeenAt,
+		session.ExpiresAt,
+		metadata,
+	)
+	return err
+}
+
+func (s *postgresAccountStore) DeleteSession(ctx context.Context, token string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM account_sessions WHERE token = $1`, token)
+	return err
+}
+
+func (s *postgresAccountStore) AppendAuditLog(ctx context.Context, entry AuditLogEntry) error {
+	payload, err := json.Marshal(entry.Payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.pool.Exec(
+		ctx,
+		`INSERT INTO audit_logs (
+			actor_account_id, actor_type, target_type, target_id, action, payload
+		) VALUES ($1, $2, $3, $4, $5, $6)`,
+		nullableString(entry.ActorAccountID),
+		entry.ActorType,
+		entry.TargetType,
+		entry.TargetID,
+		entry.Action,
+		payload,
+	)
+	return err
+}
+
+func (s *postgresAccountStore) AdminListAccounts(ctx context.Context, limit int) ([]AdminAccountSummary, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.pool.Query(
+		ctx,
+		`SELECT a.id, a.email, a.username, a.created_at, COUNT(c.id) FILTER (WHERE c.deleted_at IS NULL)
+		 FROM accounts a
+		 LEFT JOIN characters c ON c.account_id = a.id
+		 GROUP BY a.id, a.email, a.username, a.created_at
+		 ORDER BY a.created_at DESC
+		 LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]AdminAccountSummary, 0, limit)
+	for rows.Next() {
+		var item AdminAccountSummary
+		if err := rows.Scan(&item.ID, &item.Email, &item.Username, &item.CreatedAt, &item.ActiveCharacterCount); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *postgresAccountStore) AdminGetCharacter(ctx context.Context, characterID string) (Character, error) {
+	row := s.pool.QueryRow(
+		ctx,
+		`SELECT id, name, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		 FROM characters
+		 WHERE id = $1`,
+		characterID,
+	)
+	character, err := scanCharacter(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Character{}, ErrCharacterNotFound
+		}
+		return Character{}, err
+	}
+	return character, nil
+}
+
+func (s *postgresAccountStore) AdminListAuditLogs(ctx context.Context, limit int) ([]AuditLogEntry, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	rows, err := s.pool.Query(
+		ctx,
+		`SELECT actor_account_id, actor_type, target_type, target_id, action, payload, created_at
+		 FROM audit_logs
+		 ORDER BY created_at DESC
+		 LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]AuditLogEntry, 0, limit)
+	for rows.Next() {
+		var entry AuditLogEntry
+		var actorID *string
+		var payload []byte
+		if err := rows.Scan(&actorID, &entry.ActorType, &entry.TargetType, &entry.TargetID, &entry.Action, &payload, &entry.CreatedAt); err != nil {
+			return nil, err
+		}
+		if actorID != nil {
+			entry.ActorAccountID = *actorID
+		}
+		if err := json.Unmarshal(payload, &entry.Payload); err != nil {
+			return nil, fmt.Errorf("decode audit payload: %w", err)
+		}
+		out = append(out, entry)
+	}
+
+	return out, rows.Err()
+}
+
+type SessionRecord struct {
+	Token       string
+	AccountID   string
+	CharacterID string
+	LastSeenAt  time.Time
+	ExpiresAt   *time.Time
+	Metadata    map[string]any
+}
+
+type AuditLogEntry struct {
+	ActorAccountID string         `json:"actorAccountId,omitempty"`
+	ActorType      string         `json:"actorType"`
+	TargetType     string         `json:"targetType"`
+	TargetID       string         `json:"targetId"`
+	Action         string         `json:"action"`
+	Payload        map[string]any `json:"payload"`
+	CreatedAt      time.Time      `json:"createdAt"`
+}
+
+type AdminAccountSummary struct {
+	ID                   string    `json:"id"`
+	Email                string    `json:"email"`
+	Username             string    `json:"username"`
+	ActiveCharacterCount int       `json:"activeCharacterCount"`
+	CreatedAt            time.Time `json:"createdAt"`
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 type characterScanner interface {

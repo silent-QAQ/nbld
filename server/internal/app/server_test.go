@@ -14,6 +14,18 @@ func TestGuestLoginEnterWorldMoveAndState(t *testing.T) {
 	server := NewServer(":0", "test-instance")
 	mux := server.routes()
 
+	health := performJSONRequest[protocol.HealthzResponse](
+		t,
+		mux,
+		http.MethodGet,
+		"/healthz",
+		nil,
+		http.StatusOK,
+	)
+	if health.Status == "" || health.Checks["accountStore"].Status == "" || health.Checks["onlineStore"].Status == "" {
+		t.Fatal("expected health checks for account and online stores")
+	}
+
 	loginResp := performJSONRequest[protocol.GuestLoginResponse](
 		t,
 		mux,

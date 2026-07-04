@@ -19,6 +19,7 @@ const (
 )
 
 type onlineCharacterStore interface {
+	Ping(ctx context.Context) error
 	LoadCharacter(ctx context.Context, accountID, characterID string) (Character, bool, error)
 	StoreCharacter(ctx context.Context, accountID string, character Character) error
 	MarkDirty(ctx context.Context, accountID, characterID string) error
@@ -47,6 +48,10 @@ func (s *memoryOnlineCharacterStore) LoadCharacter(_ context.Context, accountID,
 	key := onlineCharacterKey(accountID, characterID)
 	character, ok := s.characters[key]
 	return character, ok, nil
+}
+
+func (s *memoryOnlineCharacterStore) Ping(_ context.Context) error {
+	return nil
 }
 
 func (s *memoryOnlineCharacterStore) StoreCharacter(_ context.Context, accountID string, character Character) error {
@@ -164,6 +169,10 @@ func (s *redisOnlineCharacterStore) LoadCharacter(ctx context.Context, accountID
 	}
 	character.Equipment.syncVisibleArmor()
 	return character, true, nil
+}
+
+func (s *redisOnlineCharacterStore) Ping(ctx context.Context) error {
+	return s.client.Ping(ctx).Err()
 }
 
 func (s *redisOnlineCharacterStore) StoreCharacter(ctx context.Context, accountID string, character Character) error {

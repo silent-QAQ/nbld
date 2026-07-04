@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS characters (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    version BIGINT NOT NULL DEFAULT 1,
     stats JSONB NOT NULL,
     inventory JSONB NOT NULL,
     warehouse JSONB NOT NULL,
@@ -29,3 +30,19 @@ CREATE INDEX IF NOT EXISTS idx_characters_account_active
 CREATE INDEX IF NOT EXISTS idx_characters_account_deleted
     ON characters (account_id, purge_at)
     WHERE deleted_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_characters_position_gin
+    ON characters
+    USING GIN (position);
+
+CREATE INDEX IF NOT EXISTS idx_characters_stats_gin
+    ON characters
+    USING GIN (stats);
+
+CREATE INDEX IF NOT EXISTS idx_characters_inventory_gin
+    ON characters
+    USING GIN (inventory);
+
+CREATE INDEX IF NOT EXISTS idx_characters_equipment_gin
+    ON characters
+    USING GIN (equipment);

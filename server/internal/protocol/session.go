@@ -43,9 +43,15 @@ type RandomSeedResponse struct {
 }
 
 type HealthzResponse struct {
-	Status     string `json:"status"`
-	InstanceID string `json:"instanceId"`
-	StartedAt  string `json:"startedAt"`
+	Status     string                 `json:"status"`
+	InstanceID string                 `json:"instanceId"`
+	StartedAt  string                 `json:"startedAt"`
+	Checks     map[string]HealthCheck `json:"checks,omitempty"`
+}
+
+type HealthCheck struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
 type EnterWorldRequest struct {

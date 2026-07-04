@@ -28,6 +28,7 @@ type Server struct {
 	auth                *authService
 	closer              io.Closer
 	syncer              *onlineCharacterSync
+	purger              *deletedCharacterPurger
 	authRequired        bool
 	onlineCacheRequired bool
 }
@@ -44,6 +45,8 @@ func NewServer(addr, instanceID string) *Server {
 	onlineStore, onlineCloser, onlineCacheRequired := buildOnlineCharacterStore()
 	syncer := newOnlineCharacterSync(onlineStore, store, defaultFlushInterval)
 	syncer.Start()
+	purger := newDeletedCharacterPurger(store, 1*time.Hour)
+	purger.Start()
 
 	return &Server{
 		addr:                addr,
@@ -58,6 +61,7 @@ func NewServer(addr, instanceID string) *Server {
 		auth:                newAuthService(store),
 		closer:              &combinedCloser{closers: []io.Closer{onlineCloser, accountCloser}},
 		syncer:              syncer,
+		purger:              purger,
 		authRequired:        authRequired,
 		onlineCacheRequired: onlineCacheRequired,
 	}
@@ -137,6 +141,9 @@ func (s *Server) close() {
 	if s.syncer != nil {
 		s.syncer.Stop()
 	}
+	if s.purger != nil {
+		s.purger.Stop()
+	}
 	if s.closer != nil {
 		_ = s.closer.Close()
 	}
@@ -161,10 +168,39 @@ func (s *Server) handleRandomSeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, protocol.HealthzResponse{
-		Status:     "ok",
+	checks := map[string]protocol.HealthCheck{
+		"accountStore": {Status: "ok"},
+		"onlineStore":  {Status: "ok"},
+	}
+	statusCode := http.StatusOK
+	overallStatus := "ok"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := s.accounts.Ping(ctx); err != nil {
+		checks["accountStore"] = protocol.HealthCheck{
+			Status: "error",
+			Error:  err.Error(),
+		}
+		overallStatus = "degraded"
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	if err := s.onlineCharacters.Ping(ctx); err != nil {
+		checks["onlineStore"] = protocol.HealthCheck{
+			Status: "error",
+			Error:  err.Error(),
+		}
+		overallStatus = "degraded"
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	writeJSON(w, statusCode, protocol.HealthzResponse{
+		Status:     overallStatus,
 		InstanceID: s.instanceID,
 		StartedAt:  s.startedAt.Format(time.RFC3339),
+		Checks:     checks,
 	})
 }
 

@@ -42,12 +42,20 @@ var (
 type accountStore interface {
 	CreateAccount(ctx context.Context, email, username, passwordHash string) (Account, error)
 	FindAccountByEmail(ctx context.Context, email string) (Account, error)
+	Ping(ctx context.Context) error
 	PurgeExpiredDeletedCharacters(ctx context.Context, accountID string) error
+	PurgeExpiredDeletedCharactersAll(ctx context.Context) error
 	ListCharacters(ctx context.Context, accountID string) (CharacterRoster, error)
 	CreateCharacter(ctx context.Context, accountID, name string) (Character, error)
 	SoftDeleteCharacter(ctx context.Context, accountID, characterID string) (Character, error)
 	GetCharacter(ctx context.Context, accountID, characterID string) (Character, error)
 	SaveCharacter(ctx context.Context, accountID string, character Character) error
+	SaveSession(ctx context.Context, session SessionRecord) error
+	DeleteSession(ctx context.Context, token string) error
+	AppendAuditLog(ctx context.Context, entry AuditLogEntry) error
+	AdminListAccounts(ctx context.Context, limit int) ([]AdminAccountSummary, error)
+	AdminGetCharacter(ctx context.Context, characterID string) (Character, error)
+	AdminListAuditLogs(ctx context.Context, limit int) ([]AuditLogEntry, error)
 }
 
 type Account struct {
@@ -66,6 +74,7 @@ type CharacterRoster struct {
 type Character struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`
+	Version   int64              `json:"version"`
 	Stats     CharacterStats     `json:"stats"`
 	Inventory ItemContainer      `json:"inventory"`
 	Warehouse ItemContainer      `json:"warehouse"`
@@ -252,6 +261,7 @@ func newCharacter(name string) Character {
 	return Character{
 		ID:        "char-" + randomHex(8),
 		Name:      strings.TrimSpace(name),
+		Version:   1,
 		Stats:     defaultCharacterStats(),
 		Inventory: ItemContainer{Items: []ItemStack{}},
 		Warehouse: ItemContainer{Items: []ItemStack{}},
@@ -268,6 +278,8 @@ type memoryAccountStore struct {
 	emailIndex map[string]string
 	userIndex  map[string]string
 	characters map[string][]Character
+	sessions   map[string]SessionRecord
+	auditLogs  []AuditLogEntry
 }
 
 func newMemoryAccountStore() *memoryAccountStore {
@@ -276,6 +288,8 @@ func newMemoryAccountStore() *memoryAccountStore {
 		emailIndex: make(map[string]string),
 		userIndex:  make(map[string]string),
 		characters: make(map[string][]Character),
+		sessions:   make(map[string]SessionRecord),
+		auditLogs:  make([]AuditLogEntry, 0),
 	}
 }
 
@@ -318,10 +332,25 @@ func (s *memoryAccountStore) FindAccountByEmail(_ context.Context, email string)
 	return s.accounts[accountID], nil
 }
 
+func (s *memoryAccountStore) Ping(_ context.Context) error {
+	return nil
+}
+
 func (s *memoryAccountStore) PurgeExpiredDeletedCharacters(_ context.Context, accountID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.purgeExpiredLocked(accountID, time.Now().UTC())
+	return nil
+}
+
+func (s *memoryAccountStore) PurgeExpiredDeletedCharactersAll(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC()
+	for accountID := range s.characters {
+		s.purgeExpiredLocked(accountID, now)
+	}
 	return nil
 }
 
@@ -449,6 +478,7 @@ func (s *memoryAccountStore) SaveCharacter(_ context.Context, accountID string, 
 		if characters[i].DeletedAt != nil {
 			return ErrCharacterDeleted
 		}
+		character.Version = characters[i].Version + 1
 		character.UpdatedAt = time.Now().UTC()
 		characters[i] = character
 		s.characters[accountID] = characters
@@ -456,6 +486,92 @@ func (s *memoryAccountStore) SaveCharacter(_ context.Context, accountID string, 
 	}
 
 	return ErrCharacterNotFound
+}
+
+func (s *memoryAccountStore) SaveSession(_ context.Context, session SessionRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessions[session.Token] = session
+	return nil
+}
+
+func (s *memoryAccountStore) DeleteSession(_ context.Context, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, token)
+	return nil
+}
+
+func (s *memoryAccountStore) AppendAuditLog(_ context.Context, entry AuditLogEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry.CreatedAt = time.Now().UTC()
+	s.auditLogs = append([]AuditLogEntry{entry}, s.auditLogs...)
+	return nil
+}
+
+func (s *memoryAccountStore) AdminListAccounts(_ context.Context, limit int) ([]AdminAccountSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	out := make([]AdminAccountSummary, 0, len(s.accounts))
+	for _, account := range s.accounts {
+		count := 0
+		for _, character := range s.characters[account.ID] {
+			if character.DeletedAt == nil {
+				count++
+			}
+		}
+		out = append(out, AdminAccountSummary{
+			ID:                   account.ID,
+			Email:                account.Email,
+			Username:             account.Username,
+			ActiveCharacterCount: count,
+			CreatedAt:            account.CreatedAt,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (s *memoryAccountStore) AdminGetCharacter(_ context.Context, characterID string) (Character, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, characters := range s.characters {
+		for _, character := range characters {
+			if character.ID == characterID {
+				return character, nil
+			}
+		}
+	}
+	return Character{}, ErrCharacterNotFound
+}
+
+func (s *memoryAccountStore) AdminListAuditLogs(_ context.Context, limit int) ([]AuditLogEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	out := make([]AuditLogEntry, len(s.auditLogs))
+	copy(out, s.auditLogs)
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (s *memoryAccountStore) purgeExpiredLocked(accountID string, now time.Time) {
