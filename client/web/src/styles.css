@@ -176,32 +176,33 @@ input {
 }
 
 .appearance-editor {
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
 .appearance-editor h3 {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
+  font-size: 18px;
 }
 
 .appearance-preview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .appearance-card {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: 6px;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.04);
 }
 
 .appearance-card strong {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -210,18 +211,19 @@ input {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-height: 120px;
+  justify-content: center;
+  gap: 1px;
+  min-height: 74px;
 }
 
 .segment {
   background: #d9b35f;
   border: 1px solid rgba(0, 0, 0, 0.25);
-  height: 10px;
+  height: 6px;
 }
 
 .segment.head {
-  height: 14px;
+  height: 10px;
   border-radius: 999px;
 }
 
@@ -231,15 +233,15 @@ input {
 
 .appearance-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 8px;
 }
 
 .appearance-palette {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-top: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 8px;
+  margin-top: 10px;
 }
 
 .hair-grid {
@@ -264,11 +266,32 @@ input {
 }
 
 .appearance-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.appearance-field span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appearance-editor .appearance-field input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.appearance-editor input[type="color"] {
+  height: 28px;
+  padding: 2px;
 }
 
 .hair-layer-btn.active {
