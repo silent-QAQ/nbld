@@ -6,20 +6,21 @@
   <title>技能编辑器</title>
   <style>
     :root {
-      --bg: #eef1ed;
+      --bg: #edf1ed;
       --panel: #fbfcf8;
-      --panel-2: #f3f6f0;
-      --ink: #16201d;
-      --muted: #61706b;
-      --line: #ccd7d0;
-      --accent: #216a5b;
-      --accent-2: #b6422f;
-      --accent-3: #d99f2b;
-      --good: #1f7a45;
-      --bad: #b3362d;
-      --shadow: 0 12px 26px rgba(22, 32, 29, 0.08);
-      --mono: "SFMono-Regular", "Cascadia Mono", "Liberation Mono", monospace;
+      --panel-soft: #f4f7f2;
+      --ink: #17211d;
+      --muted: #64736d;
+      --line: #cad6ce;
+      --accent: #206b5a;
+      --accent-2: #b84a32;
+      --accent-3: #d6a231;
+      --ok: #237a4b;
+      --warn: #8a6117;
+      --bad: #a83127;
+      --mono: "Cascadia Mono", "SFMono-Regular", "Liberation Mono", monospace;
       --sans: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
+      --shadow: 0 14px 30px rgba(23, 33, 29, 0.08);
     }
 
     * {
@@ -28,19 +29,19 @@
 
     html,
     body {
-      height: 100%;
+      min-height: 100%;
     }
 
     body {
       margin: 0;
-      background:
-        linear-gradient(135deg, rgba(33, 106, 91, 0.08), transparent 36%),
-        linear-gradient(315deg, rgba(217, 159, 43, 0.14), transparent 32%),
-        var(--bg);
       color: var(--ink);
       font-family: var(--sans);
       font-size: 14px;
-      line-height: 1.45;
+      line-height: 1.42;
+      background:
+        linear-gradient(130deg, rgba(32, 107, 90, 0.10), transparent 34%),
+        linear-gradient(310deg, rgba(214, 162, 49, 0.16), transparent 38%),
+        var(--bg);
     }
 
     button,
@@ -51,11 +52,11 @@
     }
 
     button {
+      min-height: 34px;
       border: 1px solid var(--line);
       background: #fff;
       color: var(--ink);
-      min-height: 34px;
-      padding: 7px 11px;
+      padding: 7px 10px;
       cursor: pointer;
     }
 
@@ -64,9 +65,9 @@
     }
 
     button.primary {
-      background: var(--accent);
+      color: #fff;
       border-color: var(--accent);
-      color: white;
+      background: var(--accent);
     }
 
     button.danger {
@@ -77,57 +78,56 @@
     select,
     textarea {
       width: 100%;
+      min-height: 34px;
       border: 1px solid var(--line);
-      background: white;
+      background: #fff;
       color: var(--ink);
       padding: 8px 9px;
-      min-height: 34px;
       outline: none;
     }
 
     textarea {
-      min-height: 84px;
       resize: vertical;
+      min-height: 72px;
     }
 
     input:focus,
     select:focus,
     textarea:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(33, 106, 91, 0.12);
+      box-shadow: 0 0 0 3px rgba(32, 107, 90, 0.12);
     }
 
-    .app {
-      min-height: 100%;
-      display: grid;
-      grid-template-rows: auto 1fr;
+    label {
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 14px;
       padding: 14px 18px;
-      border-bottom: 1px solid rgba(204, 215, 208, 0.9);
-      background: rgba(251, 252, 248, 0.88);
+      border-bottom: 1px solid rgba(202, 214, 206, 0.92);
+      background: rgba(251, 252, 248, 0.92);
       backdrop-filter: blur(10px);
-      position: sticky;
-      top: 0;
-      z-index: 5;
     }
 
     .brand {
       display: flex;
       align-items: baseline;
-      gap: 12px;
+      gap: 10px;
       min-width: 0;
     }
 
     .brand h1 {
+      margin: 0;
       font-size: 18px;
       line-height: 1;
-      margin: 0;
       white-space: nowrap;
     }
 
@@ -146,17 +146,17 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: minmax(320px, 0.95fr) minmax(420px, 1.4fr) minmax(360px, 1.05fr);
+      grid-template-columns: minmax(300px, 0.9fr) minmax(520px, 1.45fr) minmax(390px, 1.05fr);
       gap: 14px;
       padding: 14px;
       align-items: start;
     }
 
     .panel {
-      background: rgba(251, 252, 248, 0.94);
-      border: 1px solid var(--line);
-      box-shadow: var(--shadow);
       min-width: 0;
+      border: 1px solid var(--line);
+      background: rgba(251, 252, 248, 0.96);
+      box-shadow: var(--shadow);
     }
 
     .panel-header {
@@ -166,10 +166,11 @@
       gap: 10px;
       padding: 12px;
       border-bottom: 1px solid var(--line);
-      background: var(--panel-2);
+      background: var(--panel-soft);
     }
 
-    .panel-header h2 {
+    .panel-header h2,
+    .card h3 {
       margin: 0;
       font-size: 14px;
     }
@@ -178,9 +179,9 @@
       padding: 12px;
     }
 
-    .form-grid {
+    .grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -190,19 +191,17 @@
       min-width: 0;
     }
 
-    .field.full {
+    .full {
       grid-column: 1 / -1;
     }
 
-    label {
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .chips {
+    .chips,
+    .toolbar,
+    .pill-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 7px;
+      align-items: center;
     }
 
     .chip {
@@ -222,188 +221,179 @@
       margin: 0;
     }
 
-    .section {
-      display: grid;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    .section:last-child {
-      margin-bottom: 0;
-    }
-
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+    .pill {
+      display: inline-flex;
       align-items: center;
+      border: 1px solid #c8d8d0;
+      background: #e8f0ec;
+      color: #22483e;
+      min-height: 24px;
+      padding: 3px 7px;
+      font-size: 12px;
     }
 
-    .line-list {
+    .pill.warn {
+      border-color: #dec16d;
+      background: #fbefd4;
+      color: var(--warn);
+    }
+
+    .pill.bad {
+      border-color: #dda59b;
+      background: #f8dfda;
+      color: var(--bad);
+    }
+
+    .card {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+
+    .step-list {
       display: grid;
       gap: 10px;
     }
 
-    .skill-line {
+    .step {
       border: 1px solid var(--line);
       background: #fff;
     }
 
-    .skill-line.selected {
+    .step.selected {
       border-color: var(--accent);
       box-shadow: inset 4px 0 0 var(--accent);
     }
 
-    .builder-card .skill-line {
-      box-shadow: none;
-      background: #fbfcf8;
-    }
-
-    .line-head {
-      display: flex;
+    .step-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
       gap: 8px;
-      justify-content: space-between;
       align-items: center;
-      padding: 9px 10px;
-      background: #f8faf6;
       border-bottom: 1px solid var(--line);
+      background: #f8faf6;
+      padding: 9px 10px;
     }
 
-    .line-title {
+    .step-title {
       min-width: 0;
       font-family: var(--mono);
       font-size: 12px;
-      color: var(--ink);
-      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .line-actions {
+    .step-actions {
       display: flex;
-      gap: 6px;
-      flex: 0 0 auto;
+      gap: 5px;
     }
 
-    .line-actions button {
+    .step-actions button {
       width: 30px;
       min-height: 28px;
       padding: 0;
     }
 
-    .line-body {
+    .step-body {
       display: grid;
-      gap: 9px;
+      gap: 8px;
       padding: 10px;
     }
 
-    .compiled-line {
-      padding: 8px;
-      background: #17211e;
-      color: #dfe9e4;
-      font-family: var(--mono);
-      font-size: 12px;
+    .line-preview {
       overflow-x: auto;
       white-space: nowrap;
-    }
-
-    .pill-row {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .pill {
-      background: #e9f0ec;
-      border: 1px solid #c9d8d0;
-      color: #24463d;
-      padding: 4px 7px;
+      background: #17211d;
+      color: #e5eee9;
+      padding: 8px;
+      font-family: var(--mono);
       font-size: 12px;
     }
 
-    .pill.warn {
-      background: #fbefd7;
-      border-color: #e5c274;
-      color: #694c12;
-    }
-
-    .pill.bad {
-      background: #f8dfda;
-      border-color: #e1aaa0;
-      color: #81291f;
-    }
-
-    .builder {
-      display: grid;
-      gap: 12px;
-    }
-
-    .builder-card {
-      border: 1px solid var(--line);
-      background: #fff;
-      padding: 10px;
-      display: grid;
-      gap: 10px;
-    }
-
-    .builder-card h3 {
-      margin: 0;
-      font-size: 13px;
-    }
-
-    .effect-grid {
+    .mechanic-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
 
-    .effect-button {
-      min-height: 50px;
-      text-align: left;
+    .mechanic-button {
       display: grid;
-      gap: 2px;
       align-content: center;
+      gap: 2px;
+      min-height: 52px;
+      text-align: left;
       background: #fff;
     }
 
-    .effect-button strong {
+    .mechanic-button.active {
+      border-color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .mechanic-button strong {
       font-size: 12px;
     }
 
-    .effect-button span {
+    .mechanic-button span {
       color: var(--muted);
       font-size: 11px;
     }
 
-    .output-tabs {
+    .mini-list {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0;
+      gap: 7px;
+    }
+
+    .mini-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: #fbfcf8;
+      padding: 7px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .mini-item button {
+      width: 28px;
+      min-height: 26px;
+      padding: 0;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
       border-bottom: 1px solid var(--line);
     }
 
-    .output-tabs button {
+    .tabs button {
       border: 0;
       border-right: 1px solid var(--line);
       background: #f8faf6;
     }
 
-    .output-tabs button:last-child {
+    .tabs button:last-child {
       border-right: 0;
     }
 
-    .output-tabs button.active {
-      background: white;
+    .tabs button.active {
+      background: #fff;
       color: var(--accent);
       box-shadow: inset 0 -3px 0 var(--accent);
     }
 
     pre {
       margin: 0;
-      min-height: 420px;
+      min-height: 470px;
       max-height: calc(100vh - 220px);
       overflow: auto;
-      background: #111a18;
+      background: #111a17;
       color: #e4eee9;
       padding: 12px;
       font-family: var(--mono);
@@ -414,18 +404,13 @@
     .status {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      padding: 10px 12px;
+      gap: 7px;
       border-top: 1px solid var(--line);
       background: #f8faf6;
+      padding: 10px 12px;
     }
 
-    .hidden {
-      display: none !important;
-    }
-
-    @media (max-width: 1180px) {
+    @media (max-width: 1220px) {
       .workspace {
         grid-template-columns: 1fr 1fr;
       }
@@ -441,14 +426,14 @@
         flex-direction: column;
       }
 
-      .workspace {
+      .workspace,
+      .grid,
+      .mechanic-grid {
         grid-template-columns: 1fr;
-        padding: 10px;
       }
 
-      .form-grid,
-      .effect-grid {
-        grid-template-columns: 1fr;
+      .workspace {
+        padding: 10px;
       }
 
       pre {
@@ -458,28 +443,28 @@
   </style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <h1>技能编辑器</h1>
-        <span>技能行 / 效果表 / 条件表 / 修正表</span>
-      </div>
-      <div class="top-actions">
-        <button id="addLineTop" class="primary">新增技能行</button>
-        <button id="copyJson">复制 JSON</button>
-        <button id="downloadJson">下载配置</button>
-        <button id="resetDemo">重置示例</button>
-      </div>
-    </header>
+  <header class="topbar">
+    <div class="brand">
+      <h1>技能编辑器</h1>
+      <span>触发器 · 目标器 · 量化条件 · 机制效果</span>
+    </div>
+    <div class="top-actions">
+      <button id="addStepTop" class="primary">新增步骤</button>
+      <button id="copyJson">复制 JSON</button>
+      <button id="downloadJson">下载配置</button>
+      <button id="resetDemo">重置示例</button>
+    </div>
+  </header>
 
-    <main class="workspace">
-      <section class="panel">
-        <div class="panel-header">
-          <h2>技能基础</h2>
-          <span class="pill" id="lineCount">0 行</span>
-        </div>
-        <div class="panel-body">
-          <div class="section form-grid">
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>技能基础</h2>
+        <span class="pill" id="stepCount">0 步</span>
+      </div>
+      <div class="panel-body">
+        <div class="card">
+          <div class="grid">
             <div class="field">
               <label for="skillId">技能 ID</label>
               <input id="skillId" value="skill_spear_dash_001">
@@ -489,7 +474,7 @@
               <input id="skillName" value="突进穿刺">
             </div>
             <div class="field">
-              <label for="slotType">槽位类型</label>
+              <label for="slotType">槽位</label>
               <select id="slotType">
                 <option value="mainhand_active">主手主动</option>
                 <option value="offhand_active">副手主动</option>
@@ -498,34 +483,7 @@
             </div>
             <div class="field">
               <label for="skillType">技能类型</label>
-              <select id="skillType">
-                <option value="melee_attack">近战攻击</option>
-                <option value="ranged_attack">远程攻击</option>
-                <option value="projectile">投射物</option>
-                <option value="ray">射线</option>
-                <option value="area">区域</option>
-                <option value="aura">光环</option>
-                <option value="dash">位移</option>
-                <option value="guard">防御</option>
-                <option value="counter">反击</option>
-                <option value="summon">召唤</option>
-                <option value="buff">增益</option>
-                <option value="debuff">减益</option>
-                <option value="control">控制</option>
-                <option value="heal">治疗</option>
-                <option value="resource">资源</option>
-                <option value="passive_trigger">被动触发</option>
-                <option value="modifier">修正规则</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="rarity">稀有度</label>
-              <select id="rarity">
-                <option value="common">普通</option>
-                <option value="rare" selected>稀有</option>
-                <option value="epic">史诗</option>
-                <option value="legendary">传奇</option>
-              </select>
+              <select id="skillType"></select>
             </div>
             <div class="field">
               <label for="cooldown">冷却</label>
@@ -540,8 +498,8 @@
               <input id="manaCost" type="number" step="1" value="0">
             </div>
             <div class="field">
-              <label for="targetDefault">默认目标</label>
-              <select id="targetDefault"></select>
+              <label for="globalTrigger">默认触发器</label>
+              <select id="globalTrigger"></select>
             </div>
             <div class="field full">
               <label>主手标签</label>
@@ -553,225 +511,180 @@
             </div>
             <div class="field full">
               <label for="skillDesc">描述</label>
-              <textarea id="skillDesc">向前突进并对直线路径上的目标造成物理伤害。</textarea>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="toolbar">
-              <button id="addLineLeft" class="primary">新增技能行</button>
-              <button id="duplicateLine">复制当前行</button>
-              <button id="removeLine" class="danger">删除当前行</button>
-            </div>
-            <div class="line-list" id="lineList"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>技能行可视化编写</h2>
-          <span class="pill" id="selectedLineLabel">未选择</span>
-        </div>
-        <div class="panel-body builder" id="builder">
-          <div class="builder-card">
-            <h3>行上下文</h3>
-            <div class="form-grid">
-              <div class="field">
-                <label for="lineContext">上下文</label>
-                <select id="lineContext">
-                  <option value="main_timeline">主动作线</option>
-                  <option value="trigger_line">条件触发线</option>
-                  <option value="modifier_line">修正规则线</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="lineName">技能行名称</label>
-                <input id="lineName">
-              </div>
-            </div>
-          </div>
-
-          <div class="builder-card">
-            <h3>目标与触发</h3>
-            <div class="form-grid">
-              <div class="field">
-                <label for="targetSelector">目标选择器</label>
-                <select id="targetSelector"></select>
-              </div>
-              <div class="field">
-                <label for="triggerType">触发器</label>
-                <select id="triggerType"></select>
-              </div>
-              <div class="field">
-                <label for="hpRequirement">血量要求</label>
-                <input id="hpRequirement" placeholder="目标&lt;0.35 / 自身&gt;0.80">
-              </div>
-              <div class="field">
-                <label for="procChance">触发几率</label>
-                <input id="procChance" type="number" min="0" max="1" step="0.01" value="1">
-              </div>
-            </div>
-          </div>
-
-          <div class="builder-card">
-            <h3>条件</h3>
-            <div class="chips" id="conditionChips"></div>
-            <div class="form-grid">
-              <div class="field">
-                <label for="conditionType">量化条件类型</label>
-                <select id="conditionType"></select>
-              </div>
-              <div class="field">
-                <label for="conditionOperator">比较</label>
-                <select id="conditionOperator">
-                  <option value="gte">&gt;=</option>
-                  <option value="lte">&lt;=</option>
-                  <option value="gt">&gt;</option>
-                  <option value="lt">&lt;</option>
-                  <option value="eq">=</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="conditionValue">数值</label>
-                <input id="conditionValue" type="number" step="0.01" value="1">
-              </div>
-              <div class="field">
-                <label for="conditionParam">参数</label>
-                <input id="conditionParam" placeholder="例：frost / buckler">
-              </div>
-            </div>
-            <div class="toolbar">
-              <button id="addCondition">添加量化条件</button>
-              <button id="clearConditions" class="danger">清空条件</button>
-            </div>
-            <div class="line-list" id="quantConditionList"></div>
-          </div>
-
-          <div class="builder-card">
-            <h3>技能效果块</h3>
-            <div class="effect-grid" id="effectButtons"></div>
-            <div class="form-grid" id="effectParams"></div>
-            <div class="toolbar">
-              <button id="addEffectBlock" class="primary">添加效果块</button>
-              <button id="clearEffects" class="danger">清空效果</button>
-            </div>
-            <div class="line-list" id="effectBlockList"></div>
-          </div>
-
-          <div class="builder-card">
-            <h3>技能联动修正</h3>
-            <div class="form-grid">
-              <div class="field">
-                <label for="modifierTarget">目标技能</label>
-                <input id="modifierTarget" placeholder="突进穿刺">
-              </div>
-              <div class="field">
-                <label for="modifierField">修正字段</label>
-                <select id="modifierField">
-                  <option value="cooldown">冷却</option>
-                  <option value="base_ratio">技能倍率</option>
-                  <option value="radius">范围</option>
-                  <option value="range">距离</option>
-                  <option value="proc_chance">触发几率</option>
-                  <option value="can_pierce">可穿透</option>
-                  <option value="max_targets">目标上限</option>
-                  <option value="resource_cost">资源消耗</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="modifierMode">模式</label>
-                <select id="modifierMode">
-                  <option value="add">add</option>
-                  <option value="mul">mul</option>
-                  <option value="override">override</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="modifierValue">数值</label>
-                <input id="modifierValue" value="-0.20">
-              </div>
-            </div>
-            <div class="toolbar">
-              <button id="addModifierBlock">添加联动修正</button>
-              <button id="clearModifiers" class="danger">清空修正</button>
-            </div>
-            <div class="line-list" id="modifierBlockList"></div>
-          </div>
-
-          <div class="builder-card">
-            <h3>技能行文本</h3>
-            <textarea id="lineText"></textarea>
-            <div class="toolbar">
-              <button id="applyLineText" class="primary">从文本解析</button>
-              <button id="syncFromControls">按控件生成</button>
+              <textarea id="skillDesc">向前突进并对直线路径上的敌人造成物理伤害，可通过破军天赋追加低血追击。</textarea>
             </div>
           </div>
         </div>
-      </section>
 
-      <section class="panel output-panel">
-        <div class="panel-header">
-          <h2>编译结果</h2>
-          <span class="pill" id="validationSummary">0 个问题</span>
+        <div class="toolbar">
+          <button id="addStepLeft" class="primary">新增步骤</button>
+          <button id="duplicateStep">复制当前步骤</button>
+          <button id="removeStep" class="danger">删除当前步骤</button>
         </div>
-        <div class="output-tabs">
-          <button data-tab="all" class="active">总配置</button>
-          <button data-tab="effects">效果表</button>
-          <button data-tab="conditions">条件表</button>
-          <button data-tab="modifiers">修正表</button>
+        <div class="step-list" id="stepList"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>技能步骤</h2>
+        <span class="pill" id="selectedStepLabel">未选择</span>
+      </div>
+      <div class="panel-body">
+        <div class="card">
+          <h3>基础</h3>
+          <div class="grid">
+            <div class="field">
+              <label for="stepName">步骤名</label>
+              <input id="stepName">
+            </div>
+            <div class="field">
+              <label for="stepTrigger">触发器</label>
+              <select id="stepTrigger"></select>
+            </div>
+            <div class="field">
+              <label for="targeter">目标器</label>
+              <select id="targeter"></select>
+            </div>
+            <div class="field">
+              <label for="chance">触发几率</label>
+              <input id="chance" type="number" min="0" max="1" step="0.01" value="1">
+            </div>
+            <div class="field">
+              <label for="delay">延迟</label>
+              <input id="delay" type="number" step="0.05" value="0">
+            </div>
+            <div class="field">
+              <label for="repeat">重复次数</label>
+              <input id="repeat" type="number" step="1" value="1">
+            </div>
+          </div>
         </div>
-        <pre id="output"></pre>
-        <div class="status" id="status"></div>
-      </section>
-    </main>
-  </div>
+
+        <div class="card">
+          <h3>机制效果</h3>
+          <div class="mechanic-grid" id="mechanicButtons"></div>
+          <div class="grid" id="mechanicParams"></div>
+          <div class="toolbar">
+            <button id="applyMechanic" class="primary">应用到当前步骤</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>量化条件</h3>
+          <div class="grid">
+            <div class="field">
+              <label for="conditionType">条件类型</label>
+              <select id="conditionType"></select>
+            </div>
+            <div class="field">
+              <label for="conditionOperator">比较</label>
+              <select id="conditionOperator">
+                <option value="gte">&gt;=</option>
+                <option value="lte">&lt;=</option>
+                <option value="gt">&gt;</option>
+                <option value="lt">&lt;</option>
+                <option value="eq">=</option>
+                <option value="neq">!=</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="conditionValue">数值</label>
+              <input id="conditionValue" type="number" step="0.01" value="1">
+            </div>
+            <div class="field">
+              <label for="conditionParam">参数</label>
+              <input id="conditionParam" placeholder="frost / buckler / tianqu_pojun_core">
+            </div>
+          </div>
+          <div class="toolbar">
+            <button id="addCondition">添加条件</button>
+            <button id="clearConditions" class="danger">清空条件</button>
+          </div>
+          <div class="mini-list" id="conditionList"></div>
+        </div>
+
+        <div class="card">
+          <h3>技能步骤文本</h3>
+          <div class="line-preview" id="skillLinePreview"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel output-panel">
+      <div class="panel-header">
+        <h2>导出结果</h2>
+        <span class="pill" id="validationSummary">0 个问题</span>
+      </div>
+      <div class="tabs">
+        <button data-tab="all" class="active">总配置</button>
+        <button data-tab="steps">步骤表</button>
+        <button data-tab="mechanics">效果表</button>
+        <button data-tab="conditions">条件表</button>
+        <button data-tab="text">技能文本</button>
+      </div>
+      <pre id="output"></pre>
+      <div class="status" id="status"></div>
+    </section>
+  </main>
 
   <script>
-    const targetSelectors = [
-      ["", "默认目标"],
-      ["自身", "自身"],
-      ["当前目标", "当前目标"],
-      ["前方单体", "前方单体"],
-      ["前方直线", "前方直线"],
-      ["前方扇形", "前方扇形"],
-      ["圆形范围", "圆形范围"],
-      ["周围敌人", "周围敌人"],
-      ["周围友方", "周围友方"],
-      ["命中目标", "命中目标"],
-      ["命中目标周围", "命中目标周围"]
+    const skillTypes = [
+      ["melee", "近战"],
+      ["projectile", "投射物"],
+      ["ray", "射线"],
+      ["area", "区域"],
+      ["aura", "光环"],
+      ["dash", "位移"],
+      ["guard", "防御"],
+      ["counter", "反击"],
+      ["summon", "召唤"],
+      ["buff", "增益"],
+      ["debuff", "减益"],
+      ["control", "控制"],
+      ["heal", "治疗"],
+      ["passive", "被动触发"]
     ];
 
-    const triggerTypes = [
-      ["", "无"],
-      ["释放时", "释放时"],
-      ["前摇开始", "前摇开始"],
-      ["前摇结束", "前摇结束"],
-      ["命中时", "命中时"],
-      ["暴击时", "暴击时"],
-      ["击杀时", "击杀时"],
-      ["闪避后", "闪避后"],
-      ["格挡后", "格挡后"],
-      ["受击时", "受击时"],
-      ["持续期间每秒", "持续期间每秒"],
-      ["效果结束时", "效果结束时"]
+    const triggers = [
+      ["onCast", "释放时"],
+      ["onHit", "命中时"],
+      ["onCrit", "暴击时"],
+      ["onKill", "击杀时"],
+      ["onTick", "周期"],
+      ["onDamaged", "受击时"],
+      ["onDodge", "闪避后"],
+      ["onBlock", "格挡后"],
+      ["onEnd", "结束时"]
     ];
 
-    const conditionOptions = [
-      ["has_hit_target", "命中目标", "bool"],
-      ["target_hp_ratio", "目标血量比例", "number"],
-      ["self_hp_ratio", "自身血量比例", "number"],
-      ["target_stack", "目标层数", "stack"],
-      ["combo_hit_count", "连击命中数", "number"],
-      ["hit_target_count", "命中目标数", "number"],
-      ["distance_to_target", "目标距离", "number"],
-      ["current_mana_ratio", "当前法力比例", "number"],
-      ["current_stamina_ratio", "当前耐力比例", "number"],
-      ["offhand_type", "副手类型", "enum"],
-      ["talent_active", "天赋已激活", "enum"],
-      ["target_has_debuff", "目标存在减益", "enum"],
-      ["target_has_control", "目标处于控制", "enum"],
-      ["random_seed_bucket", "随机桶", "number"]
+    const targeters = [
+      ["self", "自身"],
+      ["current", "当前目标"],
+      ["hit", "命中目标"],
+      ["line", "前方直线"],
+      ["cone", "前方扇形"],
+      ["circle", "圆形范围"],
+      ["nearEnemies", "周围敌人"],
+      ["nearAllies", "周围友方"],
+      ["point", "指定点"],
+      ["owner", "召唤者"]
+    ];
+
+    const conditionTypes = [
+      ["target_hp_ratio", "目标血量比例", "ratio"],
+      ["self_hp_ratio", "自身血量比例", "ratio"],
+      ["mana_ratio", "法力比例", "ratio"],
+      ["stamina_ratio", "耐力比例", "ratio"],
+      ["distance", "目标距离", "distance"],
+      ["target_count", "目标数量", "count"],
+      ["hit_count", "连续命中数", "count"],
+      ["stack", "目标层数", "stack"],
+      ["has_status", "目标状态", "status"],
+      ["offhand", "副手类型", "tag"],
+      ["talent", "天赋激活", "tag"],
+      ["cooldown_ready", "技能冷却完成", "skill"],
+      ["facing_angle", "朝向角度", "angle"]
     ];
 
     const weapons = [
@@ -794,236 +707,205 @@
       ["gauntlet", "护手"]
     ];
 
-    const effectTemplates = [
+    const mechanics = [
       {
-        id: "physical_damage",
-        title: "物理伤害",
-        hint: "DealDamage",
+        id: "damage",
+        title: "伤害",
+        hint: "Damage",
         params: [
-          ["ratio", "倍率", "number", "1.35"],
+          ["damage_type", "类型", "select", "physical", [["physical", "物理"], ["magical", "法术"]]],
+          ["ratio", "倍率", "number", "1.2"],
           ["flat", "固定值", "number", "0"],
-          ["canCrit", "可暴击", "select", "true", ["true", "false"]]
-        ],
-        build: p => ({ text: `造成物理伤害${num(p.ratio, 1.35)}`, type: "DealDamage", damage_type: "physical", base_ratio: numeric(p.ratio), flat_damage: numeric(p.flat), can_crit: p.canCrit !== "false" })
-      },
-      {
-        id: "magic_damage",
-        title: "法术伤害",
-        hint: "DealDamage",
-        params: [
-          ["ratio", "倍率", "number", "0.90"],
-          ["flat", "固定值", "number", "0"],
-          ["canCrit", "可暴击", "select", "true", ["true", "false"]]
-        ],
-        build: p => ({ text: `造成法术伤害${num(p.ratio, 0.9)}`, type: "DealDamage", damage_type: "magical", base_ratio: numeric(p.ratio), flat_damage: numeric(p.flat), can_crit: p.canCrit !== "false" })
-      },
-      {
-        id: "extra_damage",
-        title: "追加伤害",
-        hint: "DealExtraDamage",
-        params: [
-          ["ratio", "倍率", "number", "0.80"]
-        ],
-        build: p => ({ text: `造成追加伤害${num(p.ratio, 0.8)}`, type: "DealExtraDamage", extra_ratio: numeric(p.ratio) })
-      },
-      {
-        id: "slow",
-        title: "减速",
-        hint: "ApplyDebuff",
-        params: [
-          ["value", "强度", "number", "0.20"],
-          ["duration", "持续", "number", "2.0"]
-        ],
-        build: p => ({ text: `附加减速${num(p.value, 0.2)}@${num(p.duration, 2)}`, type: "ApplyDebuff", debuff_id: "slow", param_1: numeric(p.value), duration: numeric(p.duration) })
-      },
-      {
-        id: "freeze",
-        title: "冻结",
-        hint: "ApplyControl",
-        params: [
-          ["duration", "持续", "number", "1.5"]
-        ],
-        build: p => ({ text: `附加冻结@${num(p.duration, 1.5)}`, type: "ApplyControl", control_type: "freeze", control_duration: numeric(p.duration) })
-      },
-      {
-        id: "shield",
-        title: "护盾",
-        hint: "ApplyShield",
-        params: [
-          ["ratio", "比例", "number", "0.06"],
-          ["duration", "持续", "number", "4.0"]
-        ],
-        build: p => ({ text: `获得护盾${num(p.ratio, 0.06)}@${num(p.duration, 4)}`, type: "ApplyShield", shield_ratio: numeric(p.ratio), duration: numeric(p.duration) })
-      },
-      {
-        id: "move",
-        title: "移动",
-        hint: "MoveCaster",
-        params: [
-          ["direction", "方向", "select", "前移", ["前移", "后撤"]],
-          ["distance", "距离", "number", "3.5"]
-        ],
-        build: p => ({ text: `自身${p.direction || "前移"}${num(p.distance, 3.5)}`, type: "MoveCaster", move_direction: p.direction === "后撤" ? "backward" : "forward", move_distance: numeric(p.distance) })
-      },
-      {
-        id: "aura",
-        title: "光环",
-        hint: "ApplyAura",
-        params: [
-          ["name", "光环", "text", "战意"],
-          ["radius", "半径", "number", "4.0"],
-          ["duration", "持续", "number", "8.0"]
-        ],
-        build: p => ({ text: `开启光环${p.name || "战意"}半径${num(p.radius, 4)}@${num(p.duration, 8)}`, type: "ApplyAura", aura_id: sanitizeId(p.name || "战意"), radius: numeric(p.radius), duration: numeric(p.duration) })
-      },
-      {
-        id: "ray",
-        title: "射线",
-        hint: "CastRay",
-        params: [
-          ["length", "长度", "number", "8.0"],
-          ["width", "宽度", "number", "0.5"],
-          ["ratio", "伤害", "number", "1.1"]
-        ],
-        build: p => ({ text: `发射射线长度${num(p.length, 8)}宽度${num(p.width, 0.5)}伤害${num(p.ratio, 1.1)}`, type: "CastRay", length: numeric(p.length), width: numeric(p.width), base_ratio: numeric(p.ratio), damage_type: "magical" })
+          ["can_crit", "暴击", "select", "true", [["true", "是"], ["false", "否"]]]
+        ]
       },
       {
         id: "projectile",
         title: "投射物",
-        hint: "SpawnProjectile",
+        hint: "Projectile",
         params: [
-          ["name", "投射物", "text", "寒星"],
-          ["speed", "速度", "number", "12.0"],
-          ["range", "射程", "number", "10.0"],
-          ["ratio", "伤害", "number", "0.9"]
-        ],
-        build: p => ({ text: `发射投射物${p.name || "寒星"}速度${num(p.speed, 12)}射程${num(p.range, 10)}伤害${num(p.ratio, 0.9)}`, type: "SpawnProjectile", projectile_id: sanitizeId(p.name || "寒星"), projectile_speed: numeric(p.speed), range: numeric(p.range), base_ratio: numeric(p.ratio) })
+          ["projectile_id", "投射物", "text", "frost_star"],
+          ["speed", "速度", "number", "12"],
+          ["range", "射程", "number", "10"],
+          ["ratio", "伤害倍率", "number", "0.9"],
+          ["pattern", "形态", "select", "single", [["single", "单发"], ["spread", "散射"], ["homing", "追踪"]]]
+        ]
+      },
+      {
+        id: "ray",
+        title: "射线",
+        hint: "Ray",
+        params: [
+          ["length", "长度", "number", "8"],
+          ["width", "宽度", "number", "0.5"],
+          ["ratio", "伤害倍率", "number", "1.0"],
+          ["tick", "跳频", "number", "0"]
+        ]
+      },
+      {
+        id: "area",
+        title: "区域",
+        hint: "Area",
+        params: [
+          ["shape", "形状", "select", "circle", [["circle", "圆形"], ["rect", "矩形"], ["sector", "扇形"]]],
+          ["radius", "半径", "number", "3"],
+          ["duration", "持续", "number", "4"],
+          ["tick", "跳频", "number", "1"]
+        ]
+      },
+      {
+        id: "aura",
+        title: "光环",
+        hint: "Aura",
+        params: [
+          ["aura_id", "光环", "text", "war_aura"],
+          ["radius", "半径", "number", "4"],
+          ["duration", "持续", "number", "6"],
+          ["team", "阵营", "select", "ally", [["ally", "友方"], ["enemy", "敌方"], ["both", "全部"]]]
+        ]
+      },
+      {
+        id: "move",
+        title: "移动",
+        hint: "Move",
+        params: [
+          ["mode", "模式", "select", "dash", [["dash", "冲刺"], ["blink", "瞬移"], ["pull", "拉拽"], ["knockback", "击退"]]],
+          ["distance", "距离", "number", "3"],
+          ["duration", "耗时", "number", "0.15"]
+        ]
       },
       {
         id: "summon",
         title: "召唤",
-        hint: "SummonUnit",
+        hint: "Summon",
         params: [
-          ["kind", "类型", "select", "单位", ["单位", "图腾", "机关"]],
-          ["name", "名称", "text", "影卫"],
-          ["duration", "持续", "number", "12.0"]
-        ],
-        build: p => ({ text: `召唤${p.kind || "单位"}${p.name || "影卫"}@${num(p.duration, 12)}`, type: p.kind === "单位" ? "SummonUnit" : "SummonTotem", summon_id: sanitizeId(p.name || "影卫"), duration: numeric(p.duration), summon_kind: p.kind || "单位" })
+          ["summon_id", "召唤物", "text", "shadow_guard"],
+          ["kind", "类型", "select", "unit", [["unit", "单位"], ["totem", "图腾"], ["trap", "陷阱"]]],
+          ["duration", "持续", "number", "12"],
+          ["max_count", "上限", "number", "1"]
+        ]
+      },
+      {
+        id: "status",
+        title: "状态",
+        hint: "Status",
+        params: [
+          ["status_id", "状态", "text", "slow"],
+          ["operation", "操作", "select", "apply", [["apply", "添加"], ["remove", "移除"], ["cleanse", "净化"]]],
+          ["value", "强度", "number", "0.2"],
+          ["duration", "持续", "number", "2"]
+        ]
+      },
+      {
+        id: "control",
+        title: "控制",
+        hint: "Control",
+        params: [
+          ["control", "类型", "select", "freeze", [["freeze", "冻结"], ["stun", "眩晕"], ["root", "定身"], ["silence", "沉默"], ["interrupt", "打断"]]],
+          ["duration", "持续", "number", "1.5"]
+        ]
+      },
+      {
+        id: "resource",
+        title: "资源",
+        hint: "Resource",
+        params: [
+          ["resource", "资源", "select", "mana", [["hp", "生命"], ["mana", "法力"], ["stamina", "耐力"]]],
+          ["operation", "操作", "select", "restore", [["restore", "回复"], ["drain", "削减"], ["cost", "消耗"]]],
+          ["value", "比例", "number", "0.1"]
+        ]
       },
       {
         id: "attribute",
         title: "属性修改",
-        hint: "ModifyAttribute",
+        hint: "Attribute",
         params: [
-          ["attr", "属性", "select", "物理攻击", ["物理攻击", "法术攻击", "物理防御", "法术防御", "移速", "伤害免疫", "伤害加成"]],
-          ["value", "数值", "number", "0.10"],
-          ["duration", "持续", "number", "6.0"]
-        ],
-        build: p => ({ text: `修改属性${p.attr || "物理攻击"}+${num(p.value, 0.1)}@${num(p.duration, 6)}`, type: "ModifyAttribute", attribute_type: attrId(p.attr || "物理攻击"), modify_mode: "add", modify_value: numeric(p.value), duration: numeric(p.duration) })
-      },
-      {
-        id: "cooldown",
-        title: "冷却缩减",
-        hint: "Modifier",
-        params: [
-          ["target", "目标技能", "text", "突进穿刺"],
-          ["value", "比例", "number", "0.20"]
-        ],
-        build: p => ({ text: `${p.target || "突进穿刺"}冷却缩减${num(p.value, 0.2)}`, type: "Modifier", target_name: p.target || "突进穿刺", modify_field: "cooldown", modify_mode: "mul", modify_value: -numeric(p.value) })
+          ["attribute", "属性", "select", "physical_attack", [["physical_attack", "物理攻击"], ["magic_attack", "法术攻击"], ["physical_defense", "物理防御"], ["magic_defense", "法术防御"], ["move_speed", "移速"], ["damage_bonus", "伤害加成"], ["damage_immunity", "伤害免疫"]]],
+          ["mode", "模式", "select", "add", [["add", "加法"], ["mul", "乘法"], ["override", "覆盖"]]],
+          ["value", "数值", "number", "0.1"],
+          ["duration", "持续", "number", "6"]
+        ]
       },
       {
         id: "stack",
-        title: "叠加层数",
-        hint: "AddStack",
+        title: "层数",
+        hint: "Stack",
         params: [
-          ["name", "层数", "select", "寒霜", ["寒霜", "灼烧", "破甲"]],
-          ["count", "数量", "number", "1"]
-        ],
-        build: p => ({ text: `叠加${p.name || "寒霜"}${num(p.count, 1)}`, type: "AddStack", stack_id: stackId(p.name || "寒霜"), stack_count: numeric(p.count) })
+          ["stack_id", "层数", "select", "frost", [["frost", "寒霜"], ["burn", "灼烧"], ["armor_break", "破甲"]]],
+          ["operation", "操作", "select", "add", [["add", "叠加"], ["consume", "消耗"], ["detonate", "引爆"], ["spread", "扩散"]]],
+          ["count", "数量", "number", "1"],
+          ["radius", "扩散半径", "number", "0"]
+        ]
+      },
+      {
+        id: "cooldown",
+        title: "冷却",
+        hint: "Cooldown",
+        params: [
+          ["target_skill", "目标技能", "text", "skill_spear_dash_001"],
+          ["operation", "操作", "select", "reduce", [["reduce", "缩减"], ["reset", "重置"], ["lock", "禁用"]]],
+          ["value", "数值", "number", "0.2"]
+        ]
+      },
+      {
+        id: "event",
+        title: "事件",
+        hint: "Event",
+        params: [
+          ["event_id", "事件", "text", "pojun_execute"],
+          ["payload", "参数", "text", ""]
+        ]
       }
     ];
 
-    const targetMap = {
-      "自身": "self",
-      "当前目标": "current_target",
-      "前方单体": "forward_single",
-      "前方直线": "forward_line",
-      "前方扇形": "forward_sector",
-      "圆形范围": "circle_area",
-      "周围敌人": "nearby_enemies",
-      "周围友方": "nearby_allies",
-      "命中目标": "hit_target",
-      "命中目标周围": "around_hit_target"
-    };
-
-    const triggerMap = {
-      "释放时": "on_cast",
-      "前摇开始": "on_precast_start",
-      "前摇结束": "on_precast_end",
-      "命中时": "on_hit",
-      "暴击时": "on_crit",
-      "击杀时": "on_kill",
-      "闪避后": "after_dodge",
-      "格挡后": "after_block",
-      "受击时": "on_damaged",
-      "持续期间每秒": "on_tick_1s",
-      "效果结束时": "on_effect_end"
-    };
-
-    const conditionMap = {
-      "命中目标": ["has_hit_target"],
-      "目标减速": ["target_has_debuff", "slow"],
-      "目标灼烧": ["target_has_stack", "burn"],
-      "目标冻结": ["target_has_control", "freeze"],
-      "寒霜层数>=4": ["target_stack_gte", "frost", 4],
-      "灼烧层数>=4": ["target_stack_gte", "burn", 4],
-      "副手为轻盾": ["offhand_eq", "buckler"],
-      "副手为法典": ["offhand_eq", "grimoire"],
-      "已激活破军核心": ["talent_active", "tianqu_pojun_core"],
-      "已激活流影核心": ["talent_active", "tianqu_liuying_core"],
-      "已激活镇岳核心": ["talent_active", "tianqu_zhenyue_core"]
-    };
-
     const state = {
-      selectedLineId: null,
+      selectedStepId: null,
+      selectedMechanic: "damage",
+      mechanicParams: {},
       outputTab: "all",
-      effectTemplate: "physical_damage",
-      effectParams: {},
-      lines: [
+      steps: [
         {
-          id: uid("line"),
-          context: "main_timeline",
-          name: "突进穿刺",
-          target: "前方直线",
-          trigger: "",
-          conditions: [],
-          hp: "",
+          id: uid("step"),
+          name: "穿刺命中",
+          trigger: "onCast",
+          targeter: "line",
           chance: 1,
-          effects: [
-            { id: uid("eff"), text: "造成物理伤害1.35", type: "DealDamage", damage_type: "physical", base_ratio: 1.35, flat_damage: 0, can_crit: true }
-          ],
-          modifiers: []
+          delay: 0.18,
+          repeat: 1,
+          mechanic: {
+            id: "damage",
+            damage_type: "physical",
+            ratio: 1.35,
+            flat: 0,
+            can_crit: true
+          },
+          conditions: []
         },
         {
-          id: uid("line"),
-          context: "trigger_line",
+          id: uid("step"),
           name: "破军追击",
-          target: "命中目标",
-          trigger: "命中时",
-          conditions: [
-            { id: uid("cond"), type: "talent_active", label: "已激活破军核心", operator: "eq", value: 1, param: "tianqu_pojun_core" }
-          ],
-          hp: "目标<0.35",
+          trigger: "onHit",
+          targeter: "hit",
           chance: 1,
-          effects: [
-            { id: uid("eff"), text: "造成追加伤害0.8", type: "DealExtraDamage", extra_ratio: 0.8 }
-          ],
-          modifiers: []
+          delay: 0,
+          repeat: 1,
+          mechanic: {
+            id: "damage",
+            damage_type: "physical",
+            ratio: 0.8,
+            flat: 0,
+            can_crit: false,
+            extra_damage: true
+          },
+          conditions: [
+            { id: uid("cond"), type: "target_hp_ratio", operator: "lt", value: 0.35, param: "" },
+            { id: uid("cond"), type: "talent", operator: "eq", value: 1, param: "tianqu_pojun_core" }
+          ]
         }
       ]
     };
 
-    state.selectedLineId = state.lines[0].id;
+    state.selectedStepId = state.steps[0].id;
 
     const $ = id => document.getElementById(id);
 
@@ -1031,447 +913,249 @@
       return `${prefix}_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
     }
 
-    function num(value, fallback) {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed)) return fallback;
-      return Number.isInteger(parsed) ? String(parsed) : String(parsed);
-    }
-
-    function sanitizeId(text) {
-      return String(text || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, "_")
-        .replace(/^_+|_+$/g, "") || "unnamed";
-    }
-
     function init() {
-      fillSelect($("targetDefault"), targetSelectors, "前方直线");
-      fillSelect($("targetSelector"), targetSelectors, "");
-      fillSelect($("triggerType"), triggerTypes, "");
-      fillSelect($("conditionType"), conditionOptions.map(([value, label]) => [value, label]), "combo_hit_count");
+      fillSelect($("skillType"), skillTypes, "melee");
+      fillSelect($("globalTrigger"), triggers, "onCast");
+      fillSelect($("stepTrigger"), triggers, "onCast");
+      fillSelect($("targeter"), targeters, "line");
+      fillSelect($("conditionType"), conditionTypes.map(([id, label]) => [id, label]), "target_hp_ratio");
       renderTagChips("weaponTags", weapons, ["spear"]);
       renderTagChips("offhandTags", offhands, []);
-      renderEffectButtons();
+      renderMechanicButtons();
       bindEvents();
       render();
     }
 
     function fillSelect(select, entries, selected) {
-      select.innerHTML = entries.map(([value, label]) => {
-        return `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(label)}</option>`;
-      }).join("");
+      select.innerHTML = entries.map(([value, label]) => `<option value="${escape(value)}"${value === selected ? " selected" : ""}>${escape(label)}</option>`).join("");
     }
 
     function renderTagChips(containerId, entries, selected) {
       const container = $(containerId);
       container.innerHTML = entries.map(([value, label]) => {
         const checked = selected.includes(value) ? " checked" : "";
-        return `<label class="chip"><input type="checkbox" value="${escapeHtml(value)}"${checked}>${escapeHtml(label)}</label>`;
+        return `<label class="chip"><input type="checkbox" value="${escape(value)}"${checked}>${escape(label)}</label>`;
       }).join("");
       container.addEventListener("change", render);
     }
 
-    function renderEffectButtons() {
-      const container = $("effectButtons");
-      container.innerHTML = effectTemplates.map(template => {
-        return `<button class="effect-button" data-effect="${template.id}">
-          <strong>${escapeHtml(template.title)}</strong>
-          <span>${escapeHtml(template.hint)}</span>
-        </button>`;
+    function renderMechanicButtons() {
+      $("mechanicButtons").innerHTML = mechanics.map(mechanic => {
+        return `<button class="mechanic-button" data-mechanic="${escape(mechanic.id)}"><strong>${escape(mechanic.title)}</strong><span>${escape(mechanic.hint)}</span></button>`;
       }).join("");
-      container.addEventListener("click", event => {
-        const button = event.target.closest("button[data-effect]");
+      $("mechanicButtons").addEventListener("click", event => {
+        const button = event.target.closest("[data-mechanic]");
         if (!button) return;
-        state.effectTemplate = button.dataset.effect;
-        const line = selectedLine();
-        const template = currentEffectTemplate();
-        state.effectParams = {};
-        template.params.forEach(param => {
-          state.effectParams[param[0]] = param[3];
-        });
+        state.selectedMechanic = button.dataset.mechanic;
+        const mechanic = currentMechanic();
+        state.mechanicParams = defaultsFor(mechanic);
         render();
       });
     }
 
     function bindEvents() {
-      [
-        "skillId",
-        "skillName",
-        "slotType",
-        "skillType",
-        "rarity",
-        "cooldown",
-        "staminaCost",
-        "manaCost",
-        "targetDefault",
-        "skillDesc"
-      ].forEach(id => $(id).addEventListener("input", render));
+      ["skillId", "skillName", "slotType", "skillType", "cooldown", "staminaCost", "manaCost", "globalTrigger", "skillDesc"].forEach(id => {
+        $(id).addEventListener("input", render);
+      });
 
-      $("addLineTop").addEventListener("click", addLine);
-      $("addLineLeft").addEventListener("click", addLine);
-      $("duplicateLine").addEventListener("click", duplicateLine);
-      $("removeLine").addEventListener("click", removeLine);
-      $("copyJson").addEventListener("click", copyJson);
+      $("addStepTop").addEventListener("click", addStep);
+      $("addStepLeft").addEventListener("click", addStep);
+      $("duplicateStep").addEventListener("click", duplicateStep);
+      $("removeStep").addEventListener("click", removeStep);
+      $("copyJson").addEventListener("click", () => navigator.clipboard.writeText($("output").textContent));
       $("downloadJson").addEventListener("click", downloadJson);
-      $("resetDemo").addEventListener("click", resetDemo);
-      $("applyLineText").addEventListener("click", applyLineText);
-      $("syncFromControls").addEventListener("click", syncFromControls);
-      $("addCondition").addEventListener("click", addQuantCondition);
-      $("clearConditions").addEventListener("click", () => {
-        const line = selectedLine();
-        if (!line) return;
-        line.conditions = [];
-        render();
-      });
-      $("addEffectBlock").addEventListener("click", addEffectBlock);
-      $("clearEffects").addEventListener("click", () => {
-        const line = selectedLine();
-        if (!line) return;
-        line.effects = [];
-        render();
-      });
-      $("addModifierBlock").addEventListener("click", addModifierBlock);
-      $("clearModifiers").addEventListener("click", () => {
-        const line = selectedLine();
-        if (!line) return;
-        line.modifiers = [];
-        render();
+      $("resetDemo").addEventListener("click", () => location.reload());
+      $("applyMechanic").addEventListener("click", applyMechanicToStep);
+      $("addCondition").addEventListener("click", addCondition);
+      $("clearConditions").addEventListener("click", clearConditions);
+
+      ["stepName", "stepTrigger", "targeter", "chance", "delay", "repeat"].forEach(id => {
+        $(id).addEventListener("input", updateSelectedStep);
       });
 
-      ["lineContext", "lineName", "targetSelector", "triggerType", "hpRequirement", "procChance"].forEach(id => {
-        $(id).addEventListener("input", updateSelectedFromControls);
-      });
-
-      $("lineText").addEventListener("input", event => {
-        const line = selectedLine();
-        if (!line) return;
-        line.rawText = event.target.value;
-      });
-
-      document.querySelector(".output-tabs").addEventListener("click", event => {
-        const button = event.target.closest("button[data-tab]");
+      document.querySelector(".tabs").addEventListener("click", event => {
+        const button = event.target.closest("[data-tab]");
         if (!button) return;
         state.outputTab = button.dataset.tab;
         render();
       });
     }
 
-    function selectedLine() {
-      return state.lines.find(line => line.id === state.selectedLineId) || null;
+    function selectedStep() {
+      return state.steps.find(step => step.id === state.selectedStepId) || state.steps[0];
     }
 
-    function addLine() {
-      const line = {
-        id: uid("line"),
-        context: "main_timeline",
-        name: $("skillName").value || "新技能行",
-        target: "",
-        trigger: "",
-        conditions: [],
-        hp: "",
+    function currentMechanic() {
+      return mechanics.find(mechanic => mechanic.id === state.selectedMechanic) || mechanics[0];
+    }
+
+    function defaultsFor(mechanic) {
+      const params = {};
+      mechanic.params.forEach(([key, , , fallback]) => params[key] = fallback);
+      return params;
+    }
+
+    function addStep() {
+      const mechanic = currentMechanic();
+      const step = {
+        id: uid("step"),
+        name: "新技能步骤",
+        trigger: $("globalTrigger").value,
+        targeter: "current",
         chance: 1,
-        effects: [
-          { id: uid("eff"), text: "造成物理伤害1.0", type: "DealDamage", damage_type: "physical", base_ratio: 1, flat_damage: 0, can_crit: true }
-        ],
-        modifiers: []
+        delay: 0,
+        repeat: 1,
+        mechanic: { id: mechanic.id, ...normalizedParams(defaultsFor(mechanic)) },
+        conditions: []
       };
-      state.lines.push(line);
-      state.selectedLineId = line.id;
+      state.steps.push(step);
+      state.selectedStepId = step.id;
       render();
     }
 
-    function duplicateLine() {
-      const line = selectedLine();
-      if (!line) return;
-      const copy = JSON.parse(JSON.stringify(line));
-      copy.id = uid("line");
+    function duplicateStep() {
+      const step = selectedStep();
+      if (!step) return;
+      const copy = JSON.parse(JSON.stringify(step));
+      copy.id = uid("step");
       copy.name = `${copy.name}副本`;
-      state.lines.push(copy);
-      state.selectedLineId = copy.id;
+      copy.conditions.forEach(condition => condition.id = uid("cond"));
+      state.steps.push(copy);
+      state.selectedStepId = copy.id;
       render();
     }
 
-    function removeLine() {
-      if (state.lines.length <= 1) return;
-      state.lines = state.lines.filter(line => line.id !== state.selectedLineId);
-      state.selectedLineId = state.lines[0].id;
+    function removeStep() {
+      if (state.steps.length <= 1) return;
+      state.steps = state.steps.filter(step => step.id !== state.selectedStepId);
+      state.selectedStepId = state.steps[0].id;
       render();
     }
 
-    function applyLineText() {
-      const line = selectedLine();
-      if (!line) return;
-      const parsed = parseSkillLine($("lineText").value);
-      Object.assign(line, parsed);
-      if (!line.context) line.context = $("lineContext").value;
+    function updateSelectedStep() {
+      const step = selectedStep();
+      if (!step) return;
+      step.name = $("stepName").value;
+      step.trigger = $("stepTrigger").value;
+      step.targeter = $("targeter").value;
+      step.chance = clamp01($("chance").value);
+      step.delay = number($("delay").value);
+      step.repeat = Math.max(1, Math.floor(number($("repeat").value)));
       render();
     }
 
-    function syncFromControls() {
-      updateSelectedFromControls();
-      const line = selectedLine();
-      if (line) {
-        $("lineText").value = buildSkillLineText(line);
-      }
+    function applyMechanicToStep() {
+      const step = selectedStep();
+      if (!step) return;
+      const mechanic = currentMechanic();
+      step.mechanic = { id: mechanic.id, ...normalizedParams(state.mechanicParams) };
       render();
     }
 
-    function addQuantCondition() {
-      const line = selectedLine();
-      if (!line) return;
-      const type = $("conditionType").value;
-      const entry = conditionOptions.find(item => item[0] === type);
-      const label = entry ? entry[1] : type;
-      line.conditions.push({
+    function addCondition() {
+      const step = selectedStep();
+      if (!step) return;
+      step.conditions.push({
         id: uid("cond"),
-        type,
-        label,
+        type: $("conditionType").value,
         operator: $("conditionOperator").value,
-        value: numeric($("conditionValue").value),
+        value: number($("conditionValue").value),
         param: $("conditionParam").value.trim()
       });
       render();
     }
 
-    function addEffectBlock() {
-      const line = selectedLine();
-      if (!line) return;
-      const template = currentEffectTemplate();
-      const built = template.build(state.effectParams);
-      line.effects.push({ id: uid("eff"), ...built });
+    function clearConditions() {
+      const step = selectedStep();
+      if (!step) return;
+      step.conditions = [];
       render();
-    }
-
-    function addModifierBlock() {
-      const line = selectedLine();
-      if (!line) return;
-      line.modifiers.push({
-        id: uid("mod"),
-        target_name: $("modifierTarget").value.trim() || $("skillName").value.trim(),
-        modify_field: $("modifierField").value,
-        modify_mode: $("modifierMode").value,
-        modify_value: parseModifierValue($("modifierValue").value)
-      });
-      render();
-    }
-
-    function updateSelectedFromControls() {
-      const line = selectedLine();
-      if (!line) return;
-      line.context = $("lineContext").value;
-      line.name = $("lineName").value;
-      line.target = $("targetSelector").value;
-      line.trigger = $("triggerType").value;
-      line.hp = $("hpRequirement").value.trim();
-      line.chance = clampChance($("procChance").value);
-      line.rawText = buildSkillLineText(line);
-      render();
-    }
-
-    function currentEffectTemplate() {
-      return effectTemplates.find(template => template.id === state.effectTemplate) || effectTemplates[0];
-    }
-
-    function renderEffectParams() {
-      const template = currentEffectTemplate();
-      const container = $("effectParams");
-      container.innerHTML = template.params.map(param => {
-        const [key, label, type, fallback, options] = param;
-        const value = state.effectParams[key] ?? fallback;
-        if (type === "select") {
-          return `<div class="field">
-            <label>${escapeHtml(label)}</label>
-            <select data-effect-param="${escapeHtml(key)}">${options.map(option => `<option value="${escapeHtml(option)}"${option === value ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>
-          </div>`;
-        }
-        return `<div class="field">
-          <label>${escapeHtml(label)}</label>
-          <input data-effect-param="${escapeHtml(key)}" type="${type}" step="0.01" value="${escapeHtml(value)}">
-        </div>`;
-      }).join("");
-
-      container.querySelectorAll("[data-effect-param]").forEach(input => {
-        input.addEventListener("input", () => {
-          state.effectParams[input.dataset.effectParam] = input.value;
-          render();
-        });
-      });
     }
 
     function render() {
-      renderLineList();
-      renderBuilder();
-      renderEffectParams();
+      renderStepList();
+      renderStepEditor();
+      renderMechanicParams();
+      renderConditions();
       renderOutput();
     }
 
-    function renderLineList() {
-      $("lineCount").textContent = `${state.lines.length} 行`;
-      $("lineList").innerHTML = state.lines.map((line, index) => {
-        const selected = line.id === state.selectedLineId ? " selected" : "";
-        return `<article class="skill-line${selected}" data-line-id="${escapeHtml(line.id)}">
-          <div class="line-head">
-            <div class="line-title">${index + 1}. ${escapeHtml(line.name || "未命名")} · ${escapeHtml(contextLabel(line.context))}</div>
-            <div class="line-actions">
-              <button data-select="${escapeHtml(line.id)}" title="选择">›</button>
+    function renderStepList() {
+      $("stepCount").textContent = `${state.steps.length} 步`;
+      $("stepList").innerHTML = state.steps.map((step, index) => {
+        const selected = step.id === state.selectedStepId ? " selected" : "";
+        return `<article class="step${selected}">
+          <div class="step-head">
+            <div class="step-title">${index + 1}. ${escape(step.name)} · ${mechanicLabel(step.mechanic.id)} · @${step.targeter} ~${step.trigger}</div>
+            <div class="step-actions"><button data-select-step="${escape(step.id)}">›</button></div>
+          </div>
+          <div class="step-body">
+            <div class="line-preview">${escape(stepText(step))}</div>
+            <div class="pill-row">
+              <span class="pill">${escape(triggerLabel(step.trigger))}</span>
+              <span class="pill">${escape(targeterLabel(step.targeter))}</span>
+              <span class="pill">${step.conditions.length} 条件</span>
+              <span class="pill">${escape(mechanicLabel(step.mechanic.id))}</span>
             </div>
           </div>
-          <div class="line-body">
-            <div class="compiled-line">${escapeHtml(buildSkillLineText(line))}</div>
-            <div class="pill-row">${linePills(line).join("")}</div>
-          </div>
         </article>`;
       }).join("");
-
-      $("lineList").querySelectorAll("[data-select]").forEach(button => {
+      document.querySelectorAll("[data-select-step]").forEach(button => {
         button.addEventListener("click", () => {
-          state.selectedLineId = button.dataset.select;
+          state.selectedStepId = button.dataset.selectStep;
+          const step = selectedStep();
+          state.selectedMechanic = step.mechanic.id;
+          state.mechanicParams = denormalizedParams(step.mechanic);
           render();
         });
       });
     }
 
-    function renderBuilder() {
-      const line = selectedLine();
-      if (!line) return;
-      $("selectedLineLabel").textContent = line.name || "未命名";
-      $("lineContext").value = line.context || "main_timeline";
-      $("lineName").value = line.name || "";
-      $("targetSelector").value = line.target || "";
-      $("triggerType").value = line.trigger || "";
-      $("triggerType").disabled = line.context === "main_timeline";
-      $("hpRequirement").value = line.hp || "";
-      $("procChance").value = line.chance ?? 1;
-      $("lineText").value = line.rawText || buildSkillLineText(line);
-      renderQuantConditionList(line);
-      renderEffectBlockList(line);
-      renderModifierBlockList(line);
+    function renderStepEditor() {
+      const step = selectedStep();
+      if (!step) return;
+      $("selectedStepLabel").textContent = step.name;
+      $("stepName").value = step.name;
+      $("stepTrigger").value = step.trigger;
+      $("targeter").value = step.targeter;
+      $("chance").value = step.chance;
+      $("delay").value = step.delay;
+      $("repeat").value = step.repeat;
+      $("skillLinePreview").textContent = stepText(step);
     }
 
-    function linePills(line) {
-      const warnings = validateLine(line);
-      const pills = [
-        `<span class="pill">${escapeHtml(contextLabel(line.context))}</span>`,
-        line.target ? `<span class="pill">目标 ${escapeHtml(line.target)}</span>` : `<span class="pill warn">默认目标</span>`,
-        line.effects.length ? `<span class="pill">${line.effects.length} 个效果</span>` : `<span class="pill bad">缺少效果</span>`,
-        line.conditions.length ? `<span class="pill">${line.conditions.length} 个条件</span>` : `<span class="pill warn">无条件</span>`,
-        line.modifiers.length ? `<span class="pill">${line.modifiers.length} 个联动</span>` : `<span class="pill">无联动</span>`
-      ];
-      warnings.forEach(warning => pills.push(`<span class="pill ${warning.level}">${escapeHtml(warning.text)}</span>`));
-      return pills;
-    }
-
-    function buildSkillLineText(line) {
-      const parts = [line.name || $("skillName").value || "未命名技能"];
-      if (line.target) parts.push(`目标=${line.target}`);
-      if (line.trigger && line.context !== "main_timeline") parts.push(`触发=${line.trigger}`);
-      line.conditions.forEach(condition => parts.push(`条件=${conditionToText(condition)}`));
-      if (line.hp) parts.push(`血量=${line.hp}`);
-      if (line.chance !== "" && line.chance !== undefined && Number(line.chance) !== 1) parts.push(`几率=${line.chance}`);
-      line.effects.forEach(effect => parts.push(`效果=${effect.text}`));
-      line.modifiers.forEach(modifier => parts.push(`联动=${modifierToText(modifier)}`));
-      return parts.join(" ");
-    }
-
-    function parseSkillLine(text) {
-      const tokens = text.trim().split(/\s+/).filter(Boolean);
-      const parsed = {
-        name: "",
-        target: "",
-        trigger: "",
-        conditions: [],
-        hp: "",
-        chance: 1,
-        effects: [],
-        modifiers: []
-      };
-
-      for (const token of tokens) {
-        if (token.startsWith("目标=")) parsed.target = token.slice(3);
-        else if (token.startsWith("触发=")) parsed.trigger = token.slice(3);
-        else if (token.startsWith("条件=")) parsed.conditions.push(token.slice(3));
-        else if (token.startsWith("血量=")) parsed.hp = token.slice(3);
-        else if (token.startsWith("几率=")) parsed.chance = clampChance(token.slice(3));
-        else if (token.startsWith("效果=")) parsed.effects.push(effectFromText(token.slice(3)));
-        else if (token.startsWith("联动=")) parsed.modifiers.push(modifierFromText(token.slice(3)));
-        else if (!parsed.name) parsed.name = token;
-      }
-
-      return parsed;
-    }
-
-    function renderQuantConditionList(line) {
-      $("quantConditionList").innerHTML = line.conditions.map(condition => {
-        return `<article class="skill-line">
-          <div class="line-head">
-            <div class="line-title">${escapeHtml(conditionToText(condition))}</div>
-            <div class="line-actions"><button data-remove-condition="${escapeHtml(condition.id)}">×</button></div>
-          </div>
-        </article>`;
+    function renderMechanicParams() {
+      const mechanic = currentMechanic();
+      document.querySelectorAll("[data-mechanic]").forEach(button => {
+        button.classList.toggle("active", button.dataset.mechanic === mechanic.id);
+      });
+      if (!Object.keys(state.mechanicParams).length) state.mechanicParams = defaultsFor(mechanic);
+      $("mechanicParams").innerHTML = mechanic.params.map(([key, label, type, fallback, options]) => {
+        const value = state.mechanicParams[key] ?? fallback;
+        if (type === "select") {
+          return `<div class="field"><label>${escape(label)}</label><select data-param="${escape(key)}">${options.map(([v, l]) => `<option value="${escape(v)}"${String(v) === String(value) ? " selected" : ""}>${escape(l)}</option>`).join("")}</select></div>`;
+        }
+        return `<div class="field"><label>${escape(label)}</label><input data-param="${escape(key)}" type="${type}" step="0.01" value="${escape(value)}"></div>`;
       }).join("");
-      $("quantConditionList").querySelectorAll("[data-remove-condition]").forEach(button => {
-        button.addEventListener("click", () => {
-          line.conditions = line.conditions.filter(condition => condition.id !== button.dataset.removeCondition);
-          render();
+      document.querySelectorAll("[data-param]").forEach(input => {
+        input.addEventListener("input", () => {
+          state.mechanicParams[input.dataset.param] = input.value;
+          renderMechanicParams();
         });
       });
     }
 
-    function renderEffectBlockList(line) {
-      $("effectBlockList").innerHTML = line.effects.map(effect => {
-        return `<article class="skill-line">
-          <div class="line-head">
-            <div class="line-title">${escapeHtml(effect.text)} · ${escapeHtml(effect.type)}</div>
-            <div class="line-actions"><button data-remove-effect="${escapeHtml(effect.id)}">×</button></div>
-          </div>
-        </article>`;
+    function renderConditions() {
+      const step = selectedStep();
+      $("conditionList").innerHTML = step.conditions.map(condition => {
+        return `<div class="mini-item"><span>${escape(conditionText(condition))}</span><button data-remove-condition="${escape(condition.id)}">×</button></div>`;
       }).join("");
-      $("effectBlockList").querySelectorAll("[data-remove-effect]").forEach(button => {
+      document.querySelectorAll("[data-remove-condition]").forEach(button => {
         button.addEventListener("click", () => {
-          line.effects = line.effects.filter(effect => effect.id !== button.dataset.removeEffect);
+          step.conditions = step.conditions.filter(condition => condition.id !== button.dataset.removeCondition);
           render();
         });
       });
-    }
-
-    function renderModifierBlockList(line) {
-      $("modifierBlockList").innerHTML = line.modifiers.map(modifier => {
-        return `<article class="skill-line">
-          <div class="line-head">
-            <div class="line-title">${escapeHtml(modifierToText(modifier))}</div>
-            <div class="line-actions"><button data-remove-modifier="${escapeHtml(modifier.id)}">×</button></div>
-          </div>
-        </article>`;
-      }).join("");
-      $("modifierBlockList").querySelectorAll("[data-remove-modifier]").forEach(button => {
-        button.addEventListener("click", () => {
-          line.modifiers = line.modifiers.filter(modifier => modifier.id !== button.dataset.removeModifier);
-          render();
-        });
-      });
-    }
-
-    function conditionToText(condition) {
-      if (typeof condition === "string") return condition;
-      const param = condition.param ? `${condition.param}` : "";
-      return `${condition.label || condition.type}${param ? `:${param}` : ""}${operatorText(condition.operator)}${condition.value}`;
-    }
-
-    function modifierToText(modifier) {
-      return `${modifier.target_name || "当前技能"}.${modifier.modify_field} ${modifier.modify_mode} ${modifier.modify_value}`;
-    }
-
-    function effectFromText(text) {
-      return { id: uid("eff"), text, ...compileEffectPart(text) };
-    }
-
-    function modifierFromText(text) {
-      return { id: uid("mod"), target_name: "当前技能", modify_field: "custom", modify_mode: "override", modify_value: text };
-    }
-
-    function operatorText(operator) {
-      return { gte: ">=", lte: "<=", gt: ">", lt: "<", eq: "=" }[operator] || "=";
     }
 
     function compile() {
@@ -1479,314 +1163,177 @@
         skill_id: $("skillId").value.trim(),
         skill_name: $("skillName").value.trim(),
         skill_desc: $("skillDesc").value.trim(),
-        rarity: $("rarity").value,
         slot_type: $("slotType").value,
         skill_type: $("skillType").value,
-        weapon_tags: checkedValues("weaponTags"),
-        offhand_tags: checkedValues("offhandTags"),
-        cooldown: numeric($("cooldown").value),
-        mana_cost: numeric($("manaCost").value),
-        stamina_cost: numeric($("staminaCost").value),
-        default_target_type: targetMap[$("targetDefault").value] || "forward_line"
+        cooldown: number($("cooldown").value),
+        stamina_cost: number($("staminaCost").value),
+        mana_cost: number($("manaCost").value),
+        default_trigger: $("globalTrigger").value,
+        weapon_tags: checked("weaponTags"),
+        offhand_tags: checked("offhandTags")
       };
 
-      const conditions = [];
-      const effects = [];
-      const modifiers = [];
+      const steps = [];
+      const mechanicsOut = [];
+      const conditionsOut = [];
       const issues = [];
 
-      state.lines.forEach((line, index) => {
-        validateLine(line).forEach(issue => issues.push({ line: index + 1, ...issue }));
-        const groupId = compileConditions(line, skill.skill_id, index, conditions);
-        effects.push(...compileEffects(line, skill, index, groupId));
-        modifiers.push(...compileModifiers(line, skill, index, groupId));
+      state.steps.forEach((step, index) => {
+        const stepId = `step_${skill.skill_id}_${index + 1}`;
+        validateStep(step, index + 1).forEach(issue => issues.push(issue));
+        steps.push({
+          step_id: stepId,
+          skill_id: skill.skill_id,
+          trigger: step.trigger,
+          targeter: step.targeter,
+          chance: step.chance,
+          delay: step.delay,
+          repeat: step.repeat
+        });
+        mechanicsOut.push({
+          mechanic_id: `mech_${skill.skill_id}_${index + 1}`,
+          step_id: stepId,
+          skill_id: skill.skill_id,
+          mechanic_type: step.mechanic.id,
+          ...step.mechanic
+        });
+        step.conditions.forEach((condition, conditionIndex) => {
+          conditionsOut.push({
+            condition_id: `cond_${skill.skill_id}_${index + 1}_${conditionIndex + 1}`,
+            step_id: stepId,
+            skill_id: skill.skill_id,
+            condition_type: condition.type,
+            compare_operator: condition.operator,
+            value: condition.value,
+            param: condition.param
+          });
+        });
       });
 
       return {
         skill,
-        skill_lines: state.lines.map((line, index) => ({
-          skill_line_id: `sl_${skill.skill_id}_${index + 1}`,
-          line_context: line.context,
-          line_text: buildSkillLineText(line)
-        })),
-        skill_effects: effects,
-        skill_conditions: conditions,
-        skill_modifiers: modifiers,
+        skill_steps: steps,
+        skill_mechanics: mechanicsOut,
+        skill_conditions: conditionsOut,
+        skill_text: state.steps.map(stepText),
         issues
       };
     }
 
-    function compileConditions(line, skillId, index, out) {
-      const records = [];
-      if (line.context !== "main_timeline" && line.trigger) {
-        records.push({
-          condition_type: triggerMap[line.trigger] || sanitizeId(line.trigger),
-          param_1: "",
-          param_2: "",
-          logic_operator: "and"
-        });
-      }
-
-      line.conditions.forEach(condition => {
-        records.push(conditionToRecord(condition));
-      });
-
-      if (line.hp) {
-        const hp = parseHp(line.hp);
-        records.push({
-          condition_type: hp.type,
-          param_1: hp.value,
-          param_2: "",
-          logic_operator: "and"
-        });
-      }
-
-      if (!records.length) return "";
-      const groupId = `cg_${skillId}_${index + 1}`;
-      records.forEach((record, conditionIndex) => {
-        out.push({
-          condition_group_id: groupId,
-          condition_id: `${groupId}_${conditionIndex + 1}`,
-          ...record
-        });
-      });
-      return groupId;
-    }
-
-    function compileEffects(line, skill, index, conditionGroupId) {
-      const base = {
-        skill_id: skill.skill_id,
-        trigger_timing: line.context === "main_timeline" ? "timeline" : (triggerMap[line.trigger] || ""),
-        target_selector: targetMap[line.target] || skill.default_target_type,
-        condition_group_id: conditionGroupId,
-        proc_chance: clampChance(line.chance)
-      };
-
-      return line.effects.flatMap((effect, effectIndex) => {
-        return splitCompositeEffect(effect.text).map((part, partIndex) => ({
-          ...base,
-          effect_id: `ef_${skill.skill_id}_${index + 1}_${effectIndex + 1}_${partIndex + 1}`,
-          ...("type" in effect && part === effect.text ? effectToRecord(effect) : compileEffectPart(part))
-        }));
-      });
-    }
-
-    function compileEffectPart(effect) {
-      let match;
-      if ((match = effect.match(/^造成物理伤害([0-9.]+)/))) {
-        return { effect_type: "DealDamage", damage_type: "physical", base_ratio: numeric(match[1]), flat_damage: 0 };
-      }
-      if ((match = effect.match(/^造成法术伤害([0-9.]+)/))) {
-        return { effect_type: "DealDamage", damage_type: "magical", base_ratio: numeric(match[1]), flat_damage: 0 };
-      }
-      if ((match = effect.match(/^造成追加伤害([0-9.]+)/))) {
-        return { effect_type: "DealExtraDamage", extra_ratio: numeric(match[1]) };
-      }
-      if ((match = effect.match(/^附加减速([0-9.]+)@([0-9.]+)/))) {
-        return { effect_type: "ApplyDebuff", debuff_id: "slow", param_1: numeric(match[1]), duration: numeric(match[2]) };
-      }
-      if ((match = effect.match(/^附加冻结@([0-9.]+)/))) {
-        return { effect_type: "ApplyControl", control_type: "freeze", control_duration: numeric(match[1]) };
-      }
-      if ((match = effect.match(/^获得护盾([0-9.]+)@([0-9.]+)/))) {
-        return { effect_type: "ApplyShield", shield_ratio: numeric(match[1]), duration: numeric(match[2]) };
-      }
-      if ((match = effect.match(/^自身(前移|后撤)([0-9.]+)/))) {
-        return { effect_type: "MoveCaster", move_direction: match[1] === "前移" ? "forward" : "backward", move_distance: numeric(match[2]) };
-      }
-      if ((match = effect.match(/^开启光环(.+)半径([0-9.]+)@([0-9.]+)/))) {
-        return { effect_type: "ApplyAura", aura_id: sanitizeId(match[1]), radius: numeric(match[2]), duration: numeric(match[3]) };
-      }
-      if ((match = effect.match(/^发射射线长度([0-9.]+)宽度([0-9.]+)伤害([0-9.]+)/))) {
-        return { effect_type: "CastRay", length: numeric(match[1]), width: numeric(match[2]), base_ratio: numeric(match[3]), damage_type: "magical" };
-      }
-      if ((match = effect.match(/^发射投射物(.+)速度([0-9.]+)射程([0-9.]+)伤害([0-9.]+)/))) {
-        return { effect_type: "SpawnProjectile", projectile_id: sanitizeId(match[1]), projectile_speed: numeric(match[2]), range: numeric(match[3]), base_ratio: numeric(match[4]) };
-      }
-      if ((match = effect.match(/^召唤(单位|图腾|机关)(.+)@([0-9.]+)/))) {
-        return { effect_type: match[1] === "单位" ? "SummonUnit" : "SummonTotem", summon_id: sanitizeId(match[2]), duration: numeric(match[3]) };
-      }
-      if ((match = effect.match(/^修改属性(.+)([+-][0-9.]+)@([0-9.]+)/))) {
-        return { effect_type: "ModifyAttribute", attribute_type: attrId(match[1]), modify_mode: "add", modify_value: numeric(match[2]), duration: numeric(match[3]) };
-      }
-      if ((match = effect.match(/^叠加(.+?)([0-9.]+)$/))) {
-        return { effect_type: "AddStack", stack_id: stackId(match[1]), stack_count: numeric(match[2]) };
-      }
-      return { effect_type: "UnknownEffect", raw_effect: effect };
-    }
-
-    function effectToRecord(effect) {
-      const { id, text, type, ...rest } = effect;
-      return { effect_type: type, ...rest };
-    }
-
-    function conditionToRecord(condition) {
-      if (typeof condition === "string") {
-        const mapped = conditionMap[condition];
-        if (mapped) {
-          return {
-            condition_type: mapped[0],
-            param_1: mapped[1] ?? "",
-            param_2: mapped[2] ?? "",
-            logic_operator: "and"
-          };
-        }
-        return {
-          condition_type: "custom_condition",
-          param_1: condition,
-          param_2: "",
-          logic_operator: "and"
-        };
-      }
-      return {
-        condition_type: condition.type,
-        param_1: condition.param || "",
-        param_2: condition.value,
-        compare_operator: condition.operator,
-        logic_operator: "and"
-      };
-    }
-
-    function splitCompositeEffect(effect) {
-      return String(effect || "").split("并").map(part => part.trim()).filter(Boolean);
-    }
-
-    function isModifierEffect(effect) {
-      return /冷却缩减|范围[+]|可穿透|伤害加成/.test(effect || "");
-    }
-
-    function compileModifiers(line, skill, index, conditionGroupId) {
-      const modifierEffects = line.effects.filter(effect => effect.type === "Modifier").map(effect => ({
-        id: effect.id,
-        target_name: effect.target_name,
-        modify_field: effect.modify_field,
-        modify_mode: effect.modify_mode,
-        modify_value: effect.modify_value
-      }));
-      return [...line.modifiers, ...modifierEffects].map((modifier, modifierIndex) => ({
-        modifier_id: `mod_${skill.skill_id}_${index + 1}_${modifierIndex + 1}`,
-        source_type: "skill_line",
-        source_id: `sl_${skill.skill_id}_${index + 1}`,
-        target_skill_id: skillIdFromName(modifier.target_name, skill),
-        modify_field: modifier.modify_field,
-        modify_mode: modifier.modify_mode,
-        modify_value: modifier.modify_value,
-        proc_chance: clampChance(line.chance),
-        apply_condition_group_id: conditionGroupId
-      }));
-    }
-
-    function parseHp(value) {
-      const match = String(value || "").match(/^(目标|自身)([<>])([0-9.]+)$/);
-      if (!match) return { type: "invalid_hp_requirement", value };
-      const subject = match[1] === "目标" ? "target" : "self";
-      const operator = match[2] === "<" ? "lt" : "gt";
-      return { type: `${subject}_hp_ratio_${operator}`, value: numeric(match[3]) };
-    }
-
-    function skillIdFromName(name, skill) {
-      if (!name || name === skill.skill_name) return skill.skill_id;
-      const map = {
-        "突进穿刺": "skill_spear_dash_001",
-        "霜环": "skill_staff_frost_ring_001",
-        "挑空": "skill_spear_launch_001"
-      };
-      return map[name] || `skill_${sanitizeId(name)}`;
-    }
-
-    function attrId(name) {
-      const map = {
-        "物理攻击": "physical_attack",
-        "法术攻击": "magic_attack",
-        "物理防御": "physical_defense",
-        "法术防御": "magic_defense",
-        "移速": "move_speed",
-        "伤害免疫": "damage_immunity",
-        "伤害加成": "damage_bonus"
-      };
-      return map[name] || sanitizeId(name);
-    }
-
-    function stackId(name) {
-      const map = { "寒霜": "frost", "灼烧": "burn", "破甲": "armor_break" };
-      return map[name] || sanitizeId(name);
-    }
-
-    function validateLine(line) {
+    function validateStep(step, line) {
       const issues = [];
-      if (!line.name) issues.push({ level: "bad", text: "缺少名称" });
-      if (!line.effects.length && !line.modifiers.length) issues.push({ level: "bad", text: "缺少效果或联动" });
-      if (line.context === "main_timeline" && line.trigger) issues.push({ level: "bad", text: "主动作线禁止触发器" });
-      if (Number(line.chance) < 0 || Number(line.chance) > 1) issues.push({ level: "bad", text: "几率越界" });
-      if (line.hp && parseHp(line.hp).type === "invalid_hp_requirement") issues.push({ level: "warn", text: "血量表达式异常" });
-      if (!line.target && line.effects.some(effect => /伤害|减速|冻结|击退|拉拽/.test(effect.text || ""))) issues.push({ level: "warn", text: "使用默认目标" });
-      line.conditions.forEach(condition => {
-        if (typeof condition !== "string" && condition.value === "" && condition.type !== "has_hit_target") {
-          issues.push({ level: "warn", text: "条件缺少数值" });
-        }
-      });
+      if (!step.name) issues.push({ line, level: "bad", text: "步骤缺少名称" });
+      if (!step.mechanic || !step.mechanic.id) issues.push({ line, level: "bad", text: "步骤缺少机制效果" });
+      if (step.chance < 0 || step.chance > 1) issues.push({ line, level: "bad", text: "触发几率越界" });
+      if (step.repeat < 1) issues.push({ line, level: "bad", text: "重复次数至少为 1" });
+      if (["damage", "status", "control", "resource", "stack"].includes(step.mechanic.id) && step.targeter === "self" && step.mechanic.id === "damage") {
+        issues.push({ line, level: "warn", text: "伤害机制目标为自身" });
+      }
       return issues;
     }
 
     function renderOutput() {
       const result = compile();
-      document.querySelectorAll(".output-tabs button").forEach(button => {
+      document.querySelectorAll(".tabs button").forEach(button => {
         button.classList.toggle("active", button.dataset.tab === state.outputTab);
       });
-
-      const payload = state.outputTab === "effects"
-        ? result.skill_effects
-        : state.outputTab === "conditions"
-          ? result.skill_conditions
-          : state.outputTab === "modifiers"
-            ? result.skill_modifiers
-            : result;
-
-      $("output").textContent = JSON.stringify(payload, null, 2);
-      const issueCount = result.issues.length;
-      $("validationSummary").textContent = issueCount ? `${issueCount} 个问题` : "0 个问题";
-      $("validationSummary").className = `pill${issueCount ? " warn" : ""}`;
+      const payload = {
+        all: result,
+        steps: result.skill_steps,
+        mechanics: result.skill_mechanics,
+        conditions: result.skill_conditions,
+        text: result.skill_text
+      }[state.outputTab] || result;
+      $("output").textContent = Array.isArray(payload) && state.outputTab === "text"
+        ? payload.join("\n")
+        : JSON.stringify(payload, null, 2);
+      $("validationSummary").textContent = result.issues.length ? `${result.issues.length} 个问题` : "0 个问题";
+      $("validationSummary").className = `pill${result.issues.length ? " warn" : ""}`;
       $("status").innerHTML = result.issues.length
-        ? result.issues.map(issue => `<span class="pill ${issue.level}">第 ${issue.line} 行：${escapeHtml(issue.text)}</span>`).join("")
+        ? result.issues.map(issue => `<span class="pill ${issue.level}">第 ${issue.line} 步：${escape(issue.text)}</span>`).join("")
         : `<span class="pill">配置可导出</span>`;
     }
 
-    function checkedValues(containerId) {
+    function stepText(step) {
+      const params = Object.entries(step.mechanic)
+        .filter(([key]) => key !== "id")
+        .map(([key, value]) => `${key}=${value}`)
+        .join(";");
+      const cond = step.conditions.length
+        ? ` ?${step.conditions.map(conditionText).join(" && ")}`
+        : "";
+      const timing = [
+        step.chance < 1 ? `chance=${step.chance}` : "",
+        step.delay > 0 ? `delay=${step.delay}` : "",
+        step.repeat > 1 ? `repeat=${step.repeat}` : ""
+      ].filter(Boolean).join(";");
+      return `${step.mechanic.id}{${params}} @${step.targeter} ~${step.trigger}${timing ? ` {${timing}}` : ""}${cond}`;
+    }
+
+    function conditionText(condition) {
+      const label = conditionLabel(condition.type);
+      const param = condition.param ? `:${condition.param}` : "";
+      return `${label}${param}${operatorSymbol(condition.operator)}${condition.value}`;
+    }
+
+    function normalizedParams(params) {
+      const normalized = {};
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === "true") normalized[key] = true;
+        else if (value === "false") normalized[key] = false;
+        else if (value !== "" && !Number.isNaN(Number(value))) normalized[key] = Number(value);
+        else normalized[key] = value;
+      });
+      return normalized;
+    }
+
+    function denormalizedParams(mechanic) {
+      const result = {};
+      Object.entries(mechanic).forEach(([key, value]) => {
+        if (key !== "id") result[key] = String(value);
+      });
+      return result;
+    }
+
+    function checked(containerId) {
       return Array.from($(containerId).querySelectorAll("input:checked")).map(input => input.value);
     }
 
-    function numeric(value) {
+    function number(value) {
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : 0;
     }
 
-    function clampChance(value) {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed)) return 1;
-      return Math.max(0, Math.min(1, parsed));
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, number(value)));
     }
 
-    function contextLabel(value) {
-      return {
-        main_timeline: "主动作线",
-        trigger_line: "条件触发线",
-        modifier_line: "修正规则线"
-      }[value] || value;
+    function mechanicLabel(id) {
+      return (mechanics.find(item => item.id === id) || {}).title || id;
     }
 
-    function effectKind(effect) {
-      if (isModifierEffect(effect)) return "修正";
-      if (/光环/.test(effect)) return "光环";
-      if (/射线/.test(effect)) return "射线";
-      if (/召唤/.test(effect)) return "召唤";
-      if (/修改属性/.test(effect)) return "属性";
-      if (/移动|前移|后撤|瞬移/.test(effect)) return "移动";
-      if (/伤害/.test(effect)) return "伤害";
-      return "效果";
+    function triggerLabel(id) {
+      return (triggers.find(item => item[0] === id) || [id, id])[1];
     }
 
-    function copyJson() {
-      navigator.clipboard.writeText($("output").textContent);
+    function targeterLabel(id) {
+      return (targeters.find(item => item[0] === id) || [id, id])[1];
+    }
+
+    function conditionLabel(id) {
+      return (conditionTypes.find(item => item[0] === id) || [id, id])[1];
+    }
+
+    function operatorSymbol(operator) {
+      return { gte: ">=", lte: "<=", gt: ">", lt: "<", eq: "=", neq: "!=" }[operator] || "=";
+    }
+
+    function escape(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     }
 
     function downloadJson() {
@@ -1796,18 +1343,6 @@
       link.download = `${$("skillId").value || "skill_config"}.json`;
       link.click();
       URL.revokeObjectURL(link.href);
-    }
-
-    function resetDemo() {
-      location.reload();
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
     }
 
     init();
