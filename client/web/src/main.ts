@@ -62,6 +62,8 @@ type ChunkRender = {
   terrainCounts: Map<string, number>;
 };
 
+type Facing = "front" | "back" | "left" | "right";
+
 type AppState = {
   api?: ApiClient;
   ws?: WebSocket;
@@ -400,25 +402,29 @@ function renderAppearanceEditor(character: CharacterSummary): void {
 
 function renderAppearancePreview(body: CharacterBodyAppearance): void {
   const cards = [
-    renderDirectionCard("正面", body.frontShoulderWidth, body.chestWidth, body.waistWidth, body.hipWidth, body.height),
-    renderDirectionCard("背面", body.frontShoulderWidth, body.chestWidth, body.waistWidth, body.hipWidth, body.height),
-    renderDirectionCard("左侧", body.sideWidth, body.chestDepth, body.waistDepth, body.hipDepth, body.height),
-    renderDirectionCard("右侧", body.sideWidth, body.chestDepth, body.waistDepth, body.hipDepth, body.height),
+    renderDirectionCard("正面", body, "front"),
+    renderDirectionCard("背面", body, "back"),
+    renderDirectionCard("左侧", body, "left"),
+    renderDirectionCard("右侧", body, "right"),
   ];
   appearancePreview.innerHTML = cards.join("");
 }
 
-function renderDirectionCard(label: string, shoulder: number, chest: number, waist: number, hip: number, height: number): string {
+function renderDirectionCard(label: string, body: CharacterBodyAppearance, facing: Facing): string {
+  const shoulder = facing === "left" || facing === "right" ? body.sideWidth : body.frontShoulderWidth;
+  const chest = facing === "left" || facing === "right" ? body.chestDepth : body.chestWidth;
+  const waist = facing === "left" || facing === "right" ? body.waistDepth : body.waistWidth;
+  const hip = facing === "left" || facing === "right" ? body.hipDepth : body.hipWidth;
   return `
-    <div class="appearance-card">
+    <div class="appearance-card" data-facing="${facing}">
       <strong>${label}</strong>
       <div class="silhouette">
-        <div class="segment head" style="width:${Math.max(10, Math.round(shoulder * 0.55))}px"></div>
+        <div class="segment head" style="width:${Math.max(10, Math.round(shoulder * 0.55))}px;height:${Math.max(12, Math.round(body.height * 0.22))}px"></div>
         <div class="segment shoulders" style="width:${shoulder}px"></div>
         <div class="segment chest" style="width:${chest}px"></div>
         <div class="segment waist" style="width:${waist}px"></div>
         <div class="segment hip" style="width:${hip}px"></div>
-        <div class="segment legs" style="width:${Math.max(8, Math.round(hip * 0.7))}px;height:${Math.max(14, Math.round(height * 0.35))}px"></div>
+        <div class="segment legs" style="width:${Math.max(8, Math.round(hip * 0.7))}px;height:${Math.max(14, Math.round(body.height * 0.35))}px"></div>
       </div>
     </div>
   `;
@@ -907,27 +913,119 @@ function drawChunkGrid(x: number, y: number, size: number): void {
 
 function drawLocalPlayer(): void {
   const screen = worldToScreen(state.player.x, state.player.y);
-  const width = (PLAYER_RENDER_WIDTH_PX / 32) * state.tileScale;
-  const height = (PLAYER_RENDER_HEIGHT_PX / 32) * state.tileScale;
-  ctx.fillStyle = "#ff4040";
-  ctx.fillRect(screen.x - width / 2, screen.y - height, width, height);
-  ctx.strokeStyle = "#ffe7d8";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(screen.x - width / 2, screen.y - height, width, height);
+  const character = state.availableCharacters.find((item) => item.id === state.characterId);
+  renderAvatarSkeleton(ctx, screen, character, "front", true, getLimbMotionState(true));
 }
 
 function drawRemotePlayer(player: WorldPlayer): void {
   const screen = worldToScreen(player.position.x, player.position.y);
-  const width = (PLAYER_RENDER_WIDTH_PX / 32) * state.tileScale;
-  const height = (PLAYER_RENDER_HEIGHT_PX / 32) * state.tileScale;
-  ctx.fillStyle = "#67d1ff";
-  ctx.fillRect(screen.x - width / 2, screen.y - height, width, height);
-  ctx.strokeStyle = "#e6f7ff";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(screen.x - width / 2, screen.y - height, width, height);
+  const character = state.availableCharacters.find((item) => item.id === player.characterId)
+    ?? (player.characterId
+      ? {
+          id: player.characterId,
+          name: player.characterName || player.playerId,
+          version: 0,
+          stats: {} as never,
+          inventory: { items: [] },
+          warehouse: { items: [] },
+          position: { worldId: "", mapId: player.mapId || "", x: player.position.x, y: player.position.y },
+          equipment: player.equipment ?? { visibleArmor: {} },
+          appearance: player.appearance ?? { body: defaultAppearanceBody() },
+          createdAt: "",
+          updatedAt: "",
+        }
+      : undefined);
+  renderAvatarSkeleton(ctx, screen, character, "front", false, getLimbMotionState(false));
   ctx.fillStyle = "#ffffff";
   ctx.font = "12px Microsoft YaHei, sans-serif";
-  ctx.fillText(player.characterName || player.playerId, screen.x + width / 2 + 4, screen.y - height + 12);
+  ctx.fillText(player.characterName || player.playerId, screen.x + 18, screen.y - 42);
+}
+
+function renderAvatarSkeleton(
+  target: CanvasRenderingContext2D,
+  screen: Position,
+  character: CharacterSummary | undefined,
+  facing: Facing,
+  local: boolean,
+  moveState: { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number },
+): void {
+  const body = character?.appearance?.body ?? defaultAppearanceBody();
+  const palette = local
+    ? { skin: "#f2c199", hair: "#2d1a13", cloth: "#ff4040", clothDark: "#b42222", metal: "#ffe7d8" }
+    : { skin: "#f0c6b0", hair: "#23314f", cloth: "#67d1ff", clothDark: "#2d8dac", metal: "#e6f7ff" };
+
+  const scale = state.tileScale / 4;
+  const side = facing === "left" || facing === "right";
+  const shoulder = (side ? body.sideWidth : body.frontShoulderWidth) * 0.18 * scale;
+  const chest = (side ? body.chestDepth : body.chestWidth) * 0.16 * scale;
+  const waist = (side ? body.waistDepth : body.waistWidth) * 0.16 * scale;
+  const hip = (side ? body.hipDepth : body.hipWidth) * 0.16 * scale;
+  const torsoHeight = body.torsoHeight * 0.22 * scale;
+  const legHeight = (body.thighLength + body.calfLength) * 0.14 * scale;
+  const headWidth = Math.max(10, shoulder * 0.7);
+  const headHeight = Math.max(12, headWidth * 0.9);
+
+  const topY = screen.y - (headHeight + torsoHeight + legHeight);
+
+  drawPixelRect(target, screen.x - headWidth / 2, topY, headWidth, headHeight, palette.skin, palette.hair);
+  drawPixelRect(target, screen.x - shoulder / 2, topY + headHeight, shoulder, torsoHeight * 0.25, palette.clothDark, palette.metal);
+  drawPixelRect(target, screen.x - chest / 2, topY + headHeight + torsoHeight * 0.25, chest, torsoHeight * 0.35, palette.cloth, palette.metal);
+  drawPixelRect(target, screen.x - waist / 2, topY + headHeight + torsoHeight * 0.6, waist, torsoHeight * 0.18, palette.clothDark, palette.metal);
+  drawPixelRect(target, screen.x - hip / 2, topY + headHeight + torsoHeight * 0.78, hip, torsoHeight * 0.22, palette.cloth, palette.metal);
+
+  const armWidth = Math.max(3, body.upperArmWidth * 0.18 * scale);
+  const armLength = Math.max(10, (body.upperArmLength + body.forearmLength) * 0.12 * scale);
+  drawLimb(target, screen.x - shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skin, palette.metal);
+  drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skin, palette.metal);
+
+  const legWidth = Math.max(4, body.thighWidth * 0.18 * scale);
+  drawLimb(target, screen.x - legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.leftLeg, palette.clothDark, palette.metal);
+  drawLimb(target, screen.x + legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothDark, palette.metal);
+
+  if (character?.equipment?.visibleArmor?.helmet) {
+    drawPixelRect(target, screen.x - headWidth / 2, topY - 2, headWidth, 4, "#7e8794", "#d5dce5");
+  }
+  if (character?.equipment?.visibleArmor?.chest) {
+    drawPixelRect(target, screen.x - chest / 2, topY + headHeight + torsoHeight * 0.25, chest, torsoHeight * 0.35, "#65758b", "#d5dce5");
+  }
+  if (character?.equipment?.visibleArmor?.pants) {
+    drawPixelRect(target, screen.x - hip / 2, topY + headHeight + torsoHeight * 0.78, hip, torsoHeight * 0.22, "#5a6475", "#d5dce5");
+  }
+  if (character?.equipment?.visibleArmor?.shoes) {
+    drawPixelRect(target, screen.x - legWidth - 1, topY + headHeight + torsoHeight + legHeight - 4, legWidth * 2 + 2, 4, "#2f3742", "#a7b0bb");
+  }
+}
+
+function drawPixelRect(target: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, fill: string, stroke: string): void {
+  target.fillStyle = fill;
+  target.fillRect(x, y, width, height);
+  target.strokeStyle = stroke;
+  target.lineWidth = 1;
+  target.strokeRect(x, y, width, height);
+}
+
+function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: number, length: number, width: number, angleDegrees: number, fill: string, stroke: string): void {
+  target.save();
+  target.translate(anchorX, anchorY);
+  target.rotate((angleDegrees * Math.PI) / 180);
+  drawPixelRect(target, -width / 2, 0, width, length, fill, stroke);
+  target.restore();
+}
+
+function getLimbMotionState(local: boolean): { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number } {
+  const moving = local ? state.pressed.size > 0 : true;
+  if (!moving) {
+    return { leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 };
+  }
+
+  const phase = Math.sin(performance.now() / 110);
+  const swing = Math.abs(phase) > 0.4 ? 90 : 45;
+  return {
+    leftArm: phase > 0 ? -swing : swing,
+    rightArm: phase > 0 ? swing : -swing,
+    leftLeg: phase > 0 ? swing : -swing,
+    rightLeg: phase > 0 ? -swing : swing,
+  };
 }
 
 function updateHud(): void {

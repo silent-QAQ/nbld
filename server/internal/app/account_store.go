@@ -91,7 +91,10 @@ type Character struct {
 }
 
 type CharacterAppearance struct {
-	Body CharacterBodyAppearance `json:"body"`
+	Body    CharacterBodyAppearance    `json:"body"`
+	Style   CharacterStyleAppearance   `json:"style"`
+	Hair    CharacterHairAppearance    `json:"hair"`
+	Palette CharacterPaletteAppearance `json:"palette"`
 }
 
 type CharacterBodyAppearance struct {
@@ -113,6 +116,33 @@ type CharacterBodyAppearance struct {
 	ChestDepth         int `json:"chestDepth"`
 	WaistDepth         int `json:"waistDepth"`
 	HipDepth           int `json:"hipDepth"`
+	HeadScale          int `json:"headScale"`
+}
+
+type CharacterStyleAppearance struct {
+	HairStyle string `json:"hairStyle"`
+}
+
+type CharacterHairAppearance struct {
+	Front   []string `json:"front"`
+	Back    []string `json:"back"`
+	Left    []string `json:"left"`
+	Right   []string `json:"right"`
+	FrontFg []string `json:"frontFg"`
+	BackFg  []string `json:"backFg"`
+	LeftFg  []string `json:"leftFg"`
+	RightFg []string `json:"rightFg"`
+}
+
+type CharacterPaletteAppearance struct {
+	SkinPrimary string `json:"skinPrimary"`
+	SkinShadow  string `json:"skinShadow"`
+	HairPrimary string `json:"hairPrimary"`
+	HairShadow  string `json:"hairShadow"`
+	ClothPrimary string `json:"clothPrimary"`
+	ClothShadow  string `json:"clothShadow"`
+	MetalPrimary string `json:"metalPrimary"`
+	MetalShadow  string `json:"metalShadow"`
 }
 
 type CharacterStats struct {
@@ -295,6 +325,30 @@ func defaultCharacterAppearance() CharacterAppearance {
 			ChestDepth:         10,
 			WaistDepth:         9,
 			HipDepth:           10,
+			HeadScale:          100,
+		},
+		Style: CharacterStyleAppearance{
+			HairStyle: "short",
+		},
+		Hair: CharacterHairAppearance{
+			Front:   []string{"01110", "11111", "11111"},
+			Back:    []string{"11111", "11111", "01110"},
+			Left:    []string{"1110", "1111", "0111"},
+			Right:   []string{"0111", "1111", "1110"},
+			FrontFg: []string{"00100"},
+			BackFg:  []string{},
+			LeftFg:  []string{"001"},
+			RightFg: []string{"100"},
+		},
+		Palette: CharacterPaletteAppearance{
+			SkinPrimary:  "#f2c199",
+			SkinShadow:   "#d89b72",
+			HairPrimary:  "#2d1a13",
+			HairShadow:   "#140b08",
+			ClothPrimary: "#ff4040",
+			ClothShadow:  "#b42222",
+			MetalPrimary: "#cfd8e3",
+			MetalShadow:  "#7e8794",
 		},
 	}
 }
@@ -353,6 +407,7 @@ func validateCharacterAppearance(appearance CharacterAppearance) error {
 		{body.ChestDepth, 7, 16},
 		{body.WaistDepth, 6, 15},
 		{body.HipDepth, 7, 16},
+		{body.HeadScale, 70, 140},
 	}
 	for _, item := range validations {
 		if item.value < item.min || item.value > item.max {
@@ -372,8 +427,57 @@ func validateCharacterAppearance(appearance CharacterAppearance) error {
 	if body.UpperArmWidth+body.ForearmWidth > 28 {
 		return ErrCharacterAppearance
 	}
+	if !validateHexColor(appearance.Palette.SkinPrimary) ||
+		!validateHexColor(appearance.Palette.SkinShadow) ||
+		!validateHexColor(appearance.Palette.HairPrimary) ||
+		!validateHexColor(appearance.Palette.HairShadow) ||
+		!validateHexColor(appearance.Palette.ClothPrimary) ||
+		!validateHexColor(appearance.Palette.ClothShadow) ||
+		!validateHexColor(appearance.Palette.MetalPrimary) ||
+		!validateHexColor(appearance.Palette.MetalShadow) {
+		return ErrCharacterAppearance
+	}
+	if !validateHairLayer(appearance.Hair.Front) ||
+		!validateHairLayer(appearance.Hair.Back) ||
+		!validateHairLayer(appearance.Hair.Left) ||
+		!validateHairLayer(appearance.Hair.Right) ||
+		!validateHairLayer(appearance.Hair.FrontFg) ||
+		!validateHairLayer(appearance.Hair.BackFg) ||
+		!validateHairLayer(appearance.Hair.LeftFg) ||
+		!validateHairLayer(appearance.Hair.RightFg) {
+		return ErrCharacterAppearance
+	}
 
 	return nil
+}
+
+func validateHexColor(value string) bool {
+	if len(value) != 7 || value[0] != '#' {
+		return false
+	}
+	for _, ch := range value[1:] {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", ch) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateHairLayer(rows []string) bool {
+	if len(rows) > 24 {
+		return false
+	}
+	for _, row := range rows {
+		if len(row) > 24 {
+			return false
+		}
+		for _, ch := range row {
+			if ch != '0' && ch != '1' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 type memoryAccountStore struct {

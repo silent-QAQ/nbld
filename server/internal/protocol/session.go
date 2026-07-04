@@ -167,23 +167,23 @@ type LeaveWorldResponse struct {
 }
 
 type WorldPlayer struct {
-	PlayerID      string   `json:"playerId"`
-	CharacterID   string   `json:"characterId,omitempty"`
-	CharacterName string   `json:"characterName,omitempty"`
-	MapID         string   `json:"mapId,omitempty"`
-	Position      Position `json:"position"`
+	PlayerID      string              `json:"playerId"`
+	CharacterID   string              `json:"characterId,omitempty"`
+	CharacterName string              `json:"characterName,omitempty"`
+	MapID         string              `json:"mapId,omitempty"`
+	Position      Position            `json:"position"`
 	Appearance    CharacterAppearance `json:"appearance"`
 	Equipment     CharacterEquipment  `json:"equipment"`
 }
 
 type WorldEvent struct {
-	Type          string   `json:"type"`
-	PlayerID      string   `json:"playerId"`
-	CharacterID   string   `json:"characterId,omitempty"`
-	CharacterName string   `json:"characterName,omitempty"`
-	MapID         string   `json:"mapId,omitempty"`
-	Position      Position `json:"position"`
-	OccurredAt    string   `json:"occurredAt"`
+	Type          string              `json:"type"`
+	PlayerID      string              `json:"playerId"`
+	CharacterID   string              `json:"characterId,omitempty"`
+	CharacterName string              `json:"characterName,omitempty"`
+	MapID         string              `json:"mapId,omitempty"`
+	Position      Position            `json:"position"`
+	OccurredAt    string              `json:"occurredAt"`
 	Appearance    CharacterAppearance `json:"appearance,omitempty"`
 	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
 }
@@ -195,17 +195,17 @@ type WSClientMessage struct {
 }
 
 type WSServerMessage struct {
-	Type          string        `json:"type"`
-	PlayerID      string        `json:"playerId,omitempty"`
-	CharacterID   string        `json:"characterId,omitempty"`
-	CharacterName string        `json:"characterName,omitempty"`
-	WorldID       string        `json:"worldId,omitempty"`
-	MapID         string        `json:"mapId,omitempty"`
-	Position      Position      `json:"position,omitempty"`
-	Players       []WorldPlayer `json:"players,omitempty"`
+	Type          string              `json:"type"`
+	PlayerID      string              `json:"playerId,omitempty"`
+	CharacterID   string              `json:"characterId,omitempty"`
+	CharacterName string              `json:"characterName,omitempty"`
+	WorldID       string              `json:"worldId,omitempty"`
+	MapID         string              `json:"mapId,omitempty"`
+	Position      Position            `json:"position,omitempty"`
+	Players       []WorldPlayer       `json:"players,omitempty"`
 	Appearance    CharacterAppearance `json:"appearance,omitempty"`
 	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
-	Error         string        `json:"error,omitempty"`
+	Error         string              `json:"error,omitempty"`
 }
 
 type CharacterStats struct {
