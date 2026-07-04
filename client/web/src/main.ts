@@ -2,6 +2,7 @@ import "./styles.css";
 import { ApiClient } from "./api";
 import { loadAssets, type AssetMaps } from "./assets";
 import type {
+  CharacterAppearance,
   CharacterBodyAppearance,
   CharacterSummary,
   ChunkCoord,
@@ -131,6 +132,8 @@ app.innerHTML = `
           <h3>角色外观</h3>
           <div class="appearance-preview" id="appearancePreview"></div>
           <div class="appearance-grid" id="appearanceGrid"></div>
+          <div class="appearance-palette" id="appearancePalette"></div>
+          <div class="hair-grid" id="hairGrid"></div>
           <button id="saveAppearanceButton" class="secondary">保存外观</button>
         </div>
       </div>
@@ -159,6 +162,8 @@ const characterList = app.querySelector<HTMLElement>("#characterList")!;
 const appearanceEditor = app.querySelector<HTMLElement>("#appearanceEditor")!;
 const appearancePreview = app.querySelector<HTMLElement>("#appearancePreview")!;
 const appearanceGrid = app.querySelector<HTMLElement>("#appearanceGrid")!;
+const appearancePalette = app.querySelector<HTMLElement>("#appearancePalette")!;
+const hairGrid = app.querySelector<HTMLElement>("#hairGrid")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
 const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
@@ -396,11 +401,14 @@ function renderCharacterList(characters: CharacterSummary[]): void {
 function renderAppearanceEditor(character: CharacterSummary): void {
   appearanceEditor.classList.remove("hidden");
   state.selectedCharacterId = character.id;
-  renderAppearancePreview(character.appearance.body);
+  renderAppearancePreview(character.appearance);
   renderAppearanceControls(character.appearance.body);
+  renderPaletteControls(character.appearance.palette);
+  renderHairControls(character.appearance.hair, character.appearance.style.hairStyle);
 }
 
-function renderAppearancePreview(body: CharacterBodyAppearance): void {
+function renderAppearancePreview(appearance: CharacterAppearance): void {
+  const body = appearance.body;
   const cards = [
     renderDirectionCard("正面", body, "front"),
     renderDirectionCard("背面", body, "back"),
@@ -461,24 +469,89 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
 
   for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
     input.addEventListener("input", () => {
-      const updated = readAppearanceFromEditor();
-      renderAppearancePreview(updated);
+      renderAppearancePreview(readAppearanceFromEditor());
     });
   }
 }
 
-function readAppearanceFromEditor(): CharacterBodyAppearance {
-  const base = structuredClone(
-    state.availableCharacters.find((character) => character.id === state.selectedCharacterId)?.appearance.body ?? defaultAppearanceBody(),
-  );
+function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
+  const fields: Array<[keyof CharacterAppearance["palette"], string]> = [
+    ["skinPrimary", "肤色主色"],
+    ["skinShadow", "肤色阴影"],
+    ["hairPrimary", "发色主色"],
+    ["hairShadow", "发色阴影"],
+    ["clothPrimary", "服装主色"],
+    ["clothShadow", "服装阴影"],
+    ["metalPrimary", "金属主色"],
+    ["metalShadow", "金属阴影"],
+  ];
+
+  appearancePalette.innerHTML = fields.map(([key, label]) => `
+    <label class="appearance-field">
+      <span>${label}</span>
+      <input type="color" data-palette-key="${key}" value="${palette[key]}">
+    </label>
+  `).join("");
+
+  for (const input of appearancePalette.querySelectorAll<HTMLInputElement>("input[data-palette-key]")) {
+    input.addEventListener("input", () => {
+      renderAppearancePreview(readAppearanceFromEditor());
+    });
+  }
+}
+
+function renderHairControls(hair: CharacterAppearance["hair"], hairStyle: string): void {
+  const layers: Array<[keyof CharacterAppearance["hair"], string]> = [
+    ["front", "前层后发"],
+    ["frontFg", "前层前发"],
+    ["back", "背面后发"],
+    ["backFg", "背面前发"],
+    ["left", "左侧后发"],
+    ["leftFg", "左侧前发"],
+    ["right", "右侧后发"],
+    ["rightFg", "右侧前发"],
+  ];
+
+  hairGrid.innerHTML = `
+    <label class="appearance-field">
+      <span>发型名</span>
+      <input type="text" id="hairStyleInput" value="${hairStyle}">
+    </label>
+    ${layers.map(([key, label]) => `
+      <label class="appearance-field hair-field">
+        <span>${label}</span>
+        <textarea data-hair-key="${key}" rows="4">${(hair[key] ?? []).join("\n")}</textarea>
+      </label>
+    `).join("")}
+  `;
+}
+
+function readAppearanceFromEditor(): CharacterAppearance {
+  const character = state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
+  const base = structuredClone(character?.appearance ?? defaultAppearance());
 
   for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
     const key = input.dataset.appearanceKey as keyof CharacterBodyAppearance;
     const min = Number(input.dataset.min ?? 0);
     const max = Number(input.dataset.max ?? 999);
-    const value = clamp(Number(input.value || base[key]), min, max);
-    base[key] = Math.round(value);
-    input.value = String(base[key]);
+    const value = clamp(Number(input.value || base.body[key]), min, max);
+    base.body[key] = Math.round(value);
+    input.value = String(base.body[key]);
+  }
+
+  for (const input of appearancePalette.querySelectorAll<HTMLInputElement>("input[data-palette-key]")) {
+    const key = input.dataset.paletteKey as keyof CharacterAppearance["palette"];
+    base.palette[key] = input.value;
+  }
+
+  const hairStyleInput = hairGrid.querySelector<HTMLInputElement>("#hairStyleInput");
+  if (hairStyleInput) {
+    base.style.hairStyle = hairStyleInput.value.trim() || "custom";
+  }
+
+  for (const input of hairGrid.querySelectorAll<HTMLTextAreaElement>("textarea[data-hair-key]")) {
+    const key = input.dataset.hairKey as keyof CharacterAppearance["hair"];
+    base.hair[key] = input.value.split("\n").map((row) => row.trim()).filter(Boolean);
   }
 
   return base;
@@ -492,8 +565,8 @@ async function saveSelectedCharacterAppearance(): Promise<void> {
   setLoginBusy(true, "保存外观中...");
   loginError.textContent = "";
   try {
-    const body = readAppearanceFromEditor();
-    const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, { body });
+    const appearance = readAppearanceFromEditor();
+    const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, appearance);
     const index = state.availableCharacters.findIndex((item) => item.id === updated.character.id);
     if (index >= 0) {
       state.availableCharacters[index] = updated.character;
@@ -527,6 +600,36 @@ function defaultAppearanceBody(): CharacterBodyAppearance {
     chestDepth: 10,
     waistDepth: 9,
     hipDepth: 10,
+    headScale: 100,
+  };
+}
+
+function defaultAppearance() {
+  return {
+    body: defaultAppearanceBody(),
+    style: {
+      hairStyle: "short",
+    },
+    hair: {
+      front: ["01110", "11111", "11111"],
+      back: ["11111", "11111", "01110"],
+      left: ["1110", "1111", "0111"],
+      right: ["0111", "1111", "1110"],
+      frontFg: ["00100"],
+      backFg: [],
+      leftFg: ["001"],
+      rightFg: ["100"],
+    },
+    palette: {
+      skinPrimary: "#f2c199",
+      skinShadow: "#d89b72",
+      hairPrimary: "#2d1a13",
+      hairShadow: "#140b08",
+      clothPrimary: "#ff4040",
+      clothShadow: "#b42222",
+      metalPrimary: "#cfd8e3",
+      metalShadow: "#7e8794",
+    },
   };
 }
 
@@ -930,7 +1033,7 @@ function drawRemotePlayer(player: WorldPlayer): void {
           warehouse: { items: [] },
           position: { worldId: "", mapId: player.mapId || "", x: player.position.x, y: player.position.y },
           equipment: player.equipment ?? { visibleArmor: {} },
-          appearance: player.appearance ?? { body: defaultAppearanceBody() },
+          appearance: player.appearance ?? defaultAppearance(),
           createdAt: "",
           updatedAt: "",
         }
@@ -949,10 +1052,11 @@ function renderAvatarSkeleton(
   local: boolean,
   moveState: { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number },
 ): void {
-  const body = character?.appearance?.body ?? defaultAppearanceBody();
-  const palette = local
-    ? { skin: "#f2c199", hair: "#2d1a13", cloth: "#ff4040", clothDark: "#b42222", metal: "#ffe7d8" }
-    : { skin: "#f0c6b0", hair: "#23314f", cloth: "#67d1ff", clothDark: "#2d8dac", metal: "#e6f7ff" };
+  const appearance = character?.appearance ?? defaultAppearance();
+  const body = appearance.body;
+  const palette = appearance.palette ?? (local
+    ? { skinPrimary: "#f2c199", skinShadow: "#d89b72", hairPrimary: "#2d1a13", hairShadow: "#140b08", clothPrimary: "#ff4040", clothShadow: "#b42222", metalPrimary: "#ffe7d8", metalShadow: "#7e8794" }
+    : { skinPrimary: "#f0c6b0", skinShadow: "#d89b72", hairPrimary: "#23314f", hairShadow: "#10192b", clothPrimary: "#67d1ff", clothShadow: "#2d8dac", metalPrimary: "#e6f7ff", metalShadow: "#8ca3ba" });
 
   const scale = state.tileScale / 4;
   const side = facing === "left" || facing === "right";
@@ -962,38 +1066,77 @@ function renderAvatarSkeleton(
   const hip = (side ? body.hipDepth : body.hipWidth) * 0.16 * scale;
   const torsoHeight = body.torsoHeight * 0.22 * scale;
   const legHeight = (body.thighLength + body.calfLength) * 0.14 * scale;
-  const headWidth = Math.max(10, shoulder * 0.7);
+  const headScale = body.headScale / 100;
+  const headWidth = Math.max(10, shoulder * 0.7 * headScale);
   const headHeight = Math.max(12, headWidth * 0.9);
 
   const topY = screen.y - (headHeight + torsoHeight + legHeight);
 
-  drawPixelRect(target, screen.x - headWidth / 2, topY, headWidth, headHeight, palette.skin, palette.hair);
-  drawPixelRect(target, screen.x - shoulder / 2, topY + headHeight, shoulder, torsoHeight * 0.25, palette.clothDark, palette.metal);
-  drawPixelRect(target, screen.x - chest / 2, topY + headHeight + torsoHeight * 0.25, chest, torsoHeight * 0.35, palette.cloth, palette.metal);
-  drawPixelRect(target, screen.x - waist / 2, topY + headHeight + torsoHeight * 0.6, waist, torsoHeight * 0.18, palette.clothDark, palette.metal);
-  drawPixelRect(target, screen.x - hip / 2, topY + headHeight + torsoHeight * 0.78, hip, torsoHeight * 0.22, palette.cloth, palette.metal);
+  const hairBackLayer = facing === "front" ? appearance.hair.back : facing === "back" ? appearance.hair.front : facing === "left" ? appearance.hair.left : appearance.hair.right;
+  const hairFrontLayer = facing === "front" ? appearance.hair.frontFg : facing === "back" ? appearance.hair.backFg : facing === "left" ? appearance.hair.leftFg : appearance.hair.rightFg;
+
+  drawHairLayer(target, screen.x, topY - 2, hairBackLayer, palette.hairPrimary, palette.hairShadow, scale);
+  drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
+  drawHairLayer(target, screen.x, topY - 1, hairFrontLayer, palette.hairPrimary, palette.hairShadow, scale);
+  drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary);
 
   const armWidth = Math.max(3, body.upperArmWidth * 0.18 * scale);
   const armLength = Math.max(10, (body.upperArmLength + body.forearmLength) * 0.12 * scale);
-  drawLimb(target, screen.x - shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skin, palette.metal);
-  drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skin, palette.metal);
+  drawLimb(target, screen.x - shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skinPrimary, palette.skinShadow);
+  drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
 
   const legWidth = Math.max(4, body.thighWidth * 0.18 * scale);
-  drawLimb(target, screen.x - legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.leftLeg, palette.clothDark, palette.metal);
-  drawLimb(target, screen.x + legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothDark, palette.metal);
+  drawLimb(target, screen.x - legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.leftLeg, palette.clothShadow, palette.metalShadow);
+  drawLimb(target, screen.x + legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothShadow, palette.metalShadow);
 
   if (character?.equipment?.visibleArmor?.helmet) {
-    drawPixelRect(target, screen.x - headWidth / 2, topY - 2, headWidth, 4, "#7e8794", "#d5dce5");
+    drawPixelRect(target, screen.x - headWidth / 2, topY - 2, headWidth, 4, palette.metalShadow, palette.metalPrimary);
   }
   if (character?.equipment?.visibleArmor?.chest) {
-    drawPixelRect(target, screen.x - chest / 2, topY + headHeight + torsoHeight * 0.25, chest, torsoHeight * 0.35, "#65758b", "#d5dce5");
+    drawPixelRect(target, screen.x - chest / 2, topY + headHeight + torsoHeight * 0.25, chest, torsoHeight * 0.35, palette.metalShadow, palette.metalPrimary);
   }
   if (character?.equipment?.visibleArmor?.pants) {
-    drawPixelRect(target, screen.x - hip / 2, topY + headHeight + torsoHeight * 0.78, hip, torsoHeight * 0.22, "#5a6475", "#d5dce5");
+    drawPixelRect(target, screen.x - hip / 2, topY + headHeight + torsoHeight * 0.78, hip, torsoHeight * 0.22, palette.metalShadow, palette.metalPrimary);
   }
   if (character?.equipment?.visibleArmor?.shoes) {
-    drawPixelRect(target, screen.x - legWidth - 1, topY + headHeight + torsoHeight + legHeight - 4, legWidth * 2 + 2, 4, "#2f3742", "#a7b0bb");
+    drawPixelRect(target, screen.x - legWidth - 1, topY + headHeight + torsoHeight + legHeight - 4, legWidth * 2 + 2, 4, palette.metalShadow, palette.metalPrimary);
   }
+}
+
+function drawHeadLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, width: number, height: number, fill: string, stroke: string): void {
+  drawPixelRect(target, centerX - width / 2, topY, width, height, fill, stroke);
+}
+
+function drawHairLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, rows: string[] | undefined, fill: string, stroke: string, scale: number): void {
+  if (!rows || rows.length === 0) return;
+  const pixel = Math.max(2, Math.round(scale * 0.9));
+  const rowWidth = Math.max(...rows.map((row) => row.length), 0);
+  const startX = centerX - (rowWidth * pixel) / 2;
+  rows.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      if (ch !== "1") return;
+      drawPixelRect(target, startX + x * pixel, topY + y * pixel, pixel, pixel, fill, stroke);
+    });
+  });
+}
+
+function drawTorsoLayer(
+  target: CanvasRenderingContext2D,
+  centerX: number,
+  topY: number,
+  shoulder: number,
+  chest: number,
+  waist: number,
+  hip: number,
+  torsoHeight: number,
+  fill: string,
+  shadow: string,
+  trim: string,
+): void {
+  drawPixelRect(target, centerX - shoulder / 2, topY, shoulder, torsoHeight * 0.22, shadow, trim);
+  drawPixelRect(target, centerX - chest / 2, topY + torsoHeight * 0.22, chest, torsoHeight * 0.34, fill, trim);
+  drawPixelRect(target, centerX - waist / 2, topY + torsoHeight * 0.56, waist, torsoHeight * 0.18, shadow, trim);
+  drawPixelRect(target, centerX - hip / 2, topY + torsoHeight * 0.74, hip, torsoHeight * 0.26, fill, trim);
 }
 
 function drawPixelRect(target: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, fill: string, stroke: string): void {

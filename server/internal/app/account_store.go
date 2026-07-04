@@ -135,10 +135,10 @@ type CharacterHairAppearance struct {
 }
 
 type CharacterPaletteAppearance struct {
-	SkinPrimary string `json:"skinPrimary"`
-	SkinShadow  string `json:"skinShadow"`
-	HairPrimary string `json:"hairPrimary"`
-	HairShadow  string `json:"hairShadow"`
+	SkinPrimary  string `json:"skinPrimary"`
+	SkinShadow   string `json:"skinShadow"`
+	HairPrimary  string `json:"hairPrimary"`
+	HairShadow   string `json:"hairShadow"`
 	ClothPrimary string `json:"clothPrimary"`
 	ClothShadow  string `json:"clothShadow"`
 	MetalPrimary string `json:"metalPrimary"`

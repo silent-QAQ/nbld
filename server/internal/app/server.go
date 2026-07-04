@@ -1575,6 +1575,30 @@ func toProtocolAppearance(appearance CharacterAppearance) protocol.CharacterAppe
 			ChestDepth:         appearance.Body.ChestDepth,
 			WaistDepth:         appearance.Body.WaistDepth,
 			HipDepth:           appearance.Body.HipDepth,
+			HeadScale:          appearance.Body.HeadScale,
+		},
+		Style: protocol.CharacterStyleAppearance{
+			HairStyle: appearance.Style.HairStyle,
+		},
+		Hair: protocol.CharacterHairAppearance{
+			Front:   appearance.Hair.Front,
+			Back:    appearance.Hair.Back,
+			Left:    appearance.Hair.Left,
+			Right:   appearance.Hair.Right,
+			FrontFg: appearance.Hair.FrontFg,
+			BackFg:  appearance.Hair.BackFg,
+			LeftFg:  appearance.Hair.LeftFg,
+			RightFg: appearance.Hair.RightFg,
+		},
+		Palette: protocol.CharacterPaletteAppearance{
+			SkinPrimary:  appearance.Palette.SkinPrimary,
+			SkinShadow:   appearance.Palette.SkinShadow,
+			HairPrimary:  appearance.Palette.HairPrimary,
+			HairShadow:   appearance.Palette.HairShadow,
+			ClothPrimary: appearance.Palette.ClothPrimary,
+			ClothShadow:  appearance.Palette.ClothShadow,
+			MetalPrimary: appearance.Palette.MetalPrimary,
+			MetalShadow:  appearance.Palette.MetalShadow,
 		},
 	}
 }
@@ -1748,6 +1772,30 @@ func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) Charact
 			ChestDepth:         appearance.Body.ChestDepth,
 			WaistDepth:         appearance.Body.WaistDepth,
 			HipDepth:           appearance.Body.HipDepth,
+			HeadScale:          appearance.Body.HeadScale,
+		},
+		Style: CharacterStyleAppearance{
+			HairStyle: appearance.Style.HairStyle,
+		},
+		Hair: CharacterHairAppearance{
+			Front:   appearance.Hair.Front,
+			Back:    appearance.Hair.Back,
+			Left:    appearance.Hair.Left,
+			Right:   appearance.Hair.Right,
+			FrontFg: appearance.Hair.FrontFg,
+			BackFg:  appearance.Hair.BackFg,
+			LeftFg:  appearance.Hair.LeftFg,
+			RightFg: appearance.Hair.RightFg,
+		},
+		Palette: CharacterPaletteAppearance{
+			SkinPrimary:  appearance.Palette.SkinPrimary,
+			SkinShadow:   appearance.Palette.SkinShadow,
+			HairPrimary:  appearance.Palette.HairPrimary,
+			HairShadow:   appearance.Palette.HairShadow,
+			ClothPrimary: appearance.Palette.ClothPrimary,
+			ClothShadow:  appearance.Palette.ClothShadow,
+			MetalPrimary: appearance.Palette.MetalPrimary,
+			MetalShadow:  appearance.Palette.MetalShadow,
 		},
 	}
 }

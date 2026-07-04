@@ -294,7 +294,10 @@ type CharacterSummary struct {
 }
 
 type CharacterAppearance struct {
-	Body CharacterBodyAppearance `json:"body"`
+	Body    CharacterBodyAppearance    `json:"body"`
+	Style   CharacterStyleAppearance   `json:"style"`
+	Hair    CharacterHairAppearance    `json:"hair"`
+	Palette CharacterPaletteAppearance `json:"palette"`
 }
 
 type CharacterBodyAppearance struct {
@@ -316,6 +319,33 @@ type CharacterBodyAppearance struct {
 	ChestDepth         int `json:"chestDepth"`
 	WaistDepth         int `json:"waistDepth"`
 	HipDepth           int `json:"hipDepth"`
+	HeadScale          int `json:"headScale"`
+}
+
+type CharacterStyleAppearance struct {
+	HairStyle string `json:"hairStyle"`
+}
+
+type CharacterHairAppearance struct {
+	Front   []string `json:"front"`
+	Back    []string `json:"back"`
+	Left    []string `json:"left"`
+	Right   []string `json:"right"`
+	FrontFg []string `json:"frontFg"`
+	BackFg  []string `json:"backFg"`
+	LeftFg  []string `json:"leftFg"`
+	RightFg []string `json:"rightFg"`
+}
+
+type CharacterPaletteAppearance struct {
+	SkinPrimary  string `json:"skinPrimary"`
+	SkinShadow   string `json:"skinShadow"`
+	HairPrimary  string `json:"hairPrimary"`
+	HairShadow   string `json:"hairShadow"`
+	ClothPrimary string `json:"clothPrimary"`
+	ClothShadow  string `json:"clothShadow"`
+	MetalPrimary string `json:"metalPrimary"`
+	MetalShadow  string `json:"metalShadow"`
 }
 
 type CharacterListResponse struct {

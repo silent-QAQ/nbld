@@ -128,10 +128,40 @@ export type CharacterBodyAppearance = {
   chestDepth: number;
   waistDepth: number;
   hipDepth: number;
+  headScale: number;
+};
+
+export type CharacterStyleAppearance = {
+  hairStyle: string;
+};
+
+export type CharacterHairAppearance = {
+  front: string[];
+  back: string[];
+  left: string[];
+  right: string[];
+  frontFg: string[];
+  backFg: string[];
+  leftFg: string[];
+  rightFg: string[];
+};
+
+export type CharacterPaletteAppearance = {
+  skinPrimary: string;
+  skinShadow: string;
+  hairPrimary: string;
+  hairShadow: string;
+  clothPrimary: string;
+  clothShadow: string;
+  metalPrimary: string;
+  metalShadow: string;
 };
 
 export type CharacterAppearance = {
   body: CharacterBodyAppearance;
+  style: CharacterStyleAppearance;
+  hair: CharacterHairAppearance;
+  palette: CharacterPaletteAppearance;
 };
 
 export type CharacterSummary = {

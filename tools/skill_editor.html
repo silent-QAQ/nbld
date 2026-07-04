@@ -582,7 +582,7 @@
               <label for="targetQuery">查询参数</label>
               <input id="targetQuery" placeholder="n=张三 / id=1001 / %a=elite">
             </div>
-            <div class="field target-kind target-coordinate">
+            <div class="field target-kind target-coordinate target-range">
               <label for="targetCoordEntity">实体坐标来源</label>
               <select id="targetCoordEntity"></select>
             </div>
@@ -1257,6 +1257,7 @@
         $(id).addEventListener("input", buildTargetFromEditor);
         $(id).addEventListener("change", buildTargetFromEditor);
       });
+      $("targetPoint").addEventListener("change", syncTargetEditorVisibility);
       $("targetParam").addEventListener("input", () => {
         $("targetSelector").value = buildTargetSelector();
         updateSelectedStep();
@@ -1330,9 +1331,7 @@
     function targetExpressionFromEditor() {
       const kind = $("targetKind").value;
       if (kind === "entity") {
-        const targeter = $("targetEntity").value;
-        const param = ["@p", "@e"].includes(targeter) ? $("targetQuery").value.trim() : "";
-        return { targeter, param, selector: targetSelectorFrom(targeter, param) };
+        return entityExpression($("targetEntity").value);
       }
       if (kind === "coordinate") {
         const selector = coordinateSelector();
@@ -1343,7 +1342,7 @@
 
     function rangeExpression() {
       const shape = $("targetShape").value;
-      const points = state.targetPoints.length ? state.targetPoints : [coordinateSelector()];
+      const points = state.targetPoints.length ? state.targetPoints : [pointSelector()];
       const r = Math.max(0, number($("targetRadius").value));
       const ir = Math.max(0, number($("targetInnerRadius").value));
       const ag = number($("targetAngle").value);
@@ -1367,13 +1366,25 @@
 
     function coordinateSelector() {
       const type = $("targetCoord").value;
-      if (type === "@entitylo") return `${$("targetCoordEntity").value}lo`;
+      if (type === "@entitylo") return `${entityExpression($("targetCoordEntity").value).selector}lo`;
       if (type === "@pl") return `@pl(${$("targetCoordValue").value.trim() || "p=0,0,0"})`;
       return "@zp";
     }
 
+    function pointSelector() {
+      const type = $("targetPoint").value;
+      if (type === "@entitylo") return `${entityExpression($("targetCoordEntity").value).selector}lo`;
+      if (type === "@pl") return `@pl(${$("targetPointValue").value.trim() || $("targetCoordValue").value.trim() || "p=0,0,0"})`;
+      return "@zp";
+    }
+
+    function entityExpression(targeter) {
+      const param = ["@p", "@e"].includes(targeter) ? $("targetQuery").value.trim() : "";
+      return { targeter, param, selector: targetSelectorFrom(targeter, param) };
+    }
+
     function addTargetPoint() {
-      state.targetPoints.push(coordinateSelector());
+      state.targetPoints.push(pointSelector());
       renderTargetPoints();
       buildTargetFromEditor();
     }
@@ -1461,8 +1472,12 @@
       const kind = $("targetKind").value;
       document.querySelectorAll(".target-kind").forEach(item => item.hidden = true);
       document.querySelectorAll(`.target-${kind}`).forEach(item => item.hidden = false);
-      document.querySelector(".target-query").hidden = kind !== "entity" || !["@p", "@e"].includes($("targetEntity").value);
-      document.querySelectorAll(".target-coordinate").forEach(item => item.hidden = kind !== "coordinate" && kind !== "range");
+      const coordinateType = kind === "range" ? $("targetPoint").value : $("targetCoord").value;
+      const needsQuery = kind === "entity"
+        ? ["@p", "@e"].includes($("targetEntity").value)
+        : ["coordinate", "range"].includes(kind) && coordinateType === "@entitylo" && ["@p", "@e"].includes($("targetCoordEntity").value);
+      document.querySelector(".target-query").hidden = !needsQuery;
+      document.querySelectorAll(".target-coordinate").forEach(item => item.hidden = kind !== "coordinate");
       if (kind === "range") {
         document.querySelectorAll(".target-range").forEach(item => item.hidden = false);
       }
