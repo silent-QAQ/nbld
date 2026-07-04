@@ -27,20 +27,28 @@ input {
 #app {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
 }
 
 .shell {
   position: relative;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .world-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   image-rendering: pixelated;
   background: #0d1216;
+  pointer-events: none;
 }
 
 .login-panel,
@@ -56,14 +64,24 @@ input {
 
 .modal {
   z-index: 20;
+  pointer-events: auto;
 }
 
 .login-panel {
   left: 50%;
   top: 50%;
   width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
   transform: translate(-50%, -50%);
   padding: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+#appearanceModal {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
 }
 
 .auth-page,
@@ -233,15 +251,15 @@ input {
 
 .hair-toolbar {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
   margin-top: 12px;
 }
 
 .layer-mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
   grid-column: 1 / -1;
 }
 
@@ -258,6 +276,17 @@ input {
   color: #1f1608;
 }
 
+.appearance-editor .hair-layer-btn,
+.appearance-editor .pixel-tools button {
+  width: auto;
+  min-height: 32px;
+  margin-top: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
 .pixel-editor {
   display: grid;
   grid-template-columns: repeat(24, 12px);
@@ -267,12 +296,14 @@ input {
   gap: 2px;
   margin-top: 12px;
   overflow: auto;
+  max-width: 100%;
+  touch-action: none;
 }
 
 .pixel-tools {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 6px;
   margin-top: 12px;
 }
 
@@ -286,6 +317,7 @@ input {
   background: rgba(255,255,255,0.04);
   border-radius: 2px;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .pixel-cell.filled {
@@ -354,6 +386,37 @@ input {
   line-height: 1.45;
   text-align: center;
   pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .login-panel {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    padding: 16px;
+  }
+
+  #appearanceModal {
+    width: calc(100vw - 20px);
+  }
+
+  .login-actions,
+  .appearance-grid,
+  .appearance-palette,
+  .hair-toolbar,
+  .pixel-tools,
+  .character-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .appearance-preview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .toast-error {
+    top: auto;
+    bottom: 12px;
+    width: calc(100vw - 20px);
+  }
 }
 
 .hud {

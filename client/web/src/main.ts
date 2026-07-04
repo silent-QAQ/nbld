@@ -739,18 +739,24 @@ function renderPixelEditorGrid(rows: string[]): void {
         cell.classList.toggle("filled", matrix[y][x]);
         updateDraftHairFromMatrix(matrix);
       };
-      cell.addEventListener("mousedown", (event) => {
+      cell.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         dragging = true;
         paintCell();
       });
-      cell.addEventListener("mouseenter", () => {
+      cell.addEventListener("pointerenter", () => {
         if (dragging) paintCell();
+      });
+      cell.addEventListener("pointerup", () => {
+        dragging = false;
       });
       hairGrid.appendChild(cell);
     }
   }
-  window.addEventListener("mouseup", () => {
+  hairGrid.addEventListener("pointerleave", () => {
+    dragging = false;
+  }, { once: true });
+  window.addEventListener("pointerup", () => {
     dragging = false;
   }, { once: true });
 }
