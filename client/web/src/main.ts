@@ -20,7 +20,6 @@ const CHUNK_SIZE = 80;
 const CHUNK_TEXTURE_SCALE = 4;
 const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
 const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
-const FIXED_TILE_SCALE = 12;
 const CHUNK_REFRESH_INTERVAL_MS = 500;
 const MOVE_SEND_INTERVAL_MS = 90;
 const TARGET_VISIBLE_TILES_X = 40;
@@ -172,8 +171,8 @@ app.innerHTML = `
           </div>
         </div>
         <div class="login-actions">
-          <button id="saveAppearanceButton">保存外观</button>
-          <button id="closeAppearanceButton" class="secondary">关闭</button>
+          <button id="saveAppearanceButton" type="button">保存外观</button>
+          <button id="closeAppearanceButton" type="button" class="secondary">关闭</button>
         </div>
       </div>
     </section>
@@ -232,7 +231,7 @@ const state: AppState = {
   mapId: "map_0_0",
   player: { x: 0, y: 0 },
   camera: { x: 0, y: 0 },
-  tileScale: FIXED_TILE_SCALE,
+  tileScale: 1,
   chunks: new Map(),
   players: new Map(),
   pressed: new Set(),
@@ -287,7 +286,8 @@ saveAppearanceButton.addEventListener("click", () => {
   void saveSelectedCharacterAppearance();
 });
 
-closeAppearanceButton.addEventListener("click", () => {
+closeAppearanceButton.addEventListener("click", (event) => {
+  event.stopPropagation();
   appearanceModal.classList.add("hidden");
 });
 
@@ -439,16 +439,26 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     const actions = document.createElement("div");
     actions.className = "character-actions";
 
+    const editButton = document.createElement("button");
+    editButton.className = "secondary";
+    editButton.textContent = "编辑外观";
+    editButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      renderAppearanceEditor(character);
+    });
+
     const enterButton = document.createElement("button");
     enterButton.textContent = "进入世界";
-    enterButton.addEventListener("click", () => {
+    enterButton.addEventListener("click", (event) => {
+      event.stopPropagation();
       void enterWorldWithCharacter(character);
     });
 
     const deleteButton = document.createElement("button");
     deleteButton.className = "secondary";
     deleteButton.textContent = "删除角色";
-    deleteButton.addEventListener("click", async () => {
+    deleteButton.addEventListener("click", async (event) => {
+      event.stopPropagation();
       if (!state.api || !state.token) return;
       setLoginBusy(true, "删除角色中...");
       loginError.textContent = "";
@@ -466,11 +476,14 @@ function renderCharacterList(characters: CharacterSummary[]): void {
       }
     });
 
-    actions.append(enterButton, deleteButton);
-    wrapper.append(preview, meta, actions);
-    wrapper.addEventListener("click", () => {
+    const openAppearance = () => {
       renderAppearanceEditor(character);
-    });
+    };
+    preview.addEventListener("click", openAppearance);
+    meta.addEventListener("click", openAppearance);
+
+    actions.append(enterButton, editButton, deleteButton);
+    wrapper.append(preview, meta, actions);
     characterList.appendChild(wrapper);
   }
 }
@@ -626,14 +639,14 @@ function renderLayerControls(): void {
 
   hairToolbar.innerHTML = `
     <div class="layer-mode-switch">
-      <button class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair">发型层</button>
-      <button class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton">骨骼层</button>
+      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair">发型层</button>
+      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton">骨骼层</button>
     </div>
     <label class="appearance-field">
       <span>发型名</span>
       <input type="text" id="hairStyleInput" value="${hairStyle}">
     </label>
-    ${(state.selectedLayerMode === "hair" ? hairLayers.map(([key, label]) => `<button class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}">${label}</button>`) : skeletonLayers.map(([key, label]) => `<button class="secondary hair-layer-btn ${state.selectedSkeletonLayer === key ? "active" : ""}" data-skeleton-layer="${key}">${label}</button>`)).join("")}
+    ${(state.selectedLayerMode === "hair" ? hairLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}">${label}</button>`) : skeletonLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedSkeletonLayer === key ? "active" : ""}" data-skeleton-layer="${key}">${label}</button>`)).join("")}
   `;
 
   for (const input of hairToolbar.querySelectorAll<HTMLInputElement>("#hairStyleInput")) {
@@ -644,21 +657,24 @@ function renderLayerControls(): void {
   }
 
   for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-hair-layer]")) {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       state.selectedHairLayer = button.dataset.hairLayer as keyof CharacterAppearance["hair"];
       renderLayerControls();
     });
   }
 
   for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-skeleton-layer]")) {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       state.selectedSkeletonLayer = button.dataset.skeletonLayer as keyof CharacterAppearance["skeleton"];
       renderLayerControls();
     });
   }
 
   for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-layer-mode]")) {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       state.selectedLayerMode = button.dataset.layerMode as LayerEditorMode;
       renderLayerControls();
     });
@@ -672,25 +688,27 @@ function renderLayerControls(): void {
 
 function renderPixelTools(): void {
   pixelTools.innerHTML = `
-    <button class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill">绘制</button>
-    <button class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase">擦除</button>
-    <button class="secondary" data-tool="mirror-h">水平镜像</button>
-    <button class="secondary" data-tool="mirror-v">垂直镜像</button>
-    <button class="secondary" data-tool="clear">清空图层</button>
-    <button class="secondary" data-tool="copy-facing">复制到同向</button>
-    <button class="secondary" data-tool="export">导出 JSON</button>
-    <button class="secondary" data-tool="import">导入 JSON</button>
+    <button type="button" class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill">绘制</button>
+    <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase">擦除</button>
+    <button type="button" class="secondary" data-tool="mirror-h">水平镜像</button>
+    <button type="button" class="secondary" data-tool="mirror-v">垂直镜像</button>
+    <button type="button" class="secondary" data-tool="clear">清空图层</button>
+    <button type="button" class="secondary" data-tool="copy-facing">复制到同向</button>
+    <button type="button" class="secondary" data-tool="export">导出 JSON</button>
+    <button type="button" class="secondary" data-tool="import">导入 JSON</button>
   `;
 
   for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-paint-mode]")) {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       state.paintMode = button.dataset.paintMode as PaintMode;
       renderPixelTools();
     });
   }
 
   for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       applyPixelTool(button.dataset.tool ?? "");
     });
   }
@@ -741,6 +759,7 @@ function renderPixelEditorGrid(rows: string[]): void {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const cell = document.createElement("button");
+      cell.type = "button";
       cell.className = `pixel-cell ${matrix[y][x] ? "filled" : ""}`;
       cell.dataset.x = String(x);
       cell.dataset.y = String(y);
@@ -1533,8 +1552,8 @@ function updateHud(): void {
   const chunkX = worldToChunk(occupied.x);
   const chunkY = worldToChunk(occupied.y);
   const tile = state.currentTile;
-  const visibleTilesX = Math.round(canvas.width / state.tileScale);
-  const visibleTilesY = Math.round(canvas.height / state.tileScale);
+  const visibleTilesX = TARGET_VISIBLE_TILES_X;
+  const visibleTilesY = TARGET_VISIBLE_TILES_Y;
   const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
     ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
     : PLAYER_WALK_SPEED_TILES_PER_SECOND;
@@ -1549,7 +1568,7 @@ function updateHud(): void {
   const dominant = dominantTerrain();
   debugPanel.innerHTML = `
     <div><b>已加载区块</b> ${state.chunks.size}　<b>缩放</b> ${state.tileScale.toFixed(1)}px/格</div>
-    <div><b>实际渲染</b> 3x3 区块　<b>当前可见</b> 约 ${visibleTilesX} x ${visibleTilesY} 格</div>
+    <div><b>实际渲染</b> ${RENDER_TILE_WINDOW_X} x ${RENDER_TILE_WINDOW_Y} 格　<b>当前可见</b> ${visibleTilesX} x ${visibleTilesY} 格</div>
     <div><b>主要地形</b> ${escapeHtml(dominant || "-")}</div>
     <div><b>最后错误</b> ${escapeHtml(state.lastError || "无")}</div>
   `;
@@ -1582,26 +1601,24 @@ function findTileAt(worldX: number, worldY: number): ChunkTile | undefined {
   return chunk.snapshot.tiles[localY * CHUNK_SIZE + localX];
 }
 
-function getRenderWindow(): { centerChunkX: number; centerChunkY: number } {
-  const occupied = positionToOccupiedTile(state.player);
-  return {
-    centerChunkX: worldToChunk(occupied.x),
-    centerChunkY: worldToChunk(occupied.y),
-  };
-}
-
-function isChunkInRenderWindow(coord: ChunkCoord, centerChunkX: number, centerChunkY: number): boolean {
-  return (
-    coord.mapId === state.mapId &&
-    Math.abs(coord.chunkX - centerChunkX) <= RENDER_CHUNK_RADIUS &&
-    Math.abs(coord.chunkY - centerChunkY) <= RENDER_CHUNK_RADIUS
-  );
+function isChunkInRenderWindow(coord: ChunkCoord): boolean {
+  if (coord.mapId !== state.mapId) return false;
+  const minX = state.camera.x - RENDER_TILE_WINDOW_X / 2;
+  const maxX = state.camera.x + RENDER_TILE_WINDOW_X / 2;
+  const minY = state.camera.y - RENDER_TILE_WINDOW_Y / 2;
+  const maxY = state.camera.y + RENDER_TILE_WINDOW_Y / 2;
+  const chunkMinX = coord.chunkX * CHUNK_SIZE;
+  const chunkMaxX = chunkMinX + CHUNK_SIZE;
+  const chunkMinY = coord.chunkY * CHUNK_SIZE;
+  const chunkMaxY = chunkMinY + CHUNK_SIZE;
+  return chunkMaxX >= minX && chunkMinX <= maxX && chunkMaxY >= minY && chunkMinY <= maxY;
 }
 
 function worldToScreen(x: number, y: number): Position {
+  const viewport = getGameViewport();
   return {
-    x: canvas.width / 2 + (x - state.camera.x) * state.tileScale,
-    y: canvas.height / 2 - (y - state.camera.y) * state.tileScale,
+    x: viewport.x + viewport.width / 2 + (x - state.camera.x) * state.tileScale,
+    y: viewport.y + viewport.height / 2 - (y - state.camera.y) * state.tileScale,
   };
 }
 
@@ -1610,7 +1627,23 @@ function resizeCanvas(): void {
   canvas.height = Math.max(1, Math.floor(window.innerHeight));
   canvas.style.width = `${window.innerWidth}px`;
   canvas.style.height = `${window.innerHeight}px`;
-  state.tileScale = FIXED_TILE_SCALE;
+  state.tileScale = getFittedTileScale();
+}
+
+function getFittedTileScale(): number {
+  return Math.max(1, Math.floor(Math.min(canvas.width / TARGET_VISIBLE_TILES_X, canvas.height / TARGET_VISIBLE_TILES_Y)));
+}
+
+function getGameViewport(): GameViewport {
+  const tileScale = Math.max(1, state.tileScale);
+  const width = TARGET_VISIBLE_TILES_X * tileScale;
+  const height = TARGET_VISIBLE_TILES_Y * tileScale;
+  return {
+    x: Math.floor((canvas.width - width) / 2),
+    y: Math.floor((canvas.height - height) / 2),
+    width,
+    height,
+  };
 }
 
 function coordKey(coord: ChunkCoord): string {
