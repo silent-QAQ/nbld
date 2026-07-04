@@ -64,6 +64,8 @@ type ChunkRender = {
 };
 
 type Facing = "front" | "back" | "left" | "right";
+type LayerEditorMode = "hair" | "skeleton";
+type PaintMode = "fill" | "erase";
 
 type AppState = {
   api?: ApiClient;
@@ -95,7 +97,10 @@ type AppState = {
   availableCharacters: CharacterSummary[];
   selectedCharacterId: string;
   selectedHairLayer: keyof CharacterAppearance["hair"];
+  selectedSkeletonLayer: keyof CharacterAppearance["skeleton"];
+  selectedLayerMode: LayerEditorMode;
   appearanceDraft: CharacterAppearance | null;
+  paintMode: PaintMode;
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -137,6 +142,7 @@ app.innerHTML = `
           <div class="appearance-palette" id="appearancePalette"></div>
           <div class="hair-toolbar" id="hairToolbar"></div>
           <div class="pixel-editor" id="hairGrid"></div>
+          <div class="pixel-tools" id="pixelTools"></div>
           <button id="saveAppearanceButton" class="secondary">保存外观</button>
         </div>
       </div>
@@ -168,6 +174,7 @@ const appearanceGrid = app.querySelector<HTMLElement>("#appearanceGrid")!;
 const appearancePalette = app.querySelector<HTMLElement>("#appearancePalette")!;
 const hairToolbar = app.querySelector<HTMLElement>("#hairToolbar")!;
 const hairGrid = app.querySelector<HTMLElement>("#hairGrid")!;
+const pixelTools = app.querySelector<HTMLElement>("#pixelTools")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
 const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
@@ -201,7 +208,10 @@ const state: AppState = {
   availableCharacters: [],
   selectedCharacterId: "",
   selectedHairLayer: "front",
+  selectedSkeletonLayer: "frontTorso",
+  selectedLayerMode: "hair",
   appearanceDraft: null,
+  paintMode: "fill",
 };
 
 baseUrlInput.value = localStorage.getItem("nbld_http_base_url") ?? window.location.origin;
@@ -424,7 +434,8 @@ function renderAppearanceEditor(character: CharacterSummary): void {
   renderAppearancePreview(state.appearanceDraft);
   renderAppearanceControls(state.appearanceDraft.body);
   renderPaletteControls(state.appearanceDraft.palette);
-  renderHairControls();
+  renderLayerControls();
+  renderPixelTools();
 }
 
 function renderAppearancePreview(appearance: CharacterAppearance): void {
@@ -524,11 +535,11 @@ function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
   }
 }
 
-function renderHairControls(): void {
+function renderLayerControls(): void {
   if (!state.appearanceDraft) return;
   const hair = state.appearanceDraft.hair;
   const hairStyle = state.appearanceDraft.style.hairStyle;
-  const layers: Array<[keyof CharacterAppearance["hair"], string]> = [
+  const hairLayers: Array<[keyof CharacterAppearance["hair"], string]> = [
     ["front", "前层后发"],
     ["frontFg", "前层前发"],
     ["back", "背面后发"],
@@ -538,13 +549,23 @@ function renderHairControls(): void {
     ["right", "右侧后发"],
     ["rightFg", "右侧前发"],
   ];
+  const skeletonLayers: Array<[keyof CharacterAppearance["skeleton"], string]> = [
+    ["frontTorso", "正面骨骼层"],
+    ["backTorso", "背面骨骼层"],
+    ["leftTorso", "左侧骨骼层"],
+    ["rightTorso", "右侧骨骼层"],
+  ];
 
   hairToolbar.innerHTML = `
+    <div class="layer-mode-switch">
+      <button class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair">发型层</button>
+      <button class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton">骨骼层</button>
+    </div>
     <label class="appearance-field">
       <span>发型名</span>
       <input type="text" id="hairStyleInput" value="${hairStyle}">
     </label>
-    ${layers.map(([key, label]) => `<button class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}">${label}</button>`).join("")}
+    ${(state.selectedLayerMode === "hair" ? hairLayers.map(([key, label]) => `<button class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}">${label}</button>`) : skeletonLayers.map(([key, label]) => `<button class="secondary hair-layer-btn ${state.selectedSkeletonLayer === key ? "active" : ""}" data-skeleton-layer="${key}">${label}</button>`)).join("")}
   `;
 
   for (const input of hairToolbar.querySelectorAll<HTMLInputElement>("#hairStyleInput")) {
@@ -557,11 +578,54 @@ function renderHairControls(): void {
   for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-hair-layer]")) {
     button.addEventListener("click", () => {
       state.selectedHairLayer = button.dataset.hairLayer as keyof CharacterAppearance["hair"];
-      renderHairControls();
+      renderLayerControls();
     });
   }
 
-  renderPixelEditorGrid(hair[state.selectedHairLayer] ?? []);
+  for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-skeleton-layer]")) {
+    button.addEventListener("click", () => {
+      state.selectedSkeletonLayer = button.dataset.skeletonLayer as keyof CharacterAppearance["skeleton"];
+      renderLayerControls();
+    });
+  }
+
+  for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-layer-mode]")) {
+    button.addEventListener("click", () => {
+      state.selectedLayerMode = button.dataset.layerMode as LayerEditorMode;
+      renderLayerControls();
+    });
+  }
+
+  const rows = state.selectedLayerMode === "hair"
+    ? hair[state.selectedHairLayer] ?? []
+    : state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? [];
+  renderPixelEditorGrid(rows);
+}
+
+function renderPixelTools(): void {
+  pixelTools.innerHTML = `
+    <button class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill">绘制</button>
+    <button class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase">擦除</button>
+    <button class="secondary" data-tool="mirror-h">水平镜像</button>
+    <button class="secondary" data-tool="mirror-v">垂直镜像</button>
+    <button class="secondary" data-tool="clear">清空图层</button>
+    <button class="secondary" data-tool="copy-facing">复制到同向</button>
+    <button class="secondary" data-tool="export">导出 JSON</button>
+    <button class="secondary" data-tool="import">导入 JSON</button>
+  `;
+
+  for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-paint-mode]")) {
+    button.addEventListener("click", () => {
+      state.paintMode = button.dataset.paintMode as PaintMode;
+      renderPixelTools();
+    });
+  }
+
+  for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
+    button.addEventListener("click", () => {
+      applyPixelTool(button.dataset.tool ?? "");
+    });
+  }
 }
 
 function readAppearanceFromEditor(): CharacterAppearance {
@@ -581,7 +645,7 @@ function readAppearanceFromEditor(): CharacterAppearance {
     base.palette[key] = input.value;
   }
 
-  const hairStyleInput = hairGrid.querySelector<HTMLInputElement>("#hairStyleInput");
+  const hairStyleInput = hairToolbar.querySelector<HTMLInputElement>("#hairStyleInput");
   if (hairStyleInput) base.style.hairStyle = hairStyleInput.value.trim() || "custom";
 
   return base;
@@ -605,20 +669,32 @@ function renderPixelEditorGrid(rows: string[]): void {
   });
 
   hairGrid.innerHTML = "";
+  let dragging = false;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const cell = document.createElement("button");
       cell.className = `pixel-cell ${matrix[y][x] ? "filled" : ""}`;
       cell.dataset.x = String(x);
       cell.dataset.y = String(y);
-      cell.addEventListener("click", () => {
-        matrix[y][x] = !matrix[y][x];
+      const paintCell = () => {
+        matrix[y][x] = state.paintMode === "fill";
         cell.classList.toggle("filled", matrix[y][x]);
         updateDraftHairFromMatrix(matrix);
+      };
+      cell.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        dragging = true;
+        paintCell();
+      });
+      cell.addEventListener("mouseenter", () => {
+        if (dragging) paintCell();
       });
       hairGrid.appendChild(cell);
     }
   }
+  window.addEventListener("mouseup", () => {
+    dragging = false;
+  }, { once: true });
 }
 
 function updateDraftHairFromMatrix(matrix: boolean[][]): void {
@@ -626,8 +702,95 @@ function updateDraftHairFromMatrix(matrix: boolean[][]): void {
   const rows = matrix
     .map((row) => row.map((cell) => (cell ? "1" : "0")).join("").replace(/0+$/g, ""))
     .filter((row) => row.length > 0);
-  state.appearanceDraft.hair[state.selectedHairLayer] = normalizeHairRows(rows);
+  if (state.selectedLayerMode === "hair") {
+    state.appearanceDraft.hair[state.selectedHairLayer] = normalizeHairRows(rows);
+  } else {
+    state.appearanceDraft.skeleton[state.selectedSkeletonLayer] = normalizeHairRows(rows);
+  }
   renderAppearancePreview(state.appearanceDraft);
+}
+
+function applyPixelTool(tool: string): void {
+  if (!state.appearanceDraft) return;
+  const rows = state.selectedLayerMode === "hair"
+    ? state.appearanceDraft.hair[state.selectedHairLayer] ?? []
+    : state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? [];
+  const matrix = rowsToMatrix(rows, 24, 24);
+
+  switch (tool) {
+    case "mirror-h":
+      for (const row of matrix) row.reverse();
+      break;
+    case "mirror-v":
+      matrix.reverse();
+      break;
+    case "clear":
+      for (const row of matrix) row.fill(false);
+      break;
+    case "copy-facing":
+      copyCurrentLayerToSibling(rows);
+      renderLayerControls();
+      return;
+    case "export":
+      void navigator.clipboard.writeText(JSON.stringify(state.appearanceDraft, null, 2));
+      loginError.textContent = "外观 JSON 已复制到剪贴板";
+      return;
+    case "import": {
+      const raw = window.prompt("粘贴外观 JSON");
+      if (!raw) return;
+      try {
+        state.appearanceDraft = JSON.parse(raw) as CharacterAppearance;
+        renderAppearanceEditor({
+          ...(state.availableCharacters.find((item) => item.id === state.selectedCharacterId) as CharacterSummary),
+          appearance: state.appearanceDraft,
+        });
+      } catch {
+        loginError.textContent = "外观 JSON 格式无效";
+      }
+      return;
+    }
+    default:
+      return;
+  }
+
+  updateDraftHairFromMatrix(matrix);
+  renderLayerControls();
+}
+
+function rowsToMatrix(rows: string[], width: number, height: number): boolean[][] {
+  const normalized = normalizeHairRows(rows);
+  return Array.from({ length: height }, (_, y) => {
+    const row = normalized[y] ?? "";
+    return Array.from({ length: width }, (_, x) => row[x] === "1");
+  });
+}
+
+function copyCurrentLayerToSibling(rows: string[]): void {
+  if (!state.appearanceDraft) return;
+  const value = normalizeHairRows(rows);
+  if (state.selectedLayerMode === "hair") {
+    const map: Partial<Record<keyof CharacterAppearance["hair"], keyof CharacterAppearance["hair"]>> = {
+      left: "right",
+      leftFg: "rightFg",
+      right: "left",
+      rightFg: "leftFg",
+      front: "back",
+      frontFg: "backFg",
+      back: "front",
+      backFg: "frontFg",
+    };
+    const target = map[state.selectedHairLayer];
+    if (target) state.appearanceDraft.hair[target] = [...value];
+  } else {
+    const map: Partial<Record<keyof CharacterAppearance["skeleton"], keyof CharacterAppearance["skeleton"]>> = {
+      leftTorso: "rightTorso",
+      rightTorso: "leftTorso",
+      frontTorso: "backTorso",
+      backTorso: "frontTorso",
+    };
+    const target = map[state.selectedSkeletonLayer];
+    if (target) state.appearanceDraft.skeleton[target] = [...value];
+  }
 }
 
 async function saveSelectedCharacterAppearance(): Promise<void> {
@@ -692,6 +855,12 @@ function defaultAppearance() {
       backFg: [],
       leftFg: ["001"],
       rightFg: ["100"],
+    },
+    skeleton: {
+      frontTorso: ["01110", "11111", "11111", "01110"],
+      backTorso: ["01110", "11111", "11111", "01110"],
+      leftTorso: ["1110", "1111", "1111", "0111"],
+      rightTorso: ["0111", "1111", "1111", "1110"],
     },
     palette: {
       skinPrimary: "#f2c199",
@@ -1147,11 +1316,18 @@ function renderAvatarSkeleton(
 
   const hairBackLayer = facing === "front" ? appearance.hair.back : facing === "back" ? appearance.hair.front : facing === "left" ? appearance.hair.left : appearance.hair.right;
   const hairFrontLayer = facing === "front" ? appearance.hair.frontFg : facing === "back" ? appearance.hair.backFg : facing === "left" ? appearance.hair.leftFg : appearance.hair.rightFg;
+  const torsoLayer = facing === "front"
+    ? appearance.skeleton.frontTorso
+    : facing === "back"
+      ? appearance.skeleton.backTorso
+      : facing === "left"
+        ? appearance.skeleton.leftTorso
+        : appearance.skeleton.rightTorso;
 
   drawHairLayer(target, screen.x, topY - 2, hairBackLayer, palette.hairPrimary, palette.hairShadow, scale);
   drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
   drawHairLayer(target, screen.x, topY - 1, hairFrontLayer, palette.hairPrimary, palette.hairShadow, scale);
-  drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary);
+  drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary, torsoLayer, scale);
 
   const armWidth = Math.max(3, body.upperArmWidth * 0.18 * scale);
   const armLength = Math.max(10, (body.upperArmLength + body.forearmLength) * 0.12 * scale);
@@ -1205,7 +1381,13 @@ function drawTorsoLayer(
   fill: string,
   shadow: string,
   trim: string,
+  layer: string[],
+  scale: number,
 ): void {
+  if (layer && layer.length > 0) {
+    drawHairLayer(target, centerX, topY, layer, fill, trim, scale);
+    return;
+  }
   drawPixelRect(target, centerX - shoulder / 2, topY, shoulder, torsoHeight * 0.22, shadow, trim);
   drawPixelRect(target, centerX - chest / 2, topY + torsoHeight * 0.22, chest, torsoHeight * 0.34, fill, trim);
   drawPixelRect(target, centerX - waist / 2, topY + torsoHeight * 0.56, waist, torsoHeight * 0.18, shadow, trim);

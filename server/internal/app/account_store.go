@@ -91,11 +91,11 @@ type Character struct {
 }
 
 type CharacterAppearance struct {
-	Body    CharacterBodyAppearance     `json:"body"`
-	Style   CharacterStyleAppearance    `json:"style"`
-	Hair    CharacterHairAppearance     `json:"hair"`
+	Body     CharacterBodyAppearance     `json:"body"`
+	Style    CharacterStyleAppearance    `json:"style"`
+	Hair     CharacterHairAppearance     `json:"hair"`
 	Skeleton CharacterSkeletonAppearance `json:"skeleton"`
-	Palette CharacterPaletteAppearance  `json:"palette"`
+	Palette  CharacterPaletteAppearance  `json:"palette"`
 }
 
 type CharacterBodyAppearance struct {
