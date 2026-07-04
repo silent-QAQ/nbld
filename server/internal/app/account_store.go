@@ -54,8 +54,10 @@ type accountStore interface {
 	DeleteSession(ctx context.Context, token string) error
 	AppendAuditLog(ctx context.Context, entry AuditLogEntry) error
 	AdminListAccounts(ctx context.Context, limit int) ([]AdminAccountSummary, error)
+	AdminListCharactersByAccount(ctx context.Context, accountID string) ([]Character, error)
 	AdminGetCharacter(ctx context.Context, characterID string) (Character, error)
 	AdminListAuditLogs(ctx context.Context, limit int) ([]AuditLogEntry, error)
+	AdminListAuditLogsByTarget(ctx context.Context, targetType, targetID string, limit int) ([]AuditLogEntry, error)
 }
 
 type Account struct {
@@ -558,6 +560,15 @@ func (s *memoryAccountStore) AdminGetCharacter(_ context.Context, characterID st
 	return Character{}, ErrCharacterNotFound
 }
 
+func (s *memoryAccountStore) AdminListCharactersByAccount(_ context.Context, accountID string) ([]Character, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]Character, len(s.characters[accountID]))
+	copy(out, s.characters[accountID])
+	return out, nil
+}
+
 func (s *memoryAccountStore) AdminListAuditLogs(_ context.Context, limit int) ([]AuditLogEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -570,6 +581,26 @@ func (s *memoryAccountStore) AdminListAuditLogs(_ context.Context, limit int) ([
 	copy(out, s.auditLogs)
 	if len(out) > limit {
 		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (s *memoryAccountStore) AdminListAuditLogsByTarget(_ context.Context, targetType, targetID string, limit int) ([]AuditLogEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	out := make([]AuditLogEntry, 0, limit)
+	for _, entry := range s.auditLogs {
+		if entry.TargetType == targetType && entry.TargetID == targetID {
+			out = append(out, entry)
+		}
+		if len(out) >= limit {
+			break
+		}
 	}
 	return out, nil
 }

@@ -4,16 +4,21 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"nbld/server/internal/protocol"
 )
+
+//go:embed web/admin.html
+var adminHTML string
 
 type Server struct {
 	addr                string
@@ -131,6 +136,13 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("/api/v1/world/seed/random", s.handleRandomSeed)
 	mux.HandleFunc("/api/v1/world/move", s.handleMove)
 	mux.HandleFunc("/api/v1/world/events", s.handleWorldEvents)
+	mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
+	mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccountCharacters)
+	mux.HandleFunc("/api/admin/characters/", s.handleAdminCharacter)
+	mux.HandleFunc("/api/admin/audit-logs", s.handleAdminAuditLogs)
+	mux.HandleFunc("/api/admin/login", s.handleAdminLogin)
+	mux.HandleFunc("/api/admin/force-logout", s.handleAdminForceLogout)
+	mux.HandleFunc("/admin", s.handleAdminPage)
 	mux.HandleFunc("/ws/world", s.handleWorldWebSocket)
 	mux.HandleFunc("/debug/map", s.handleDebugMap)
 	mux.HandleFunc("/debug/map/sample", s.handleDebugMapSample)
@@ -289,6 +301,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Token:     token,
 	})
 
+	if err := s.accounts.SaveSession(r.Context(), SessionRecord{
+		Token:      token,
+		AccountID:  account.ID,
+		LastSeenAt: time.Now().UTC(),
+		Metadata: map[string]any{
+			"loginMethod": "email",
+		},
+	}); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, protocol.LoginResponse{
 		AccountID:  account.ID,
 		Email:      account.Email,
@@ -351,6 +375,17 @@ func (s *Server) handleCreateCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = s.accounts.AppendAuditLog(r.Context(), AuditLogEntry{
+		ActorAccountID: session.AccountID,
+		ActorType:      "account",
+		TargetType:     "character",
+		TargetID:       character.ID,
+		Action:         "character_create",
+		Payload: map[string]any{
+			"name": req.Name,
+		},
+	})
+
 	writeJSON(w, http.StatusCreated, protocol.CharacterMutationResponse{
 		Character: toProtocolCharacter(character),
 	})
@@ -393,6 +428,17 @@ func (s *Server) handleDeleteCharacter(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
+
+	_ = s.accounts.AppendAuditLog(r.Context(), AuditLogEntry{
+		ActorAccountID: session.AccountID,
+		ActorType:      "account",
+		TargetType:     "character",
+		TargetID:       req.CharacterID,
+		Action:         "character_delete",
+		Payload: map[string]any{
+			"deletedAt": time.Now().UTC().Format(time.RFC3339),
+		},
+	})
 
 	writeJSON(w, http.StatusOK, protocol.DeleteCharacterResponse{
 		Character: toProtocolCharacter(character),
@@ -562,6 +608,17 @@ func (s *Server) handleEnterWorld(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = s.accounts.SaveSession(r.Context(), SessionRecord{
+		Token:       session.Token,
+		AccountID:   session.AccountID,
+		CharacterID: character.ID,
+		LastSeenAt:  time.Now().UTC(),
+		Metadata: map[string]any{
+			"worldId": worldID,
+			"mapId":   mapID,
+		},
+	})
+
 	writeJSON(w, http.StatusOK, protocol.EnterWorldResponse{
 		PlayerID:      updated.PlayerID,
 		CharacterID:   updated.CharacterID,
@@ -595,6 +652,7 @@ func (s *Server) handleLeaveWorld(w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
+		_ = s.accounts.DeleteSession(r.Context(), session.Token)
 	}
 
 	removed, ok := s.state.deleteSession(req.Token)
@@ -808,6 +866,205 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+func (s *Server) handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAdmin(w, r) {
+		return
+	}
+
+	accounts, err := s.accounts.AdminListAccounts(r.Context(), 100)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+
+	resp := protocol.AdminAccountsResponse{
+		Accounts: make([]protocol.AdminAccountSummary, 0, len(accounts)),
+	}
+	for _, account := range accounts {
+		resp.Accounts = append(resp.Accounts, protocol.AdminAccountSummary{
+			ID:                   account.ID,
+			Email:                account.Email,
+			Username:             account.Username,
+			ActiveCharacterCount: account.ActiveCharacterCount,
+			CreatedAt:            account.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleAdminAccountCharacters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAdmin(w, r) {
+		return
+	}
+
+	accountID := strings.TrimPrefix(r.URL.Path, "/api/admin/accounts/")
+	accountID = strings.TrimSuffix(accountID, "/characters")
+	if accountID == "" || !strings.HasSuffix(r.URL.Path, "/characters") {
+		http.Error(w, "accountId is required", http.StatusBadRequest)
+		return
+	}
+
+	characters, err := s.accounts.AdminListCharactersByAccount(r.Context(), accountID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, protocol.AdminAccountCharactersResponse{
+		Characters: toProtocolCharacters(characters),
+	})
+}
+
+func (s *Server) handleAdminCharacter(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAdmin(w, r) {
+		return
+	}
+
+	characterID := strings.TrimPrefix(r.URL.Path, "/api/admin/characters/")
+	if characterID == "" {
+		http.Error(w, "characterId is required", http.StatusBadRequest)
+		return
+	}
+
+	character, err := s.accounts.AdminGetCharacter(r.Context(), characterID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, protocol.AdminCharacterResponse{
+		Character: toProtocolCharacter(character),
+	})
+}
+
+func (s *Server) handleAdminAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAdmin(w, r) {
+		return
+	}
+
+	logs, err := s.accounts.AdminListAuditLogs(r.Context(), 100)
+	targetType := r.URL.Query().Get("targetType")
+	targetID := r.URL.Query().Get("targetId")
+	if targetType != "" && targetID != "" {
+		logs, err = s.accounts.AdminListAuditLogsByTarget(r.Context(), targetType, targetID, 100)
+	}
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+
+	resp := protocol.AdminAuditLogsResponse{
+		Logs: make([]protocol.AdminAuditLogEntry, 0, len(logs)),
+	}
+	for _, entry := range logs {
+		resp.Logs = append(resp.Logs, protocol.AdminAuditLogEntry{
+			ActorAccountID: entry.ActorAccountID,
+			ActorType:      entry.ActorType,
+			TargetType:     entry.TargetType,
+			TargetID:       entry.TargetID,
+			Action:         entry.Action,
+			Payload:        entry.Payload,
+			CreatedAt:      entry.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req protocol.AdminLoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json body", http.StatusBadRequest)
+		return
+	}
+
+	expectedUser := os.Getenv("NBLD_ADMIN_USERNAME")
+	expectedPass := os.Getenv("NBLD_ADMIN_PASSWORD")
+	if expectedUser == "" || expectedPass == "" {
+		http.Error(w, "admin credentials not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if req.Username != expectedUser || req.Password != expectedPass {
+		http.Error(w, "admin login invalid", http.StatusUnauthorized)
+		return
+	}
+
+	sessionToken := randomHex(24)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "nbld_admin_session",
+		Value:    sessionToken,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	writeJSON(w, http.StatusOK, protocol.AdminLoginResponse{
+		Status: "ok",
+	})
+}
+
+func (s *Server) handleAdminForceLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAdmin(w, r) {
+		return
+	}
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "session token is required", http.StatusBadRequest)
+		return
+	}
+
+	if session, ok := s.state.deleteSession(token); ok {
+		_ = s.accounts.DeleteSession(r.Context(), token)
+		_ = s.accounts.AppendAuditLog(r.Context(), AuditLogEntry{
+			ActorType:  "admin",
+			TargetType: "session",
+			TargetID:   token,
+			Action:     "force_logout",
+			Payload: map[string]any{
+				"accountId":   session.AccountID,
+				"characterId": session.CharacterID,
+			},
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdminPage(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = io.WriteString(w, adminHTML)
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, v any) {
@@ -1057,6 +1314,19 @@ func (s *Server) requireAccountSession(w http.ResponseWriter, token string) (ses
 	return session, true
 }
 
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	expected := os.Getenv("NBLD_ADMIN_TOKEN")
+	if expected == "" {
+		http.Error(w, "admin token not configured", http.StatusServiceUnavailable)
+		return false
+	}
+	if r.Header.Get("X-Admin-Token") != expected {
+		http.Error(w, "admin token invalid", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
 func toProtocolCharacters(characters []Character) []protocol.CharacterSummary {
 	out := make([]protocol.CharacterSummary, 0, len(characters))
 	for _, character := range characters {
@@ -1175,17 +1445,11 @@ func (s *Server) updateOnlineCharacterPosition(ctx context.Context, accountID, c
 }
 
 func (s *Server) updateOnlineCharacter(ctx context.Context, accountID, characterID string, mutate func(*Character)) error {
-	character, err := s.loadCharacterForWorld(ctx, accountID, characterID)
-	if err != nil {
-		return err
-	}
-
-	mutate(&character)
-	character.UpdatedAt = time.Now().UTC()
-	if err := s.onlineCharacters.StoreCharacter(ctx, accountID, character); err != nil {
-		return err
-	}
-	return s.onlineCharacters.MarkDirty(ctx, accountID, characterID)
+	_, err := s.onlineCharacters.UpdateCharacter(ctx, accountID, characterID, func(character *Character) error {
+		mutate(character)
+		return nil
+	})
+	return err
 }
 
 func (s *Server) flushCharacterNow(ctx context.Context, accountID, characterID string) error {

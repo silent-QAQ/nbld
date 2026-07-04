@@ -22,6 +22,7 @@ type onlineCharacterStore interface {
 	Ping(ctx context.Context) error
 	LoadCharacter(ctx context.Context, accountID, characterID string) (Character, bool, error)
 	StoreCharacter(ctx context.Context, accountID string, character Character) error
+	UpdateCharacter(ctx context.Context, accountID, characterID string, mutate func(*Character) error) (Character, error)
 	MarkDirty(ctx context.Context, accountID, characterID string) error
 	RemoveCharacter(ctx context.Context, accountID, characterID string) error
 	FlushDirty(ctx context.Context, sink accountStore) error
@@ -61,6 +62,25 @@ func (s *memoryOnlineCharacterStore) StoreCharacter(_ context.Context, accountID
 	key := onlineCharacterKey(accountID, character.ID)
 	s.characters[key] = character
 	return nil
+}
+
+func (s *memoryOnlineCharacterStore) UpdateCharacter(_ context.Context, accountID, characterID string, mutate func(*Character) error) (Character, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := onlineCharacterKey(accountID, characterID)
+	character, ok := s.characters[key]
+	if !ok {
+		return Character{}, ErrCharacterNotFound
+	}
+	if err := mutate(&character); err != nil {
+		return Character{}, err
+	}
+	character.Version++
+	character.UpdatedAt = time.Now().UTC()
+	s.characters[key] = character
+	s.dirty[key] = struct{}{}
+	return character, nil
 }
 
 func (s *memoryOnlineCharacterStore) MarkDirty(_ context.Context, accountID, characterID string) error {
@@ -187,6 +207,62 @@ func (s *redisOnlineCharacterStore) StoreCharacter(ctx context.Context, accountI
 	pipe.Expire(ctx, redisAccountCharactersKey(accountID), s.ttl)
 	_, err = pipe.Exec(ctx)
 	return err
+}
+
+func (s *redisOnlineCharacterStore) UpdateCharacter(ctx context.Context, accountID, characterID string, mutate func(*Character) error) (Character, error) {
+	key := redisCharacterPayloadKey(accountID, characterID)
+
+	for attempts := 0; attempts < 5; attempts++ {
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			payload, err := tx.Get(ctx, key).Bytes()
+			if err != nil {
+				if errors.Is(err, redis.Nil) {
+					return ErrCharacterNotFound
+				}
+				return err
+			}
+
+			var character Character
+			if err := json.Unmarshal(payload, &character); err != nil {
+				return err
+			}
+			if err := mutate(&character); err != nil {
+				return err
+			}
+			character.Version++
+			character.UpdatedAt = time.Now().UTC()
+			character.Equipment.syncVisibleArmor()
+
+			updatedPayload, err := json.Marshal(character)
+			if err != nil {
+				return err
+			}
+
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, key, updatedPayload, s.ttl)
+				pipe.SAdd(ctx, redisAccountCharactersKey(accountID), characterID)
+				pipe.Expire(ctx, redisAccountCharactersKey(accountID), s.ttl)
+				pipe.SAdd(ctx, redisDirtyCharactersKey(), onlineCharacterKey(accountID, characterID))
+				pipe.Expire(ctx, redisDirtyCharactersKey(), s.ttl)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			return redis.NewStringResult(string(updatedPayload), nil).Err()
+		}, key)
+		if err == nil {
+			character, _, loadErr := s.LoadCharacter(ctx, accountID, characterID)
+			return character, loadErr
+		}
+		if err == redis.TxFailedErr {
+			continue
+		}
+		return Character{}, err
+	}
+
+	return Character{}, errors.New("failed to update character due to concurrent modifications")
 }
 
 func (s *redisOnlineCharacterStore) MarkDirty(ctx context.Context, accountID, characterID string) error {

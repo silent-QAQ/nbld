@@ -54,6 +54,49 @@ type HealthCheck struct {
 	Error  string `json:"error,omitempty"`
 }
 
+type AdminAccountSummary struct {
+	ID                   string `json:"id"`
+	Email                string `json:"email"`
+	Username             string `json:"username"`
+	ActiveCharacterCount int    `json:"activeCharacterCount"`
+	CreatedAt            string `json:"createdAt"`
+}
+
+type AdminAccountsResponse struct {
+	Accounts []AdminAccountSummary `json:"accounts"`
+}
+
+type AdminCharacterResponse struct {
+	Character CharacterSummary `json:"character"`
+}
+
+type AdminAuditLogEntry struct {
+	ActorAccountID string         `json:"actorAccountId,omitempty"`
+	ActorType      string         `json:"actorType"`
+	TargetType     string         `json:"targetType"`
+	TargetID       string         `json:"targetId"`
+	Action         string         `json:"action"`
+	Payload        map[string]any `json:"payload"`
+	CreatedAt      string         `json:"createdAt"`
+}
+
+type AdminAuditLogsResponse struct {
+	Logs []AdminAuditLogEntry `json:"logs"`
+}
+
+type AdminLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type AdminLoginResponse struct {
+	Status string `json:"status"`
+}
+
+type AdminAccountCharactersResponse struct {
+	Characters []CharacterSummary `json:"characters"`
+}
+
 type EnterWorldRequest struct {
 	Token       string `json:"token"`
 	CharacterID string `json:"characterId,omitempty"`

@@ -126,7 +126,7 @@ func (s *postgresAccountStore) ListCharacters(ctx context.Context, accountID str
 
 	rows, err := s.pool.Query(
 		ctx,
-		`SELECT id, name, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE account_id = $1
 		 ORDER BY created_at ASC`,
@@ -290,7 +290,7 @@ func (s *postgresAccountStore) SoftDeleteCharacter(ctx context.Context, accountI
 		 WHERE account_id = $1
 		   AND id = $2
 		   AND deleted_at IS NULL
-		 RETURNING id, name, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at`,
+		 RETURNING id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at`,
 		accountID,
 		characterID,
 	)
@@ -315,7 +315,7 @@ func (s *postgresAccountStore) GetCharacter(ctx context.Context, accountID, char
 
 	row := s.pool.QueryRow(
 		ctx,
-		`SELECT id, name, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE account_id = $1 AND id = $2`,
 		accountID,
@@ -471,10 +471,35 @@ func (s *postgresAccountStore) AdminListAccounts(ctx context.Context, limit int)
 	return out, rows.Err()
 }
 
+func (s *postgresAccountStore) AdminListCharactersByAccount(ctx context.Context, accountID string) ([]Character, error) {
+	rows, err := s.pool.Query(
+		ctx,
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		 FROM characters
+		 WHERE account_id = $1
+		 ORDER BY created_at ASC`,
+		accountID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]Character, 0)
+	for rows.Next() {
+		character, err := scanCharacter(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, character)
+	}
+	return out, rows.Err()
+}
+
 func (s *postgresAccountStore) AdminGetCharacter(ctx context.Context, characterID string) (Character, error) {
 	row := s.pool.QueryRow(
 		ctx,
-		`SELECT id, name, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
+		`SELECT id, name, version, stats, inventory, warehouse, position, equipment, deleted_at, purge_at, created_at, updated_at
 		 FROM characters
 		 WHERE id = $1`,
 		characterID,
@@ -527,6 +552,46 @@ func (s *postgresAccountStore) AdminListAuditLogs(ctx context.Context, limit int
 	return out, rows.Err()
 }
 
+func (s *postgresAccountStore) AdminListAuditLogsByTarget(ctx context.Context, targetType, targetID string, limit int) ([]AuditLogEntry, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	rows, err := s.pool.Query(
+		ctx,
+		`SELECT actor_account_id, actor_type, target_type, target_id, action, payload, created_at
+		 FROM audit_logs
+		 WHERE target_type = $1 AND target_id = $2
+		 ORDER BY created_at DESC
+		 LIMIT $3`,
+		targetType,
+		targetID,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]AuditLogEntry, 0, limit)
+	for rows.Next() {
+		var entry AuditLogEntry
+		var actorID *string
+		var payload []byte
+		if err := rows.Scan(&actorID, &entry.ActorType, &entry.TargetType, &entry.TargetID, &entry.Action, &payload, &entry.CreatedAt); err != nil {
+			return nil, err
+		}
+		if actorID != nil {
+			entry.ActorAccountID = *actorID
+		}
+		if err := json.Unmarshal(payload, &entry.Payload); err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
+	}
+	return out, rows.Err()
+}
+
 type SessionRecord struct {
 	Token       string
 	AccountID   string
@@ -576,6 +641,7 @@ func scanCharacter(scanner characterScanner) (Character, error) {
 	err := scanner.Scan(
 		&character.ID,
 		&character.Name,
+		&character.Version,
 		&statsData,
 		&inventoryData,
 		&warehouseData,
