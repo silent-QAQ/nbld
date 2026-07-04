@@ -107,47 +107,64 @@ if (!app) throw new Error("missing #app");
 app.innerHTML = `
   <div class="shell">
     <canvas class="world-canvas"></canvas>
-    <section class="login-panel">
-      <div class="auth-page" id="authPage">
+    <section class="modal login-panel" id="loginModal">
+      <div class="auth-page">
         <h1>NBLD H5 客户端</h1>
-        <p>使用邮箱注册/登录。</p>
+        <p>使用邮箱登录进入游戏。</p>
         <label for="baseUrl">服务端地址</label>
         <input id="baseUrl" spellcheck="false" />
         <label for="emailInput">邮箱</label>
         <input id="emailInput" spellcheck="false" />
-        <label for="usernameInput">用户名（注册时使用）</label>
-        <input id="usernameInput" spellcheck="false" />
         <label for="passwordInput">密码</label>
         <input id="passwordInput" type="password" />
-        <label for="confirmPasswordInput">再次输入密码（注册时使用）</label>
-        <input id="confirmPasswordInput" type="password" />
         <div class="login-actions">
           <button id="loginButton">邮箱登录</button>
-          <button id="registerButton" class="secondary">注册账号</button>
+          <button id="openRegisterButton" class="secondary">前往注册</button>
         </div>
       </div>
-      <div class="character-panel hidden" id="characterPanel">
+      <div class="error" id="loginError"></div>
+    </section>
+    <section class="modal login-panel hidden" id="registerModal">
+      <div class="auth-page">
+        <h1>注册账号</h1>
+        <p>创建账号后返回选角。</p>
+        <label for="usernameInput">用户名</label>
+        <input id="usernameInput" spellcheck="false" />
+        <label for="confirmPasswordInput">再次输入密码</label>
+        <input id="confirmPasswordInput" type="password" />
+        <div class="login-actions">
+          <button id="registerButton">注册账号</button>
+          <button id="backToLoginButton" class="secondary">返回登录</button>
+        </div>
+      </div>
+    </section>
+    <section class="modal login-panel hidden" id="characterModal">
+      <div class="character-panel">
         <div class="character-header">
           <strong id="accountSummary">未登录</strong>
-          <button id="logoutButton" class="secondary">退出登录 / 返回登录页</button>
+          <button id="logoutButton" class="secondary">退出登录</button>
         </div>
         <p class="section-hint">选择角色进入世界，或创建新角色。</p>
         <div class="character-list" id="characterList"></div>
         <label for="characterNameInput">新角色名</label>
         <input id="characterNameInput" spellcheck="false" />
         <button id="createCharacterButton" class="secondary">创建角色</button>
-        <div class="appearance-editor hidden" id="appearanceEditor">
-          <h3>角色外观编辑</h3>
-          <div class="appearance-preview" id="appearancePreview"></div>
-          <div class="appearance-grid" id="appearanceGrid"></div>
-          <div class="appearance-palette" id="appearancePalette"></div>
-          <div class="hair-toolbar" id="hairToolbar"></div>
-          <div class="pixel-editor" id="hairGrid"></div>
-          <div class="pixel-tools" id="pixelTools"></div>
-          <button id="saveAppearanceButton" class="secondary">保存外观</button>
+      </div>
+    </section>
+    <section class="modal login-panel hidden" id="appearanceModal">
+      <div class="appearance-editor">
+        <h3>角色外观编辑</h3>
+        <div class="appearance-preview" id="appearancePreview"></div>
+        <div class="appearance-grid" id="appearanceGrid"></div>
+        <div class="appearance-palette" id="appearancePalette"></div>
+        <div class="hair-toolbar" id="hairToolbar"></div>
+        <div class="pixel-editor" id="hairGrid"></div>
+        <div class="pixel-tools" id="pixelTools"></div>
+        <div class="login-actions">
+          <button id="saveAppearanceButton">保存外观</button>
+          <button id="closeAppearanceButton" class="secondary">关闭</button>
         </div>
       </div>
-      <div class="error" id="loginError"></div>
     </section>
     <section class="hud hidden"></section>
     <section class="debug-panel hidden"></section>
@@ -157,11 +174,15 @@ app.innerHTML = `
 
 const canvas = app.querySelector<HTMLCanvasElement>(".world-canvas")!;
 const ctx = canvas.getContext("2d", { alpha: false })!;
-const loginPanel = app.querySelector<HTMLElement>(".login-panel")!;
-const authPage = app.querySelector<HTMLElement>("#authPage")!;
+const loginModal = app.querySelector<HTMLElement>("#loginModal")!;
+const registerModal = app.querySelector<HTMLElement>("#registerModal")!;
+const characterModal = app.querySelector<HTMLElement>("#characterModal")!;
+const appearanceModal = app.querySelector<HTMLElement>("#appearanceModal")!;
 const loginError = app.querySelector<HTMLElement>("#loginError")!;
 const loginButton = app.querySelector<HTMLButtonElement>("#loginButton")!;
+const openRegisterButton = app.querySelector<HTMLButtonElement>("#openRegisterButton")!;
 const registerButton = app.querySelector<HTMLButtonElement>("#registerButton")!;
+const backToLoginButton = app.querySelector<HTMLButtonElement>("#backToLoginButton")!;
 const baseUrlInput = app.querySelector<HTMLInputElement>("#baseUrl")!;
 const emailInput = app.querySelector<HTMLInputElement>("#emailInput")!;
 const usernameInput = app.querySelector<HTMLInputElement>("#usernameInput")!;
@@ -178,6 +199,7 @@ const hairToolbar = app.querySelector<HTMLElement>("#hairToolbar")!;
 const hairGrid = app.querySelector<HTMLElement>("#hairGrid")!;
 const pixelTools = app.querySelector<HTMLElement>("#pixelTools")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
+const closeAppearanceButton = app.querySelector<HTMLButtonElement>("#closeAppearanceButton")!;
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
 const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
@@ -221,8 +243,18 @@ loginButton.addEventListener("click", () => {
   void loginWithEmail();
 });
 
+openRegisterButton.addEventListener("click", () => {
+  loginModal.classList.add("hidden");
+  registerModal.classList.remove("hidden");
+});
+
 registerButton.addEventListener("click", () => {
   void registerWithEmail();
+});
+
+backToLoginButton.addEventListener("click", () => {
+  registerModal.classList.add("hidden");
+  loginModal.classList.remove("hidden");
 });
 
 app.querySelector<HTMLButtonElement>("#createCharacterButton")!.addEventListener("click", () => {
@@ -235,6 +267,10 @@ logoutButton.addEventListener("click", () => {
 
 saveAppearanceButton.addEventListener("click", () => {
   void saveSelectedCharacterAppearance();
+});
+
+closeAppearanceButton.addEventListener("click", () => {
+  appearanceModal.classList.add("hidden");
 });
 
 baseUrlInput.addEventListener("keydown", (event) => {
@@ -335,8 +371,9 @@ async function loadCharacters(): Promise<void> {
   const roster = await state.api.characters(state.token);
   state.availableCharacters = roster.active ?? [];
   renderCharacterList(state.availableCharacters);
-  authPage.classList.add("hidden");
-  characterPanel.classList.remove("hidden");
+  loginModal.classList.add("hidden");
+  registerModal.classList.add("hidden");
+  characterModal.classList.remove("hidden");
   accountSummary.textContent = `${state.accountUsername || state.accountEmail} (${state.accountId})`;
 
   if (state.selectedCharacterId) {
@@ -420,6 +457,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
 
 function renderAppearanceEditor(character: CharacterSummary): void {
   appearanceEditor.classList.remove("hidden");
+  appearanceModal.classList.remove("hidden");
   state.selectedCharacterId = character.id;
   state.appearanceDraft = structuredClone(character.appearance);
   renderAppearancePreview(state.appearanceDraft);
@@ -911,7 +949,10 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     await refreshChunks(true);
     connectWebSocket(state.api);
 
-    loginPanel.classList.add("hidden");
+    loginModal.classList.add("hidden");
+    registerModal.classList.add("hidden");
+    characterModal.classList.add("hidden");
+    appearanceModal.classList.add("hidden");
     hud.classList.remove("hidden");
     debugPanel.classList.remove("hidden");
     helpPanel.classList.remove("hidden");
@@ -997,9 +1038,10 @@ function logoutToLogin(): void {
   state.lastChunkKey = "";
 
   localStorage.removeItem("nbld_session");
-  loginPanel.classList.remove("hidden");
-  authPage.classList.remove("hidden");
-  characterPanel.classList.add("hidden");
+  loginModal.classList.remove("hidden");
+  registerModal.classList.add("hidden");
+  characterModal.classList.add("hidden");
+  appearanceModal.classList.add("hidden");
   hud.classList.add("hidden");
   debugPanel.classList.add("hidden");
   helpPanel.classList.add("hidden");

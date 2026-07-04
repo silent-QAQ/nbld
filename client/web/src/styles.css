@@ -54,6 +54,10 @@ input {
   backdrop-filter: blur(10px);
 }
 
+.modal {
+  z-index: 20;
+}
+
 .login-panel {
   left: 50%;
   top: 50%;
