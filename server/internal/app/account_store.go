@@ -484,11 +484,11 @@ func validateHexColor(value string) bool {
 }
 
 func validateHairLayer(rows []string) bool {
-	if len(rows) > 24 {
+	if len(rows) > 60 {
 		return false
 	}
 	for _, row := range rows {
-		if len(row) > 24 {
+		if len(row) > 30 {
 			return false
 		}
 		for _, ch := range row {

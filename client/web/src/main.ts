@@ -27,6 +27,8 @@ const TARGET_VISIBLE_TILES_Y = 22.5;
 const RENDER_TILE_WINDOW_X = 120;
 const RENDER_TILE_WINDOW_Y = 120;
 const CHUNK_PREFETCH_MARGIN_TILES = 20;
+const AVATAR_EDITOR_WIDTH = 30;
+const AVATAR_EDITOR_HEIGHT = 60;
 const PLAYER_RENDER_WIDTH_PX = 28;
 const PLAYER_RENDER_HEIGHT_PX = 58;
 const PLAYER_COLLISION_SIZE_TILES = 1;
@@ -65,7 +67,7 @@ type ChunkRender = {
 
 type Facing = "front" | "back" | "left" | "right";
 type LayerEditorMode = "hair" | "skeleton";
-type PaintMode = "fill" | "erase";
+type PaintMode = "fill" | "erase" | "bucket";
 type GameViewport = { x: number; y: number; width: number; height: number };
 
 type AppState = {
@@ -101,8 +103,12 @@ type AppState = {
   selectedHairLayer: keyof CharacterAppearance["hair"];
   selectedSkeletonLayer: keyof CharacterAppearance["skeleton"];
   selectedLayerMode: LayerEditorMode;
+  appearanceFacing: Facing;
+  showHairLayer: boolean;
   appearanceDraft: CharacterAppearance | null;
   paintMode: PaintMode;
+  paintColor: string;
+  recentPaintColors: string[];
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -165,11 +171,13 @@ app.innerHTML = `
           <div class="appearance-left">
             <div class="appearance-preview" id="appearancePreview"></div>
             <div class="appearance-grid" id="appearanceGrid"></div>
-            <div class="appearance-palette" id="appearancePalette"></div>
+          </div>
+          <div class="appearance-center">
+            <canvas class="pixel-editor-canvas" id="hairGrid"></canvas>
           </div>
           <div class="appearance-right">
             <div class="hair-toolbar" id="hairToolbar"></div>
-            <div class="pixel-editor" id="hairGrid"></div>
+            <div class="appearance-palette" id="appearancePalette"></div>
             <div class="pixel-tools" id="pixelTools"></div>
           </div>
         </div>
@@ -213,7 +221,7 @@ const appearancePreview = app.querySelector<HTMLElement>("#appearancePreview")!;
 const appearanceGrid = app.querySelector<HTMLElement>("#appearanceGrid")!;
 const appearancePalette = app.querySelector<HTMLElement>("#appearancePalette")!;
 const hairToolbar = app.querySelector<HTMLElement>("#hairToolbar")!;
-const hairGrid = app.querySelector<HTMLElement>("#hairGrid")!;
+const hairGrid = app.querySelector<HTMLCanvasElement>("#hairGrid")!;
 const pixelTools = app.querySelector<HTMLElement>("#pixelTools")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
 const closeAppearanceButton = app.querySelector<HTMLButtonElement>("#closeAppearanceButton")!;
@@ -252,8 +260,17 @@ const state: AppState = {
   selectedHairLayer: "front",
   selectedSkeletonLayer: "frontTorso",
   selectedLayerMode: "hair",
+  appearanceFacing: "front",
+  showHairLayer: true,
   appearanceDraft: null,
   paintMode: "fill",
+  paintColor: "#ff4040",
+  recentPaintColors: [
+    "#ff4040", "#b42222", "#f2c199", "#d89b72", "#2d1a13",
+    "#140b08", "#cfd8e3", "#7e8794", "#ffffff", "#000000",
+    "#d9b35f", "#8fb6ff", "#5cc84a", "#2f6e35", "#9b6b3d",
+    "#7a7f6a", "#67d1ff", "#ff77aa", "#8d6bff", "#f5e663",
+  ],
 };
 
 baseUrlInput.value = normalizeBaseUrl(localStorage.getItem("nbld_http_base_url") ?? defaultApiBaseUrl());
@@ -533,42 +550,36 @@ async function openCreateCharacterWithAppearance(): Promise<void> {
 }
 
 function renderAppearancePreview(appearance: CharacterAppearance): void {
-  const normalized = normalizeAppearance(appearance);
-  const previewCharacter = {
-    ...currentAppearanceCharacter(),
-    appearance: normalized,
-  };
-  const cards: Array<[string, Facing]> = [
-    ["正面", "front"],
-    ["背面", "back"],
-    ["左侧", "left"],
-    ["右侧", "right"],
+  state.appearanceDraft = normalizeAppearance(appearance);
+  const views: Array<[Facing, string]> = [
+    ["front", "正面"],
+    ["back", "背面"],
+    ["left", "左侧"],
+    ["right", "右侧"],
   ];
+  appearancePreview.innerHTML = `
+    ${views.map(([facing, label]) => `<button type="button" class="secondary hair-layer-btn ${state.appearanceFacing === facing ? "active" : ""}" data-facing="${facing}" aria-pressed="${state.appearanceFacing === facing}">${label}</button>`).join("")}
+    <button type="button" class="secondary hair-layer-btn ${state.showHairLayer ? "active" : ""}" data-toggle-hair aria-pressed="${state.showHairLayer}">${state.showHairLayer ? "隐藏发层" : "显示发层"}</button>
+  `;
 
-  appearancePreview.innerHTML = "";
-  for (const [label, facing] of cards) {
-    const card = document.createElement("div");
-    card.className = "appearance-card";
-
-    const title = document.createElement("strong");
-    title.textContent = label;
-
-    const preview = document.createElement("canvas");
-    preview.width = 96;
-    preview.height = 112;
-    preview.className = "appearance-card-canvas";
-    const previewCtx = preview.getContext("2d", { alpha: true })!;
-    previewCtx.imageSmoothingEnabled = false;
-    renderAvatarSkeleton(previewCtx, { x: 48, y: 94 }, previewCharacter, facing, true, {
-      leftArm: 0,
-      rightArm: 0,
-      leftLeg: 0,
-      rightLeg: 0,
+  for (const button of appearancePreview.querySelectorAll<HTMLButtonElement>("[data-facing]")) {
+    button.addEventListener("click", () => {
+      state.appearanceFacing = button.dataset.facing as Facing;
+      syncSelectedLayersToFacing();
+      renderAppearanceEditor({
+        ...currentAppearanceCharacter(),
+        appearance: state.appearanceDraft ?? defaultAppearance(),
+      });
     });
-
-    card.append(title, preview);
-    appearancePreview.appendChild(card);
   }
+
+  appearancePreview.querySelector<HTMLButtonElement>("[data-toggle-hair]")?.addEventListener("click", () => {
+    state.showHairLayer = !state.showHairLayer;
+    renderAppearanceEditor({
+      ...currentAppearanceCharacter(),
+      appearance: state.appearanceDraft ?? defaultAppearance(),
+    });
+  });
 }
 
 function renderDirectionCard(label: string, body: CharacterBodyAppearance, facing: Facing): string {
@@ -619,7 +630,8 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
   appearanceGrid.innerHTML = fields.map(([key, label, min, max]) => `
     <label class="appearance-field">
       <span>${label}</span>
-      <input type="number" data-appearance-key="${key}" data-min="${min}" data-max="${max}" value="${body[key]}">
+      <input type="range" data-appearance-key="${key}" data-min="${min}" data-max="${max}" min="${min}" max="${max}" value="${body[key]}">
+      <output>${body[key]}</output>
     </label>
   `).join("");
 
@@ -627,71 +639,47 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
     input.addEventListener("input", () => {
       if (!state.appearanceDraft) return;
       state.appearanceDraft = readAppearanceFromEditor();
-      renderAppearancePreview(state.appearanceDraft);
+      const output = input.parentElement?.querySelector("output");
+      if (output) output.textContent = input.value;
+      renderPixelEditorGrid(getActiveLayerRows());
     });
   }
 }
 
 function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
-  const fields: Array<[keyof CharacterAppearance["palette"], string]> = [
-    ["skinPrimary", "肤色主色"],
-    ["skinShadow", "肤色阴影"],
-    ["hairPrimary", "发色主色"],
-    ["hairShadow", "发色阴影"],
-    ["clothPrimary", "服装主色"],
-    ["clothShadow", "服装阴影"],
-    ["metalPrimary", "金属主色"],
-    ["metalShadow", "金属阴影"],
-  ];
-
-  appearancePalette.innerHTML = fields.map(([key, label]) => `
+  state.paintColor = state.selectedLayerMode === "hair" ? palette.hairPrimary : palette.clothPrimary;
+  appearancePalette.innerHTML = `
     <label class="appearance-field">
-      <span>${label}</span>
-      <input type="color" data-palette-key="${key}" value="${palette[key]}">
+      <span>当前颜料</span>
+      <input type="color" id="paintColorInput" value="${state.paintColor}">
     </label>
-  `).join("");
+  `;
 
-  for (const input of appearancePalette.querySelectorAll<HTMLInputElement>("input[data-palette-key]")) {
-    input.addEventListener("input", () => {
-      if (!state.appearanceDraft) return;
-      state.appearanceDraft = readAppearanceFromEditor();
-      renderAppearancePreview(state.appearanceDraft);
-    });
-  }
+  appearancePalette.querySelector<HTMLInputElement>("#paintColorInput")?.addEventListener("input", (event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    state.paintColor = input.value;
+    applyPaintColorToPalette(input.value);
+    pushRecentPaintColor(input.value);
+    renderPixelEditorGrid(getActiveLayerRows());
+    renderPixelTools();
+  });
 }
 
 function renderLayerControls(): void {
   if (!state.appearanceDraft) return;
   state.appearanceDraft = normalizeAppearance(state.appearanceDraft);
-  const hair = state.appearanceDraft.hair;
   const hairStyle = state.appearanceDraft.style.hairStyle;
-  const hairLayers: Array<[keyof CharacterAppearance["hair"], string]> = [
-    ["front", "前层后发"],
-    ["frontFg", "前层前发"],
-    ["back", "背面后发"],
-    ["backFg", "背面前发"],
-    ["left", "左侧后发"],
-    ["leftFg", "左侧前发"],
-    ["right", "右侧后发"],
-    ["rightFg", "右侧前发"],
-  ];
-  const skeletonLayers: Array<[keyof CharacterAppearance["skeleton"], string]> = [
-    ["frontTorso", "正面骨骼层"],
-    ["backTorso", "背面骨骼层"],
-    ["leftTorso", "左侧骨骼层"],
-    ["rightTorso", "右侧骨骼层"],
-  ];
+  syncSelectedLayersToFacing();
 
   hairToolbar.innerHTML = `
     <div class="layer-mode-switch">
-      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair" aria-pressed="${state.selectedLayerMode === "hair"}">发型层</button>
       <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton" aria-pressed="${state.selectedLayerMode === "skeleton"}">骨骼层</button>
+      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair" aria-pressed="${state.selectedLayerMode === "hair"}">发层</button>
     </div>
     <label class="appearance-field">
       <span>发型名</span>
       <input type="text" id="hairStyleInput" value="${hairStyle}">
     </label>
-    ${(state.selectedLayerMode === "hair" ? hairLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedHairLayer === key ? "active" : ""}" data-hair-layer="${key}" aria-pressed="${state.selectedHairLayer === key}">${label}</button>`) : skeletonLayers.map(([key, label]) => `<button type="button" class="secondary hair-layer-btn ${state.selectedSkeletonLayer === key ? "active" : ""}" data-skeleton-layer="${key}" aria-pressed="${state.selectedSkeletonLayer === key}">${label}</button>`)).join("")}
   `;
 
   for (const input of hairToolbar.querySelectorAll<HTMLInputElement>("#hairStyleInput")) {
@@ -701,46 +689,29 @@ function renderLayerControls(): void {
     });
   }
 
-  for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-hair-layer]")) {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      state.selectedHairLayer = button.dataset.hairLayer as keyof CharacterAppearance["hair"];
-      renderLayerControls();
-    });
-  }
-
-  for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-skeleton-layer]")) {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      state.selectedSkeletonLayer = button.dataset.skeletonLayer as keyof CharacterAppearance["skeleton"];
-      renderLayerControls();
-    });
-  }
-
   for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-layer-mode]")) {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       state.selectedLayerMode = button.dataset.layerMode as LayerEditorMode;
-      renderLayerControls();
+      renderAppearanceEditor({
+        ...currentAppearanceCharacter(),
+        appearance: state.appearanceDraft ?? defaultAppearance(),
+      });
     });
   }
 
-  const rows = state.selectedLayerMode === "hair"
-    ? hair[state.selectedHairLayer] ?? []
-    : state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? [];
-  renderPixelEditorGrid(rows);
+  renderPixelEditorGrid(getActiveLayerRows());
 }
 
 function renderPixelTools(): void {
   pixelTools.innerHTML = `
-    <button type="button" class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill" aria-pressed="${state.paintMode === "fill"}">绘制</button>
-    <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase" aria-pressed="${state.paintMode === "erase"}">擦除</button>
-    <button type="button" class="secondary" data-tool="mirror-h">水平镜像</button>
-    <button type="button" class="secondary" data-tool="mirror-v">垂直镜像</button>
-    <button type="button" class="secondary" data-tool="clear">清空图层</button>
-    <button type="button" class="secondary" data-tool="copy-facing">复制到同向</button>
-    <button type="button" class="secondary" data-tool="export">导出 JSON</button>
-    <button type="button" class="secondary" data-tool="import">导入 JSON</button>
+    <button type="button" class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill" aria-pressed="${state.paintMode === "fill"}">画笔</button>
+    <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase" aria-pressed="${state.paintMode === "erase"}">橡皮</button>
+    <button type="button" class="secondary ${state.paintMode === "bucket" ? "active" : ""}" data-paint-mode="bucket" aria-pressed="${state.paintMode === "bucket"}">涂料桶</button>
+    <button type="button" class="secondary" data-tool="clear">清空</button>
+    <div class="recent-colors">
+      ${state.recentPaintColors.slice(0, 20).map((color) => `<button type="button" class="color-swatch" data-color="${color}" style="background:${color}" aria-label="${color}"></button>`).join("")}
+    </div>
   `;
 
   for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-paint-mode]")) {
@@ -755,6 +726,16 @@ function renderPixelTools(): void {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       applyPixelTool(button.dataset.tool ?? "");
+    });
+  }
+
+  for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-color]")) {
+    button.addEventListener("click", () => {
+      const color = button.dataset.color ?? state.paintColor;
+      state.paintColor = color;
+      applyPaintColorToPalette(color);
+      renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
+      renderPixelEditorGrid(getActiveLayerRows());
     });
   }
 }
