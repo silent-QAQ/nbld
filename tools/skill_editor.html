@@ -474,6 +474,10 @@
               <input id="skillName" value="突进穿刺">
             </div>
             <div class="field">
+              <label for="skillGroup">技能组</label>
+              <input id="skillGroup" value="combat.spear">
+            </div>
+            <div class="field">
               <label for="slotType">槽位</label>
               <select id="slotType">
                 <option value="mainhand_active">主手主动</option>
@@ -547,6 +551,26 @@
               <select id="targeter"></select>
             </div>
             <div class="field">
+              <label for="targetRange">目标距离</label>
+              <input id="targetRange" type="number" min="0" step="0.1" value="4">
+            </div>
+            <div class="field">
+              <label for="targetRadius">目标半径</label>
+              <input id="targetRadius" type="number" min="0" step="0.1" value="0">
+            </div>
+            <div class="field">
+              <label for="targetAngle">目标角度</label>
+              <input id="targetAngle" type="number" min="0" step="1" value="0">
+            </div>
+            <div class="field">
+              <label for="targetWidth">目标宽度</label>
+              <input id="targetWidth" type="number" min="0" step="0.1" value="0.6">
+            </div>
+            <div class="field">
+              <label for="maxTargets">目标上限</label>
+              <input id="maxTargets" type="number" min="1" step="1" value="1">
+            </div>
+            <div class="field">
               <label for="chance">触发几率</label>
               <input id="chance" type="number" min="0" max="1" step="0.01" value="1">
             </div>
@@ -573,6 +597,10 @@
         <div class="card">
           <h3>量化条件</h3>
           <div class="grid">
+            <div class="field">
+              <label for="conditionScope">作用域</label>
+              <select id="conditionScope"></select>
+            </div>
             <div class="field">
               <label for="conditionType">条件类型</label>
               <select id="conditionType"></select>
@@ -671,6 +699,13 @@
       ["owner", "召唤者"]
     ];
 
+    const conditionScopes = [
+      ["caster", "施法者"],
+      ["target", "目标"],
+      ["skill", "技能"],
+      ["world", "场景"]
+    ];
+
     const conditionTypes = [
       ["target_hp_ratio", "目标血量比例", "ratio"],
       ["self_hp_ratio", "自身血量比例", "ratio"],
@@ -684,7 +719,10 @@
       ["offhand", "副手类型", "tag"],
       ["talent", "天赋激活", "tag"],
       ["cooldown_ready", "技能冷却完成", "skill"],
-      ["facing_angle", "朝向角度", "angle"]
+      ["facing_angle", "朝向角度", "angle"],
+      ["line_of_sight", "视线无遮挡", "bool"],
+      ["terrain_tag", "地形标签", "tag"],
+      ["state_tag", "状态标签", "tag"]
     ];
 
     const weapons = [
@@ -848,6 +886,16 @@
         ]
       },
       {
+        id: "meta",
+        title: "技能组",
+        hint: "MetaSkill",
+        params: [
+          ["skill_ref", "调用技能", "text", "skill_spear_followup_001"],
+          ["mode", "模式", "select", "async", [["sync", "同步"], ["async", "异步"], ["queued", "排队"]]],
+          ["max_depth", "最大深度", "number", "1"]
+        ]
+      },
+      {
         id: "event",
         title: "事件",
         hint: "Event",
@@ -869,6 +917,13 @@
           name: "穿刺命中",
           trigger: "onCast",
           targeter: "line",
+          targeter_params: {
+            range: 4.5,
+            radius: 0,
+            angle: 0,
+            width: 0.6,
+            max_targets: 3
+          },
           chance: 1,
           delay: 0.18,
           repeat: 1,
@@ -886,6 +941,13 @@
           name: "破军追击",
           trigger: "onHit",
           targeter: "hit",
+          targeter_params: {
+            range: 0,
+            radius: 0,
+            angle: 0,
+            width: 0,
+            max_targets: 1
+          },
           chance: 1,
           delay: 0,
           repeat: 1,
@@ -898,8 +960,8 @@
             extra_damage: true
           },
           conditions: [
-            { id: uid("cond"), type: "target_hp_ratio", operator: "lt", value: 0.35, param: "" },
-            { id: uid("cond"), type: "talent", operator: "eq", value: 1, param: "tianqu_pojun_core" }
+            { id: uid("cond"), scope: "target", type: "target_hp_ratio", operator: "lt", value: 0.35, param: "" },
+            { id: uid("cond"), scope: "skill", type: "talent", operator: "eq", value: 1, param: "tianqu_pojun_core" }
           ]
         }
       ]
@@ -918,6 +980,7 @@
       fillSelect($("globalTrigger"), triggers, "onCast");
       fillSelect($("stepTrigger"), triggers, "onCast");
       fillSelect($("targeter"), targeters, "line");
+      fillSelect($("conditionScope"), conditionScopes, "target");
       fillSelect($("conditionType"), conditionTypes.map(([id, label]) => [id, label]), "target_hp_ratio");
       renderTagChips("weaponTags", weapons, ["spear"]);
       renderTagChips("offhandTags", offhands, []);
@@ -954,7 +1017,7 @@
     }
 
     function bindEvents() {
-      ["skillId", "skillName", "slotType", "skillType", "cooldown", "staminaCost", "manaCost", "globalTrigger", "skillDesc"].forEach(id => {
+      ["skillId", "skillName", "skillGroup", "slotType", "skillType", "cooldown", "staminaCost", "manaCost", "globalTrigger", "skillDesc"].forEach(id => {
         $(id).addEventListener("input", render);
       });
 
@@ -969,8 +1032,12 @@
       $("addCondition").addEventListener("click", addCondition);
       $("clearConditions").addEventListener("click", clearConditions);
 
-      ["stepName", "stepTrigger", "targeter", "chance", "delay", "repeat"].forEach(id => {
+      ["stepName", "stepTrigger", "targeter", "targetRange", "targetRadius", "targetAngle", "targetWidth", "maxTargets", "chance", "delay", "repeat"].forEach(id => {
         $(id).addEventListener("input", updateSelectedStep);
+      });
+      $("targeter").addEventListener("change", () => {
+        writeTargeterParams(defaultTargeterParams($("targeter").value));
+        updateSelectedStep();
       });
 
       document.querySelector(".tabs").addEventListener("click", event => {
@@ -995,6 +1062,40 @@
       return params;
     }
 
+    function defaultTargeterParams(targeter) {
+      const presets = {
+        self: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 },
+        current: { range: 8, radius: 0, angle: 0, width: 0, max_targets: 1 },
+        hit: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 },
+        line: { range: 4, radius: 0, angle: 0, width: 0.6, max_targets: 3 },
+        cone: { range: 3.5, radius: 0, angle: 70, width: 0, max_targets: 5 },
+        circle: { range: 0, radius: 3, angle: 0, width: 0, max_targets: 6 },
+        nearEnemies: { range: 0, radius: 5, angle: 0, width: 0, max_targets: 5 },
+        nearAllies: { range: 0, radius: 5, angle: 0, width: 0, max_targets: 5 },
+        point: { range: 8, radius: 2, angle: 0, width: 0, max_targets: 6 },
+        owner: { range: 0, radius: 0, angle: 0, width: 0, max_targets: 1 }
+      };
+      return { ...(presets[targeter] || presets.current) };
+    }
+
+    function readTargeterParams() {
+      return {
+        range: Math.max(0, number($("targetRange").value)),
+        radius: Math.max(0, number($("targetRadius").value)),
+        angle: Math.max(0, number($("targetAngle").value)),
+        width: Math.max(0, number($("targetWidth").value)),
+        max_targets: Math.max(1, Math.floor(number($("maxTargets").value)))
+      };
+    }
+
+    function writeTargeterParams(params) {
+      $("targetRange").value = params.range;
+      $("targetRadius").value = params.radius;
+      $("targetAngle").value = params.angle;
+      $("targetWidth").value = params.width;
+      $("maxTargets").value = params.max_targets;
+    }
+
     function addStep() {
       const mechanic = currentMechanic();
       const step = {
@@ -1002,6 +1103,7 @@
         name: "新技能步骤",
         trigger: $("globalTrigger").value,
         targeter: "current",
+        targeter_params: defaultTargeterParams("current"),
         chance: 1,
         delay: 0,
         repeat: 1,
@@ -1038,6 +1140,7 @@
       step.name = $("stepName").value;
       step.trigger = $("stepTrigger").value;
       step.targeter = $("targeter").value;
+      step.targeter_params = readTargeterParams();
       step.chance = clamp01($("chance").value);
       step.delay = number($("delay").value);
       step.repeat = Math.max(1, Math.floor(number($("repeat").value)));
@@ -1057,6 +1160,7 @@
       if (!step) return;
       step.conditions.push({
         id: uid("cond"),
+        scope: $("conditionScope").value,
         type: $("conditionType").value,
         operator: $("conditionOperator").value,
         value: number($("conditionValue").value),
@@ -1086,7 +1190,7 @@
         const selected = step.id === state.selectedStepId ? " selected" : "";
         return `<article class="step${selected}">
           <div class="step-head">
-            <div class="step-title">${index + 1}. ${escape(step.name)} · ${mechanicLabel(step.mechanic.id)} · @${step.targeter} ~${step.trigger}</div>
+            <div class="step-title">${index + 1}. ${escape(step.name)} · ${mechanicLabel(step.mechanic.id)} · ${escape(targeterText(step))} ~${step.trigger}</div>
             <div class="step-actions"><button data-select-step="${escape(step.id)}">›</button></div>
           </div>
           <div class="step-body">
@@ -1118,6 +1222,7 @@
       $("stepName").value = step.name;
       $("stepTrigger").value = step.trigger;
       $("targeter").value = step.targeter;
+      writeTargeterParams(normalizedTargeterParams(step));
       $("chance").value = step.chance;
       $("delay").value = step.delay;
       $("repeat").value = step.repeat;
@@ -1162,6 +1267,7 @@
       const skill = {
         skill_id: $("skillId").value.trim(),
         skill_name: $("skillName").value.trim(),
+        skill_group: $("skillGroup").value.trim(),
         skill_desc: $("skillDesc").value.trim(),
         slot_type: $("slotType").value,
         skill_type: $("skillType").value,
@@ -1186,6 +1292,7 @@
           skill_id: skill.skill_id,
           trigger: step.trigger,
           targeter: step.targeter,
+          targeter_params: normalizedTargeterParams(step),
           chance: step.chance,
           delay: step.delay,
           repeat: step.repeat
@@ -1202,6 +1309,7 @@
             condition_id: `cond_${skill.skill_id}_${index + 1}_${conditionIndex + 1}`,
             step_id: stepId,
             skill_id: skill.skill_id,
+            condition_scope: condition.scope || inferredConditionScope(condition.type),
             condition_type: condition.type,
             compare_operator: condition.operator,
             value: condition.value,
@@ -1226,6 +1334,23 @@
       if (!step.mechanic || !step.mechanic.id) issues.push({ line, level: "bad", text: "步骤缺少机制效果" });
       if (step.chance < 0 || step.chance > 1) issues.push({ line, level: "bad", text: "触发几率越界" });
       if (step.repeat < 1) issues.push({ line, level: "bad", text: "重复次数至少为 1" });
+      const targeterParams = normalizedTargeterParams(step);
+      if (targeterParams.max_targets < 1) issues.push({ line, level: "bad", text: "目标上限至少为 1" });
+      if (["line", "cone", "current", "point"].includes(step.targeter) && targeterParams.range <= 0) {
+        issues.push({ line, level: "bad", text: "该目标器需要配置目标距离" });
+      }
+      if (step.targeter === "line" && targeterParams.width <= 0) {
+        issues.push({ line, level: "bad", text: "直线目标器需要配置目标宽度" });
+      }
+      if (step.targeter === "cone" && targeterParams.angle <= 0) {
+        issues.push({ line, level: "bad", text: "扇形目标器需要配置目标角度" });
+      }
+      if (["circle", "nearEnemies", "nearAllies"].includes(step.targeter) && targeterParams.radius <= 0) {
+        issues.push({ line, level: "bad", text: "范围目标器需要配置目标半径" });
+      }
+      if (step.mechanic.id === "meta" && Number(step.mechanic.max_depth) > 3) {
+        issues.push({ line, level: "warn", text: "技能组调用深度建议不超过 3" });
+      }
       if (["damage", "status", "control", "resource", "stack"].includes(step.mechanic.id) && step.targeter === "self" && step.mechanic.id === "damage") {
         issues.push({ line, level: "warn", text: "伤害机制目标为自身" });
       }
@@ -1267,13 +1392,47 @@
         step.delay > 0 ? `delay=${step.delay}` : "",
         step.repeat > 1 ? `repeat=${step.repeat}` : ""
       ].filter(Boolean).join(";");
-      return `${step.mechanic.id}{${params}} @${step.targeter} ~${step.trigger}${timing ? ` {${timing}}` : ""}${cond}`;
+      return `${step.mechanic.id}{${params}} ${targeterText(step)} ~${step.trigger}${timing ? `{${timing}}` : ""}${cond}`;
     }
 
     function conditionText(condition) {
-      const label = conditionLabel(condition.type);
       const param = condition.param ? `:${condition.param}` : "";
-      return `${label}${param}${operatorSymbol(condition.operator)}${condition.value}`;
+      return `${condition.scope || inferredConditionScope(condition.type)}.${condition.type}${param}${operatorSymbol(condition.operator)}${condition.value}`;
+    }
+
+    function normalizedTargeterParams(step) {
+      const params = { ...defaultTargeterParams(step.targeter), ...(step.targeter_params || {}) };
+      return {
+        range: number(params.range),
+        radius: number(params.radius),
+        angle: number(params.angle),
+        width: number(params.width),
+        max_targets: Math.max(1, Math.floor(number(params.max_targets)))
+      };
+    }
+
+    function targeterText(step) {
+      const params = Object.entries(targeterParamsForText(normalizedTargeterParams(step)))
+        .map(([key, value]) => `${key}=${value}`)
+        .join(";");
+      return `@${step.targeter}${params ? `{${params}}` : ""}`;
+    }
+
+    function targeterParamsForText(params) {
+      const output = {};
+      if (params.range > 0) output.range = params.range;
+      if (params.radius > 0) output.radius = params.radius;
+      if (params.angle > 0) output.angle = params.angle;
+      if (params.width > 0) output.width = params.width;
+      if (params.max_targets > 1) output.max = params.max_targets;
+      return output;
+    }
+
+    function inferredConditionScope(type) {
+      if (type.startsWith("target_") || ["distance", "stack", "has_status"].includes(type)) return "target";
+      if (type.startsWith("self_") || ["mana_ratio", "stamina_ratio", "offhand"].includes(type)) return "caster";
+      if (["talent", "cooldown_ready", "hit_count"].includes(type)) return "skill";
+      return "world";
     }
 
     function normalizedParams(params) {
