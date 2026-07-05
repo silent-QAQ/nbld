@@ -573,6 +573,7 @@ function renderAppearancePreview(appearance: CharacterAppearance): void {
 
   appearancePreview.querySelector<HTMLButtonElement>("[data-toggle-hair]")?.addEventListener("click", () => {
     state.showHairLayer = !state.showHairLayer;
+    state.selectedLayerMode = state.showHairLayer ? "hair" : "skeleton";
     renderAppearanceEditor({
       ...currentAppearanceCharacter(),
       appearance: state.appearanceDraft ?? defaultAppearance(),
@@ -638,7 +639,7 @@ function syncSelectedLayersToFacing(): void {
 function getActiveLayerRows(): string[] {
   if (!state.appearanceDraft) return [];
   syncSelectedLayersToFacing();
-  return state.selectedLayerMode === "hair"
+  return state.showHairLayer
     ? state.appearanceDraft.hair[state.selectedHairLayer] ?? []
     : state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? [];
 }
@@ -646,7 +647,7 @@ function getActiveLayerRows(): string[] {
 function setActiveLayerRows(rows: string[]): void {
   if (!state.appearanceDraft) return;
   syncSelectedLayersToFacing();
-  if (state.selectedLayerMode === "hair") {
+  if (state.showHairLayer) {
     state.appearanceDraft.hair[state.selectedHairLayer] = normalizeHairRows(rows);
   } else {
     state.appearanceDraft.skeleton[state.selectedSkeletonLayer] = normalizeHairRows(rows);
@@ -656,7 +657,7 @@ function setActiveLayerRows(rows: string[]): void {
 function applyPaintColorToPalette(color: string): void {
   if (!state.appearanceDraft) return;
   const normalized = normalizeHexColor(color, state.paintColor);
-  if (state.selectedLayerMode === "hair") {
+  if (state.showHairLayer) {
     state.appearanceDraft.palette.hairPrimary = normalized;
   } else {
     state.appearanceDraft.palette.clothPrimary = normalized;
@@ -714,7 +715,7 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
 }
 
 function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
-  state.paintColor = state.selectedLayerMode === "hair" ? palette.hairPrimary : palette.clothPrimary;
+  state.paintColor = state.showHairLayer ? palette.hairPrimary : palette.clothPrimary;
   appearancePalette.innerHTML = `
     <label class="appearance-field">
       <span>当前颜料</span>
@@ -737,12 +738,9 @@ function renderLayerControls(): void {
   state.appearanceDraft = normalizeAppearance(state.appearanceDraft);
   const hairStyle = state.appearanceDraft.style.hairStyle;
   syncSelectedLayersToFacing();
+  state.selectedLayerMode = state.showHairLayer ? "hair" : "skeleton";
 
   hairToolbar.innerHTML = `
-    <div class="layer-mode-switch">
-      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "skeleton" ? "active" : ""}" data-layer-mode="skeleton" aria-pressed="${state.selectedLayerMode === "skeleton"}">骨骼层</button>
-      <button type="button" class="secondary hair-layer-btn ${state.selectedLayerMode === "hair" ? "active" : ""}" data-layer-mode="hair" aria-pressed="${state.selectedLayerMode === "hair"}">发层</button>
-    </div>
     <label class="appearance-field">
       <span>发型名</span>
       <input type="text" id="hairStyleInput" value="${hairStyle}">
@@ -753,17 +751,6 @@ function renderLayerControls(): void {
     input.addEventListener("input", () => {
       if (!state.appearanceDraft) return;
       state.appearanceDraft.style.hairStyle = input.value.trim() || "custom";
-    });
-  }
-
-  for (const button of hairToolbar.querySelectorAll<HTMLButtonElement>("[data-layer-mode]")) {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      state.selectedLayerMode = button.dataset.layerMode as LayerEditorMode;
-      renderAppearanceEditor({
-        ...currentAppearanceCharacter(),
-        appearance: state.appearanceDraft ?? defaultAppearance(),
-      });
     });
   }
 
@@ -947,14 +934,14 @@ function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, activeMatr
 
   if (state.appearanceDraft) {
     const bodyRows = state.appearanceDraft.skeleton[activeBodyLayerKey()] ?? [];
-    const bodyMatrix = state.selectedLayerMode === "skeleton"
+    const bodyMatrix = !state.showHairLayer
       ? activeMatrix
       : rowsToMatrix(bodyRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
     drawMatrix(target, bodyMatrix, cellSize, state.appearanceDraft.palette.clothPrimary);
 
     if (state.showHairLayer) {
       const hairRows = state.appearanceDraft.hair[activeHairLayerKey()] ?? [];
-      const hairMatrix = state.selectedLayerMode === "hair"
+      const hairMatrix = state.showHairLayer
         ? activeMatrix
         : rowsToMatrix(hairRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
       drawMatrix(target, hairMatrix, cellSize, state.appearanceDraft.palette.hairPrimary);

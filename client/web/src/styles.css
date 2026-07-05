@@ -298,13 +298,6 @@ input {
   margin-top: 0;
 }
 
-.layer-mode-switch {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  grid-column: 1 / -1;
-}
-
 .appearance-field {
   display: grid;
   grid-template-columns: 70px minmax(0, 1fr) 28px;
@@ -312,6 +305,10 @@ input {
   gap: 4px;
   font-size: 10.5px;
   color: var(--muted);
+}
+
+.hair-toolbar .appearance-field {
+  grid-column: 1 / -1;
 }
 
 .appearance-field span {
