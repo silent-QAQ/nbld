@@ -25,6 +25,7 @@ const MOVE_SEND_INTERVAL_MS = 90;
 const HUD_REFRESH_INTERVAL_MS = 120;
 const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
+const GAME_ASPECT_RATIO = TARGET_VISIBLE_TILES_X / TARGET_VISIBLE_TILES_Y;
 const RENDER_TILE_WINDOW_X = 120;
 const RENDER_TILE_WINDOW_Y = 120;
 const CHUNK_PREFETCH_MARGIN_TILES = 20;
@@ -77,6 +78,28 @@ type LayerEditorMode = "hair" | "skeleton";
 type PaintMode = "fill" | "erase" | "bucket" | "picker";
 type BodyControlPage = "overall" | "body" | "arms" | "legs";
 type GameViewport = { x: number; y: number; width: number; height: number };
+type LimbPose = -90 | -45 | 0 | 45 | 90 | "disabled";
+type LimbDisableMode = "none" | "arms" | "legs" | "all";
+type LimbMotionState = { leftArm: LimbPose; rightArm: LimbPose; leftLeg: LimbPose; rightLeg: LimbPose };
+const IDLE_LIMB_STATE: LimbMotionState = { leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 };
+type SkinExportPackage = {
+  format: "nbld.skin";
+  version: 1;
+  exportedAt: string;
+  appearance: CharacterAppearance;
+  layers: {
+    skeleton: CharacterAppearance["skeleton"];
+    hair: CharacterAppearance["hair"];
+  };
+  textures: {
+    skeleton: Record<keyof CharacterAppearance["skeleton"], string>;
+    hair: Record<keyof CharacterAppearance["hair"], string>;
+  };
+};
+
+type ScreenOrientationWithLock = ScreenOrientation & {
+  lock?: (orientation: "landscape" | "portrait" | "any") => Promise<void>;
+};
 
 type AppState = {
   api?: ApiClient;
@@ -237,6 +260,9 @@ app.innerHTML = `
     <section class="hud hidden"></section>
     <section class="debug-panel hidden"></section>
     <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
+    <section class="orientation-overlay hidden" id="orientationOverlay">
+      <div>请横屏游玩</div>
+    </section>
     <section class="modal pause-menu hidden" id="pauseMenu">
       <div class="pause-layout">
         <aside class="pause-nav" id="pauseNav"></aside>
@@ -283,6 +309,7 @@ const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
 const debugPanel = app.querySelector<HTMLElement>(".debug-panel")!;
 const helpPanel = app.querySelector<HTMLElement>(".help-panel")!;
+const orientationOverlay = app.querySelector<HTMLElement>("#orientationOverlay")!;
 const pauseMenu = app.querySelector<HTMLElement>("#pauseMenu")!;
 const pauseNav = app.querySelector<HTMLElement>("#pauseNav")!;
 const pauseContent = app.querySelector<HTMLElement>("#pauseContent")!;
@@ -432,6 +459,10 @@ window.addEventListener("resize", () => {
     renderPixelEditorGrid(getActiveLayerRows());
   }
 });
+window.addEventListener("orientationchange", () => {
+  resizeCanvas();
+});
+
 window.addEventListener("keydown", (event) => {
   if (state.awaitingKeyBinding) {
     event.preventDefault();
@@ -573,7 +604,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
       rightArm: 0,
       leftLeg: 0,
       rightLeg: 0,
-    });
+    } satisfies LimbMotionState);
 
     const meta = document.createElement("div");
     meta.className = "character-meta";
@@ -598,6 +629,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     enterButton.textContent = "进入世界";
     enterButton.addEventListener("click", (event) => {
       event.stopPropagation();
+      requestLandscapeOrientation();
       void enterWorldWithCharacter(character);
     });
 
@@ -1054,9 +1086,8 @@ function renderPixelTools(): void {
     <button type="button" class="secondary ${state.paintMode === "bucket" ? "active" : ""}" data-paint-mode="bucket" aria-pressed="${state.paintMode === "bucket"}">涂料桶</button>
     <button type="button" class="secondary ${state.paintMode === "picker" ? "active" : ""}" data-paint-mode="picker" aria-pressed="${state.paintMode === "picker"}">取色器</button>
     <button type="button" class="secondary" data-tool="clear">清空</button>
-    <button type="button" class="secondary" data-tool="export-json">导出JSON</button>
+    <button type="button" class="secondary" data-tool="export-skin">导出皮肤</button>
     <button type="button" class="secondary" data-tool="import">导入</button>
-    <button type="button" class="secondary" data-tool="export-png">导出PNG</button>
   `;
 
   for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-paint-mode]")) {
@@ -1238,11 +1269,8 @@ function applyPixelTool(tool: string): void {
     case "clear":
       for (const row of matrix) row.fill(EMPTY_PIXEL_SYMBOL);
       break;
-    case "export-json":
-      void copyTextToClipboard(JSON.stringify(normalizeAppearance(state.appearanceDraft), null, 2));
-      return;
-    case "export-png":
-      exportActiveLayerPng();
+    case "export-skin":
+      exportSkinPackage();
       return;
     case "import":
       appearanceFileInput.value = "";
@@ -1357,7 +1385,9 @@ async function importAppearanceFile(file: File): Promise<void> {
   try {
     if (file.type.includes("json") || file.name.toLowerCase().endsWith(".json")) {
       const raw = await file.text();
-      state.appearanceDraft = normalizeAppearance(JSON.parse(raw) as Partial<CharacterAppearance>);
+      const parsed = JSON.parse(raw) as Partial<CharacterAppearance> | Partial<SkinExportPackage>;
+      const appearance = "appearance" in parsed && parsed.appearance ? parsed.appearance : parsed;
+      state.appearanceDraft = normalizeAppearance(appearance as Partial<CharacterAppearance>);
       renderAppearanceEditor({
         ...currentAppearanceCharacter(),
         appearance: state.appearanceDraft,
@@ -1391,38 +1421,58 @@ async function importAppearanceFile(file: File): Promise<void> {
   }
 }
 
-function exportActiveLayerPng(): void {
-  const matrix = rowsToMatrix(getActiveLayerRows(), AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
+function exportSkinPackage(): void {
+  if (!state.appearanceDraft) return;
+  const appearance = normalizeAppearance(state.appearanceDraft);
+  const skinPackage: SkinExportPackage = {
+    format: "nbld.skin",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    appearance,
+    layers: {
+      skeleton: appearance.skeleton,
+      hair: appearance.hair,
+    },
+    textures: {
+      skeleton: Object.fromEntries(
+        Object.entries(appearance.skeleton).map(([key, rows]) => [key, layerRowsToPngDataUrl(rows, appearance.palette.pixelSwatches)]),
+      ) as SkinExportPackage["textures"]["skeleton"],
+      hair: Object.fromEntries(
+        Object.entries(appearance.hair).map(([key, rows]) => [key, layerRowsToPngDataUrl(rows, appearance.palette.pixelSwatches)]),
+      ) as SkinExportPackage["textures"]["hair"],
+    },
+  };
+  downloadTextFile(
+    `${state.characterName || characterNameInput.value.trim() || "skin"}.nbld-skin.json`,
+    JSON.stringify(skinPackage, null, 2),
+    "application/json",
+  );
+  loginError.textContent = "皮肤包已导出，包含所有骨骼层、发层贴图和配置";
+}
+
+function layerRowsToPngDataUrl(rows: string[] | undefined, swatches: string[]): string {
+  const matrix = rowsToMatrix(rows ?? [], AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
   const output = document.createElement("canvas");
   output.width = AVATAR_EDITOR_WIDTH;
   output.height = AVATAR_EDITOR_HEIGHT;
   const outputCtx = output.getContext("2d")!;
   outputCtx.clearRect(0, 0, output.width, output.height);
-  outputCtx.fillStyle = isEditingHairLayer()
-    ? (state.appearanceDraft?.palette.hairPrimary ?? state.paintColor)
-    : (state.appearanceDraft?.palette.clothPrimary ?? state.paintColor);
   matrix.forEach((row, y) => {
     row.forEach((symbol, x) => {
       if (symbol === EMPTY_PIXEL_SYMBOL) return;
-      outputCtx.fillStyle = pixelSymbolToColor(symbol, state.appearanceDraft?.palette.pixelSwatches ?? []);
+      outputCtx.fillStyle = pixelSymbolToColor(symbol, swatches);
       outputCtx.fillRect(x, y, 1, 1);
     });
   });
-  const link = document.createElement("a");
-  link.download = `${state.appearanceFacing}-${isEditingHairLayer() ? "hair" : "body"}.png`;
-  link.href = output.toDataURL("image/png");
-  link.click();
+  return output.toDataURL("image/png");
 }
 
-async function copyTextToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard?.writeText(text);
-    loginError.textContent = "外观 JSON 已复制到剪贴板";
-    return;
-  } catch {
-    window.prompt("复制外观 JSON", text);
-    loginError.textContent = "浏览器不允许直接复制，请从弹窗复制外观 JSON";
-  }
+function downloadTextFile(filename: string, content: string, mimeType: string): void {
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = URL.createObjectURL(new Blob([content], { type: mimeType }));
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 0);
 }
 
 async function saveSelectedCharacterAppearance(): Promise<void> {
@@ -1690,6 +1740,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     hud.classList.remove("hidden");
     debugPanel.classList.remove("hidden");
     helpPanel.classList.remove("hidden");
+    resizeCanvas();
   } catch (error) {
     state.status = "进入世界失败";
     state.lastError = errorToString(error);
@@ -1791,6 +1842,7 @@ function logoutToLogin(): void {
   hud.classList.add("hidden");
   debugPanel.classList.add("hidden");
   helpPanel.classList.add("hidden");
+  orientationOverlay.classList.add("hidden");
   loginError.textContent = "";
   pauseMenu.classList.add("hidden");
   state.menuOpen = false;
@@ -2364,7 +2416,7 @@ function renderAvatarSkeleton(
   character: CharacterSummary | undefined,
   facing: Facing,
   local: boolean,
-  moveState: { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number },
+  moveState: LimbMotionState,
 ): void {
   const appearance = normalizeAppearance(character?.appearance ?? defaultAppearance());
   const body = appearance.body;
@@ -2417,7 +2469,8 @@ function renderAvatarSkeleton(
   const armLength = Math.max(10, (body.upperArmLength + body.forearmLength) * 0.12 * scale);
   if (skinLayer.length === 0) {
     if (side) {
-      drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
+      const sideArmX = screen.x + (facing === "left" ? shoulder * 0.18 : -shoulder * 0.18);
+      drawLimb(target, sideArmX, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
     } else {
       drawLimb(target, screen.x - shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skinPrimary, palette.skinShadow);
       drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
@@ -2512,7 +2565,9 @@ function drawPixelRect(target: CanvasRenderingContext2D, x: number, y: number, w
   target.strokeRect(x, y, width, height);
 }
 
-function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: number, length: number, width: number, angleDegrees: number, fill: string, stroke: string): void {
+function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: number, length: number, width: number, pose: LimbPose, fill: string, stroke: string): void {
+  if (pose === "disabled") return;
+  const angleDegrees = normalizeLimbAngle(pose);
   target.save();
   target.translate(anchorX, anchorY);
   target.rotate((angleDegrees * Math.PI) / 180);
@@ -2520,20 +2575,37 @@ function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: nu
   target.restore();
 }
 
-function getLimbMotionState(local: boolean): { leftArm: number; rightArm: number; leftLeg: number; rightLeg: number } {
+function normalizeLimbAngle(angle: number): -90 | -45 | 0 | 45 | 90 {
+  if (angle <= -67.5) return -90;
+  if (angle < -22.5) return -45;
+  if (angle < 22.5) return 0;
+  if (angle < 67.5) return 45;
+  return 90;
+}
+
+function applyLimbDisableMode(state: LimbMotionState, mode: LimbDisableMode): LimbMotionState {
+  if (mode === "arms") return { ...state, leftArm: "disabled", rightArm: "disabled" };
+  if (mode === "legs") return { ...state, leftLeg: "disabled", rightLeg: "disabled" };
+  if (mode === "all") return { leftArm: "disabled", rightArm: "disabled", leftLeg: "disabled", rightLeg: "disabled" };
+  return state;
+}
+
+function getLimbMotionState(local: boolean): LimbMotionState {
   const moving = local ? state.characterId !== "" && state.pressed.size > 0 : true;
   if (!moving) {
-    return { leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 };
+    return applyLimbDisableMode({ leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 }, "none");
   }
 
   const phase = Math.sin(performance.now() / 110);
-  const swing = Math.abs(phase) > 0.4 ? 90 : 45;
-  return {
-    leftArm: phase > 0 ? -swing : swing,
-    rightArm: phase > 0 ? swing : -swing,
-    leftLeg: phase > 0 ? swing : -swing,
-    rightLeg: phase > 0 ? -swing : swing,
-  };
+  const swing: 45 | 90 = Math.abs(phase) > 0.4 ? 90 : 45;
+  const forwardSwing = swing as LimbPose;
+  const backwardSwing = -swing as LimbPose;
+  return applyLimbDisableMode({
+    leftArm: phase > 0 ? backwardSwing : forwardSwing,
+    rightArm: phase > 0 ? forwardSwing : backwardSwing,
+    leftLeg: phase > 0 ? forwardSwing : backwardSwing,
+    rightLeg: phase > 0 ? backwardSwing : forwardSwing,
+  }, "none");
 }
 
 function updateHud(): void {
@@ -2616,11 +2688,23 @@ function worldToScreen(x: number, y: number): Position {
 }
 
 function resizeCanvas(): void {
-  canvas.width = Math.max(1, Math.floor(window.innerWidth));
-  canvas.height = Math.max(1, Math.floor(window.innerHeight));
-  canvas.style.width = `${window.innerWidth}px`;
-  canvas.style.height = `${window.innerHeight}px`;
+  const viewportWidth = Math.max(1, Math.floor(window.innerWidth));
+  const viewportHeight = Math.max(1, Math.floor(window.innerHeight));
+  const fitWidth = Math.min(viewportWidth, Math.floor(viewportHeight * GAME_ASPECT_RATIO));
+  const fitHeight = Math.min(viewportHeight, Math.floor(fitWidth / GAME_ASPECT_RATIO));
+  const left = Math.floor((viewportWidth - fitWidth) / 2);
+  const top = Math.floor((viewportHeight - fitHeight) / 2);
+
+  canvas.width = Math.max(1, fitWidth);
+  canvas.height = Math.max(1, fitHeight);
+  canvas.style.width = `${fitWidth}px`;
+  canvas.style.height = `${fitHeight}px`;
+  canvas.style.left = `${left}px`;
+  canvas.style.top = `${top}px`;
+  canvas.style.right = "auto";
+  canvas.style.bottom = "auto";
   state.tileScale = getFittedTileScale();
+  updateOrientationOverlay();
 }
 
 function getFittedTileScale(): number {
@@ -2637,6 +2721,24 @@ function getGameViewport(): GameViewport {
     width,
     height,
   };
+}
+
+function isPortraitHandheldViewport(): boolean {
+  const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+  const narrowScreen = Math.min(window.innerWidth, window.innerHeight) <= 820;
+  return state.characterId !== "" && coarsePointer && narrowScreen && window.innerHeight > window.innerWidth;
+}
+
+function updateOrientationOverlay(): void {
+  orientationOverlay.classList.toggle("hidden", !isPortraitHandheldViewport());
+}
+
+function requestLandscapeOrientation(): void {
+  const orientation = screen.orientation as ScreenOrientationWithLock | undefined;
+  if (!orientation?.lock) return;
+  void orientation.lock("landscape").catch(() => {
+    updateOrientationOverlay();
+  });
 }
 
 function coordKey(coord: ChunkCoord): string {
