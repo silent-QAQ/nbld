@@ -1271,6 +1271,7 @@ async function saveSelectedCharacterAppearance(): Promise<void> {
   loginError.textContent = "";
   try {
     const appearance = normalizeAppearance(readAppearanceFromEditor());
+    state.appearanceDraft = appearance;
     if (!character || character.id === "draft") {
       const name = characterNameInput.value.trim() || state.accountUsername || "Hero";
       const created = await state.api.createCharacter(state.token, name);
@@ -1282,10 +1283,16 @@ async function saveSelectedCharacterAppearance(): Promise<void> {
       const updated = await state.api.updateCharacterAppearance(state.token, state.selectedCharacterId, appearance);
       const index = state.availableCharacters.findIndex((item) => item.id === updated.character.id);
       if (index >= 0) {
-        state.availableCharacters[index] = updated.character;
+        state.availableCharacters[index] = {
+          ...updated.character,
+          appearance,
+        };
       }
       renderCharacterList(state.availableCharacters);
-      renderAppearanceEditor(updated.character);
+      renderAppearanceEditor({
+        ...updated.character,
+        appearance,
+      });
     }
   } catch (error) {
     loginError.textContent = errorToString(error);
