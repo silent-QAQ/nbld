@@ -360,6 +360,7 @@ type CharacterPaletteAppearance struct {
 	ClothShadow  string `json:"clothShadow"`
 	MetalPrimary string `json:"metalPrimary"`
 	MetalShadow  string `json:"metalShadow"`
+	PixelSwatches []string `json:"pixelSwatches"`
 }
 
 type CharacterListResponse struct {

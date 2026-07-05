@@ -157,6 +157,7 @@ type CharacterPaletteAppearance struct {
 	ClothShadow  string `json:"clothShadow"`
 	MetalPrimary string `json:"metalPrimary"`
 	MetalShadow  string `json:"metalShadow"`
+	PixelSwatches []string `json:"pixelSwatches"`
 }
 
 type CharacterStats struct {
@@ -375,6 +376,12 @@ func defaultCharacterAppearance() CharacterAppearance {
 			ClothShadow:  "#b42222",
 			MetalPrimary: "#cfd8e3",
 			MetalShadow:  "#7e8794",
+			PixelSwatches: []string{
+				"#ff4040", "#b42222", "#f2c199", "#d89b72", "#2d1a13",
+				"#140b08", "#cfd8e3", "#7e8794", "#ffffff", "#000000",
+				"#d9b35f", "#8fb6ff", "#5cc84a", "#2f6e35", "#9b6b3d",
+				"#7a7f6a", "#67d1ff", "#ff77aa", "#8d6bff", "#f5e663",
+			},
 		},
 	}
 }
@@ -468,6 +475,14 @@ func validateCharacterAppearance(appearance CharacterAppearance) error {
 		!validateHexColor(appearance.Palette.MetalPrimary) ||
 		!validateHexColor(appearance.Palette.MetalShadow) {
 		return ErrCharacterAppearance
+	}
+	if len(appearance.Palette.PixelSwatches) > 32 {
+		return ErrCharacterAppearance
+	}
+	for _, color := range appearance.Palette.PixelSwatches {
+		if !validateHexColor(color) {
+			return ErrCharacterAppearance
+		}
 	}
 	if !validateHairLayer(appearance.Hair.Front) ||
 		!validateHairLayer(appearance.Hair.Back) ||

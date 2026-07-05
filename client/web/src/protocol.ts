@@ -168,6 +168,7 @@ export type CharacterPaletteAppearance = {
   clothShadow: string;
   metalPrimary: string;
   metalShadow: string;
+  pixelSwatches: string[];
 };
 
 export type CharacterAppearance = {
