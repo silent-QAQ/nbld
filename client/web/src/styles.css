@@ -224,9 +224,51 @@ input {
   padding-top: 0;
 }
 
+.appearance-title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
 .appearance-editor h3 {
   margin: 0 0 5px;
   font-size: 15px;
+}
+
+.appearance-help {
+  position: relative;
+  min-height: 24px;
+  margin-top: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.appearance-help-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  display: none;
+  width: min(340px, calc(100vw - 40px));
+  padding: 10px 12px;
+  border: 1px solid #ffe08a;
+  border-radius: 10px;
+  background: rgba(12, 17, 24, 0.96);
+  color: var(--text);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.42);
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+}
+
+.appearance-help:hover .appearance-help-popover,
+.appearance-help:focus .appearance-help-popover,
+.appearance-help:focus-within .appearance-help-popover {
+  display: block;
 }
 
 .appearance-layout {

@@ -201,7 +201,17 @@ app.innerHTML = `
     </section>
     <section class="modal login-panel hidden" id="appearanceModal">
       <div class="appearance-editor" id="appearanceEditor">
-        <h3>角色外观编辑</h3>
+        <div class="appearance-title">
+          <h3>角色外观编辑</h3>
+          <button type="button" class="secondary appearance-help" aria-label="捏脸教程">
+            教程
+            <span class="appearance-help-popover">
+              皮肤分为4个面，每个面都有自己的发层（头发），有按钮可以隐藏/显示发层。<br>
+              发层无任何限制，隐藏发层才能编辑骨骼层（头也算），骨骼层仅允许在骨骼上涂色。<br>
+              快绘制属于你的角色吧！！！
+            </span>
+          </button>
+        </div>
         <div class="appearance-layout">
           <div class="appearance-left">
             <div class="appearance-preview" id="appearancePreview"></div>
