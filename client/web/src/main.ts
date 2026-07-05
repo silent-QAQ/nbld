@@ -175,7 +175,7 @@ app.innerHTML = `
             <div class="appearance-grid" id="appearanceGrid"></div>
           </div>
           <div class="appearance-center">
-            <canvas class="pixel-editor-canvas" id="hairGrid"></canvas>
+            <div class="pixel-editor-grid" id="hairGrid"></div>
           </div>
           <div class="appearance-right">
             <div class="hair-toolbar" id="hairToolbar"></div>
@@ -224,7 +224,7 @@ const appearancePreview = app.querySelector<HTMLElement>("#appearancePreview")!;
 const appearanceGrid = app.querySelector<HTMLElement>("#appearanceGrid")!;
 const appearancePalette = app.querySelector<HTMLElement>("#appearancePalette")!;
 const hairToolbar = app.querySelector<HTMLElement>("#hairToolbar")!;
-const hairGrid = app.querySelector<HTMLCanvasElement>("#hairGrid")!;
+const hairGrid = app.querySelector<HTMLElement>("#hairGrid")!;
 const pixelTools = app.querySelector<HTMLElement>("#pixelTools")!;
 const appearanceFileInput = app.querySelector<HTMLInputElement>("#appearanceFileInput")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
@@ -539,6 +539,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
 function renderAppearanceEditor(character: CharacterSummary): void {
   appearanceEditor.classList.remove("hidden");
   appearanceModal.classList.remove("hidden");
+  state.editorHoverCell = null;
   state.selectedCharacterId = character.id;
   state.appearanceDraft = normalizeAppearance(character.appearance);
   renderAppearancePreview(state.appearanceDraft);
@@ -959,11 +960,17 @@ function renderPixelEditorGrid(rows: string[]): void {
 
   const pointerToCell = (event: PointerEvent): { x: number; y: number } => {
     const rect = hairGrid.getBoundingClientRect();
-    const pixelX = clamp(event.clientX - rect.left, 0, Math.max(0, rect.width - 0.001));
-    const pixelY = clamp(event.clientY - rect.top, 0, Math.max(0, rect.height - 0.001));
+    const contentLeft = rect.left + hairGrid.clientLeft;
+    const contentTop = rect.top + hairGrid.clientTop;
+    const contentWidth = Math.max(1, hairGrid.clientWidth);
+    const contentHeight = Math.max(1, hairGrid.clientHeight);
+    const cellWidth = contentWidth / width;
+    const cellHeight = contentHeight / height;
+    const pixelX = clamp(event.clientX - contentLeft, 0, Math.max(0, contentWidth - 0.001));
+    const pixelY = clamp(event.clientY - contentTop, 0, Math.max(0, contentHeight - 0.001));
     return {
-      x: clamp(Math.floor(pixelX / cellSize), 0, width - 1),
-      y: clamp(Math.floor(pixelY / cellSize), 0, height - 1),
+      x: clamp(Math.floor(pixelX / cellWidth), 0, width - 1),
+      y: clamp(Math.floor(pixelY / cellHeight), 0, height - 1),
     };
   };
 
@@ -973,11 +980,16 @@ function renderPixelEditorGrid(rows: string[]): void {
     activePointerId = event.pointerId;
     dragging = true;
     const cell = pointerToCell(event);
+    state.editorHoverCell = cell;
     paintAt(cell.x, cell.y);
   };
   hairGrid.onpointermove = (event) => {
-    if (!dragging || state.paintMode === "bucket") return;
     const cell = pointerToCell(event);
+    state.editorHoverCell = cell;
+    if (!dragging || state.paintMode === "bucket") {
+      drawAppearanceEditorCanvas(gridCtx, cellSize);
+      return;
+    }
     paintAt(cell.x, cell.y);
   };
   hairGrid.onpointerup = (event) => {
@@ -988,11 +1000,15 @@ function renderPixelEditorGrid(rows: string[]): void {
   hairGrid.onpointercancel = (event) => {
     dragging = false;
     activePointerId = null;
+    state.editorHoverCell = null;
     if (hairGrid.hasPointerCapture(event.pointerId)) hairGrid.releasePointerCapture(event.pointerId);
+    drawAppearanceEditorCanvas(gridCtx, cellSize);
   };
   hairGrid.onpointerleave = () => {
     if (activePointerId === null || !hairGrid.hasPointerCapture(activePointerId)) {
       dragging = false;
+      state.editorHoverCell = null;
+      drawAppearanceEditorCanvas(gridCtx, cellSize);
     }
   };
 
@@ -1091,6 +1107,17 @@ function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, cellSize: 
     target.moveTo(0, y * cellSize + 0.5);
     target.lineTo(AVATAR_EDITOR_WIDTH * cellSize, y * cellSize + 0.5);
     target.stroke();
+  }
+
+  if (state.editorHoverCell) {
+    target.strokeStyle = "rgba(255, 224, 138, 0.95)";
+    target.lineWidth = 2;
+    target.strokeRect(
+      state.editorHoverCell.x * cellSize + 1,
+      state.editorHoverCell.y * cellSize + 1,
+      Math.max(1, cellSize - 2),
+      Math.max(1, cellSize - 2),
+    );
   }
 }
 
