@@ -812,7 +812,15 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, ok := s.state.updateMovement(req.Token, req.Position, req.Sprinting)
+	session, ok := s.state.getSession(req.Token)
+	if !ok {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+	previousMapID := session.MapID
+	previousPosition := session.Position
+
+	session, ok = s.state.updateMovement(req.Token, req.Position, req.Sprinting)
 	if !ok {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -860,7 +868,11 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		Equipment:     toProtocolEquipment(session.Equipment),
 	})
 
-	s.ws.broadcastNearby(session.WorldID, session.MapID, session.Position, protocol.WSServerMessage{
+	nearbyPositions := []protocol.Position{session.Position}
+	if previousMapID == session.MapID {
+		nearbyPositions = append(nearbyPositions, previousPosition)
+	}
+	s.ws.broadcastNearbyAny(session.WorldID, session.MapID, nearbyPositions, protocol.WSServerMessage{
 		Type:          "player_moved",
 		PlayerID:      session.PlayerID,
 		CharacterID:   session.CharacterID,
@@ -1341,6 +1353,9 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		previousMapID := client.mapID
+		previousPosition := client.position
+
 		updated, ok := s.state.updateMovement(hello.Token, message.Position, message.Sprinting)
 		if !ok {
 			client.send <- protocol.WSServerMessage{
@@ -1399,10 +1414,14 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			Appearance:    toProtocolAppearance(updated.Appearance),
 			Equipment:     toProtocolEquipment(updated.Equipment),
 		})
-		s.ws.broadcastNearby(updated.WorldID, updated.MapID, updated.Position, broadcast)
+		nearbyPositions := []protocol.Position{updated.Position}
+		if previousMapID == updated.MapID {
+			nearbyPositions = append(nearbyPositions, previousPosition)
+		}
+		s.ws.broadcastNearbyAny(updated.WorldID, updated.MapID, nearbyPositions, broadcast)
 
 		if transitioned {
-			s.ws.broadcast(updated.WorldID, protocol.WSServerMessage{
+			s.ws.broadcastNearby(updated.WorldID, updated.MapID, updated.Position, protocol.WSServerMessage{
 				Type:          "map_transition",
 				PlayerID:      updated.PlayerID,
 				CharacterID:   updated.CharacterID,

@@ -2392,6 +2392,12 @@ function handleServerMessage(message: WSServerMessage): void {
   }
 
   if (message.type === "player_moved" && message.playerId && message.position) {
+    if (message.playerId !== state.playerId && !isPositionInLocalAOI(message.mapId, message.position)) {
+      state.players.delete(message.playerId);
+      state.remoteVisuals.delete(message.playerId);
+      state.remoteFacing.delete(message.playerId);
+      return;
+    }
     const previous = state.players.get(message.playerId);
     if (previous) {
       state.remoteFacing.set(
@@ -2687,6 +2693,15 @@ function getPreferredChunkWindowKey(position: Position): string {
   if (localY < CHUNK_PREFETCH_MARGIN_TILES) chunkY -= 1;
 
   return `${state.mapId}:${chunkX}:${chunkY}`;
+}
+
+function isPositionInLocalAOI(mapId: string | undefined, position: Position): boolean {
+  if ((mapId || state.mapId) !== state.mapId) return false;
+  const localChunkX = Math.floor(state.player.x / CHUNK_SIZE);
+  const localChunkY = Math.floor(state.player.y / CHUNK_SIZE);
+  const remoteChunkX = Math.floor(position.x / CHUNK_SIZE);
+  const remoteChunkY = Math.floor(position.y / CHUNK_SIZE);
+  return Math.abs(localChunkX - remoteChunkX) <= 1 && Math.abs(localChunkY - remoteChunkY) <= 1;
 }
 
 function hasMissingChunksInRenderWindow(): boolean {

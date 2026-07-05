@@ -556,6 +556,49 @@ func TestRuntimeStaminaRecoversAfterSprintIntentExpires(t *testing.T) {
 	}
 }
 
+func TestWSHubBroadcastNearbyUsesThreeByThreeChunks(t *testing.T) {
+	hub := newWSHub()
+	near := &wsClient{
+		worldID:  "world",
+		mapID:    "map_0_0",
+		position: protocol.Position{X: 80, Y: 80},
+		send:     make(chan protocol.WSServerMessage, 1),
+	}
+	far := &wsClient{
+		worldID:  "world",
+		mapID:    "map_0_0",
+		position: protocol.Position{X: 240, Y: 80},
+		send:     make(chan protocol.WSServerMessage, 1),
+	}
+	otherMap := &wsClient{
+		worldID:  "world",
+		mapID:    "map_1_0",
+		position: protocol.Position{X: 80, Y: 80},
+		send:     make(chan protocol.WSServerMessage, 1),
+	}
+	hub.add(near)
+	hub.add(far)
+	hub.add(otherMap)
+
+	hub.broadcastNearby("world", "map_0_0", protocol.Position{X: 0, Y: 0}, protocol.WSServerMessage{Type: "player_moved"})
+
+	select {
+	case <-near.send:
+	default:
+		t.Fatal("expected nearby client to receive broadcast")
+	}
+	select {
+	case <-far.send:
+		t.Fatal("expected far client to be filtered")
+	default:
+	}
+	select {
+	case <-otherMap.send:
+		t.Fatal("expected other map client to be filtered")
+	default:
+	}
+}
+
 func mustRegisterAndLogin(t *testing.T, handler http.Handler, email, username string) protocol.LoginRequest {
 	t.Helper()
 
