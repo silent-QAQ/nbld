@@ -130,6 +130,20 @@ type AppState = {
   paintColor: string;
   recentPaintColors: string[];
   bodyControlPage: BodyControlPage;
+  menuOpen: boolean;
+  settingsPage: "audio" | "video" | "keys";
+  audioSettings: {
+    masterVolume: number;
+    musicVolume: number;
+    sfxVolume: number;
+  };
+  videoSettings: {
+    chunkRenderBudget: number;
+    showDebug: boolean;
+    showHelp: boolean;
+  };
+  keyBindings: Record<"moveUp" | "moveDown" | "moveLeft" | "moveRight" | "sprint", string>;
+  awaitingKeyBinding: keyof AppState["keyBindings"] | null;
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -213,6 +227,12 @@ app.innerHTML = `
     <section class="hud hidden"></section>
     <section class="debug-panel hidden"></section>
     <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
+    <section class="modal pause-menu hidden" id="pauseMenu">
+      <div class="pause-layout">
+        <aside class="pause-nav" id="pauseNav"></aside>
+        <div class="pause-content" id="pauseContent"></div>
+      </div>
+    </section>
   </div>
 `;
 
@@ -253,6 +273,9 @@ const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
 const debugPanel = app.querySelector<HTMLElement>(".debug-panel")!;
 const helpPanel = app.querySelector<HTMLElement>(".help-panel")!;
+const pauseMenu = app.querySelector<HTMLElement>("#pauseMenu")!;
+const pauseNav = app.querySelector<HTMLElement>("#pauseNav")!;
+const pauseContent = app.querySelector<HTMLElement>("#pauseContent")!;
 const avatarLayerRasterCache = new Map<string, HTMLCanvasElement>();
 
 const state: AppState = {
@@ -302,6 +325,26 @@ const state: AppState = {
   paintMode: "fill",
   paintColor: "#ff4040",
   bodyControlPage: "overall",
+  menuOpen: false,
+  settingsPage: "audio",
+  audioSettings: {
+    masterVolume: 100,
+    musicVolume: 70,
+    sfxVolume: 80,
+  },
+  videoSettings: {
+    chunkRenderBudget: CHUNK_RENDER_BUDGET_PER_FRAME,
+    showDebug: true,
+    showHelp: true,
+  },
+  keyBindings: {
+    moveUp: "KeyW",
+    moveDown: "KeyS",
+    moveLeft: "KeyA",
+    moveRight: "KeyD",
+    sprint: "ShiftLeft",
+  },
+  awaitingKeyBinding: null,
   recentPaintColors: [
     "#ff4040", "#b42222", "#f2c199", "#d89b72", "#2d1a13",
     "#140b08", "#cfd8e3", "#7e8794", "#ffffff", "#000000",
@@ -380,6 +423,19 @@ window.addEventListener("resize", () => {
   }
 });
 window.addEventListener("keydown", (event) => {
+  if (state.awaitingKeyBinding) {
+    event.preventDefault();
+    state.keyBindings[state.awaitingKeyBinding] = event.code;
+    state.awaitingKeyBinding = null;
+    renderPauseMenu("settings");
+    return;
+  }
+  if (event.code === "Escape" && state.characterId) {
+    event.preventDefault();
+    togglePauseMenu();
+    return;
+  }
+  if (state.menuOpen) return;
   if (isTypingTarget(event.target)) return;
   if (event.code === "KeyH") {
     hud.classList.toggle("hidden");
@@ -392,6 +448,7 @@ window.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("keyup", (event) => {
+  if (state.menuOpen) return;
   if (isTypingTarget(event.target)) return;
   state.pressed.delete(event.code);
 });
