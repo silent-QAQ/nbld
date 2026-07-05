@@ -22,8 +22,12 @@ import type {
 
 const CHUNK_SIZE = 80;
 const TILE_TEXTURE_SIZE_PX = 32;
-const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
-const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
+const SPRINT_SPEED_MULTIPLIER = 1.4;
+const SPRINT_STAMINA_COST_PER_SECOND = 10;
+const STAMINA_REGEN_WHILE_RUNNING = 2;
+const STAMINA_REGEN_RECENTLY_STOPPED = 4;
+const STAMINA_REGEN_RESTED = 8;
+const STAMINA_RECENT_STOP_SECONDS = 3;
 const IDLE_CHUNK_REFRESH_INTERVAL_MS = 5000;
 const MOVE_SEND_INTERVAL_MS = 90;
 const HUD_REFRESH_INTERVAL_MS = 120;
@@ -179,6 +183,9 @@ type AppState = {
   playerVisual: Position;
   camera: Position;
   facing: Facing;
+  currentStamina: number;
+  sprinting: boolean;
+  lastSprintEndedAt: number;
   tileScale: number;
   chunks: Map<string, ChunkRender>;
   pendingChunkRenders: Array<{ key: string; snapshot: ChunkSnapshot }>;
@@ -396,6 +403,9 @@ const state: AppState = {
   playerVisual: { x: 0, y: 0 },
   camera: { x: 0, y: 0 },
   facing: "front",
+  currentStamina: 100,
+  sprinting: false,
+  lastSprintEndedAt: -Infinity,
   tileScale: 1,
   chunks: new Map(),
   pendingChunkRenders: [],
@@ -1916,6 +1926,9 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.player = { ...entered.position };
     state.playerVisual = { ...entered.position };
     state.camera = { ...entered.position };
+    state.currentStamina = getCombatStats(character.stats).resources.staminaMax;
+    state.sprinting = false;
+    state.lastSprintEndedAt = -Infinity;
     state.players.clear();
     state.chunks.clear();
     state.pendingChunkRenders = [];
@@ -2013,6 +2026,9 @@ function logoutToLogin(): void {
   state.characterName = "";
   state.worldId = "";
   state.mapId = "map_0_0";
+  state.currentStamina = 100;
+  state.sprinting = false;
+  state.lastSprintEndedAt = -Infinity;
   state.players.clear();
   state.chunks.clear();
   state.pendingChunkRenders = [];
@@ -2070,7 +2086,7 @@ function toggleInventory(open = !state.inventoryOpen): void {
 
 function renderInventoryModal(): void {
   const character = currentPlayerCharacter();
-  const combat = getCombatStats(character?.stats);
+  const combat = withRuntimeResources(getCombatStats(character?.stats));
   inventoryModal.innerHTML = `
     <div class="inventory-frame">
       <div class="inventory-titlebar">
@@ -2135,10 +2151,10 @@ function renderInventoryAvatar(character: CharacterSummary | undefined): void {
   target.imageSmoothingEnabled = false;
   target.clearRect(0, 0, canvas.width, canvas.height);
   target.save();
-  target.translate(canvas.width / 2, canvas.height - 28);
-  target.scale(2.6, 2.6);
+  target.translate(canvas.width / 2, canvas.height - 18);
+  target.scale(10.5, 10.5);
   const previousScale = state.tileScale;
-  state.tileScale = 14;
+  state.tileScale = 6;
   renderAvatarSkeleton(target, { x: 0, y: 0 }, character, state.inventoryFacing, true, IDLE_LIMB_STATE);
   state.tileScale = previousScale;
   target.restore();
@@ -2207,7 +2223,7 @@ function renderSettingsPanel(): string {
 function renderProfilePanel(): string {
   const character = currentPlayerCharacter();
   const stats = character?.stats;
-  const combat = getCombatStats(stats);
+  const combat = withRuntimeResources(getCombatStats(stats));
   const warnings = stats?.metadata?.warnings ?? [];
   return `
     <div class="profile-panel">
@@ -2450,6 +2466,10 @@ function processPendingChunkRenders(limit: number): void {
 function updatePlayer(deltaSeconds: number, now: number): void {
   if (!state.token || !state.characterId) return;
 
+  const combat = getCombatStats(currentPlayerCharacter()?.stats);
+  const staminaMax = Math.max(1, combat.resources.staminaMax);
+  state.currentStamina = clamp(state.currentStamina, 0, staminaMax);
+
   let dx = 0;
   let dy = 0;
   if (state.pressed.has(state.keyBindings.moveLeft) || state.pressed.has("ArrowLeft")) dx -= 1;
@@ -2457,11 +2477,14 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   if (state.pressed.has(state.keyBindings.moveUp) || state.pressed.has("ArrowUp")) dy += 1;
   if (state.pressed.has(state.keyBindings.moveDown) || state.pressed.has("ArrowDown")) dy -= 1;
 
-  if (dx !== 0 || dy !== 0) {
+  const moving = dx !== 0 || dy !== 0;
+  const wantsSprint = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight");
+  const canSprint = moving && wantsSprint && state.currentStamina > 0;
+  updateStamina(deltaSeconds, now, canSprint, staminaMax);
+
+  if (moving) {
     const length = Math.hypot(dx, dy);
-    const speed = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight")
-      ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
-      : PLAYER_WALK_SPEED_TILES_PER_SECOND;
+    const speed = getCurrentMoveSpeed(combat, state.sprinting);
     state.facing = facingFromVector(dx / length, dy / length, state.facing);
     const deltaX = (dx / length) * speed * deltaSeconds;
     const deltaY = (dy / length) * speed * deltaSeconds;
@@ -2488,6 +2511,33 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   }
 
   state.currentTile = findTileAt(state.player.x, state.player.y);
+}
+
+function updateStamina(deltaSeconds: number, now: number, sprinting: boolean, staminaMax: number): void {
+  if (sprinting) {
+    const staminaDelta = (STAMINA_REGEN_WHILE_RUNNING - SPRINT_STAMINA_COST_PER_SECOND) * deltaSeconds;
+    state.currentStamina = clamp(state.currentStamina + staminaDelta, 0, staminaMax);
+    state.sprinting = state.currentStamina > 0;
+    if (!state.sprinting) {
+      state.lastSprintEndedAt = now;
+    }
+    return;
+  }
+
+  if (state.sprinting) {
+    state.lastSprintEndedAt = now;
+  }
+  state.sprinting = false;
+  const stoppedSeconds = (now - state.lastSprintEndedAt) / 1000;
+  const regen = stoppedSeconds <= STAMINA_RECENT_STOP_SECONDS
+    ? STAMINA_REGEN_RECENTLY_STOPPED
+    : STAMINA_REGEN_RESTED;
+  state.currentStamina = clamp(state.currentStamina + regen * deltaSeconds, 0, staminaMax);
+}
+
+function getCurrentMoveSpeed(combat: CharacterCombatStats, sprinting: boolean): number {
+  const baseMoveSpeed = Math.max(0, combat.moveSpeed);
+  return sprinting ? baseMoveSpeed * SPRINT_SPEED_MULTIPLIER : baseMoveSpeed;
 }
 
 function updatePlayerVisual(deltaSeconds: number): void {
@@ -3053,16 +3103,14 @@ function getLimbMotionState(local: boolean): LimbMotionState {
 function updateHud(): void {
   if (!state.token || !state.characterId) return;
   const character = currentPlayerCharacter();
-  const combat = getCombatStats(character?.stats);
+  const combat = withRuntimeResources(getCombatStats(character?.stats));
   const occupied = positionToOccupiedTile(state.player);
   const chunkX = worldToChunk(occupied.x);
   const chunkY = worldToChunk(occupied.y);
   const tile = state.currentTile;
   const visibleTilesX = TARGET_VISIBLE_TILES_X;
   const visibleTilesY = TARGET_VISIBLE_TILES_Y;
-  const speed = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight")
-    ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
-    : PLAYER_WALK_SPEED_TILES_PER_SECOND;
+  const speed = getCurrentMoveSpeed(combat, state.sprinting);
   hud.innerHTML = renderGameHud(character, combat);
 
   const dominant = dominantTerrain();
@@ -3167,6 +3215,18 @@ function getCombatStats(stats: CharacterStats | undefined): CharacterCombatStats
     healPower: 0,
     healTakenBonus: 0,
     powerScore,
+  };
+}
+
+function withRuntimeResources(combat: CharacterCombatStats): CharacterCombatStats {
+  const staminaMax = Math.max(1, combat.resources.staminaMax);
+  state.currentStamina = clamp(state.currentStamina, 0, staminaMax);
+  return {
+    ...combat,
+    resources: {
+      ...combat.resources,
+      staminaCurrent: state.currentStamina,
+    },
   };
 }
 
