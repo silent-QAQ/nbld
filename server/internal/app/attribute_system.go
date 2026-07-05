@@ -85,10 +85,9 @@ func NormalizeCharacterStats(stats CharacterStats) CharacterStats {
 		SchemaVersion: attributeSchemaVersion,
 		ProfileID:     defaultStatProfileID,
 		AttributeDefs: attributeDefinitions,
-		Warnings:      stats.Metadata.Warnings,
+		Warnings:      uniqueStrings(stats.Metadata.Warnings),
 	}
-	stats.Metadata.Warnings = append(stats.Metadata.Warnings, validateStatSourceRules(stats.Sources)...)
-	sort.Strings(stats.Metadata.Warnings)
+	stats.Metadata.Warnings = uniqueStrings(append(stats.Metadata.Warnings, validateStatSourceRules(stats.Sources)...))
 	return stats
 }
 
@@ -117,11 +116,18 @@ func normalizeAttributeValues(values AttributeValues) AttributeValues {
 		out[def.Code] = def.DefaultValue
 	}
 	for code, value := range values {
-		def, ok := attributeDefinitionByCode[code]
-		if !ok || math.IsNaN(value) || math.IsInf(value, 0) {
+		if _, ok := attributeDefinitionByCode[code]; !ok || math.IsNaN(value) || math.IsInf(value, 0) {
 			continue
 		}
-		out[code] = clampAttributeValue(def, value)
+		out[code] = roundStatValue(value)
+	}
+	return out
+}
+
+func normalizeFinalAttributeValues(values AttributeValues) AttributeValues {
+	out := make(AttributeValues, len(attributeDefinitions))
+	for _, def := range attributeDefinitions {
+		out[def.Code] = clampAttributeValue(def, values[def.Code])
 	}
 	return out
 }
@@ -191,9 +197,9 @@ func deriveCharacterStats(sources CharacterStatSources) CharacterDerivedStats {
 	combatStats[AttributeHealth] = derivedStats[AttributeHealth] + sources.Buff[AttributeHealth]
 
 	return CharacterDerivedStats{
-		BaseStats:     normalizeAttributeValues(baseStats),
-		DerivedStats:  normalizeAttributeValues(derivedStats),
-		CombatStats:   normalizeAttributeValues(combatStats),
+		BaseStats:    normalizeFinalAttributeValues(baseStats),
+		DerivedStats: normalizeFinalAttributeValues(derivedStats),
+		CombatStats:  normalizeFinalAttributeValues(combatStats),
 	}
 }
 
@@ -300,4 +306,24 @@ func validateStatSourceRules(sources CharacterStatSources) []string {
 		warnings = append(warnings, "passive gem health is ignored by design")
 	}
 	return warnings
+}
+
+func uniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -209,9 +209,14 @@ type WSServerMessage struct {
 }
 
 type CharacterStats struct {
-	Base    CharacterBaseStats    `json:"base"`
-	Attack  CharacterAttackStats  `json:"attack"`
-	Defense CharacterDefenseStats `json:"defense"`
+	Base     CharacterBaseStats     `json:"base"`
+	Attack   CharacterAttackStats   `json:"attack"`
+	Defense  CharacterDefenseStats  `json:"defense"`
+	Level    int                    `json:"level"`
+	Sources  CharacterStatSources   `json:"sources"`
+	Derived  CharacterDerivedStats  `json:"derived"`
+	Combat   CharacterCombatStats   `json:"combat"`
+	Metadata CharacterStatsMetadata `json:"metadata"`
 }
 
 type CharacterBaseStats struct {
@@ -237,6 +242,74 @@ type CharacterDefenseStats struct {
 	CritResistance   int `json:"critResistance"`
 	DamageMitigation int `json:"damageMitigation"`
 	BonusMitigation  int `json:"bonusMitigation"`
+}
+
+type AttributeValues map[string]float64
+
+type CharacterStatSources struct {
+	Base          AttributeValues `json:"base"`
+	LevelGrowth   AttributeValues `json:"levelGrowth"`
+	Talent        AttributeValues `json:"talent"`
+	Equipment     AttributeValues `json:"equipment"`
+	PassiveGem    AttributeValues `json:"passiveGem"`
+	Buff          AttributeValues `json:"buff"`
+	System        AttributeValues `json:"system"`
+	Manual        AttributeValues `json:"manual,omitempty"`
+	EquipmentNote string          `json:"equipmentNote,omitempty"`
+}
+
+type CharacterDerivedStats struct {
+	BaseStats    AttributeValues `json:"baseStats"`
+	DerivedStats AttributeValues `json:"derivedStats"`
+	CombatStats  AttributeValues `json:"combatStats"`
+}
+
+type CharacterResourceStats struct {
+	HealthMax      int `json:"healthMax"`
+	HealthCurrent  int `json:"healthCurrent"`
+	ManaMax        int `json:"manaMax"`
+	ManaCurrent    int `json:"manaCurrent"`
+	StaminaMax     int `json:"staminaMax"`
+	StaminaCurrent int `json:"staminaCurrent"`
+}
+
+type CharacterCombatStats struct {
+	Resources       CharacterResourceStats `json:"resources"`
+	PhysicalAttack  int                    `json:"physicalAttack"`
+	MagicAttack     int                    `json:"magicAttack"`
+	PhysicalDefense int                    `json:"physicalDefense"`
+	MagicDefense    int                    `json:"magicDefense"`
+	MoveSpeed       float64                `json:"moveSpeed"`
+	PhysicalCrit    float64                `json:"physicalCrit"`
+	MagicCrit       float64                `json:"magicCrit"`
+	CritDamageBonus float64                `json:"critDamageBonus"`
+	DamageBonus     float64                `json:"damageBonus"`
+	ExtraDamage     float64                `json:"extraDamage"`
+	CritResist      float64                `json:"critResist"`
+	DamageImmunity  float64                `json:"damageImmunity"`
+	ExtraImmunity   float64                `json:"extraImmunity"`
+	HealPower       float64                `json:"healPower"`
+	HealTakenBonus  float64                `json:"healTakenBonus"`
+	PowerScore      int                    `json:"powerScore"`
+}
+
+type AttributeDefinition struct {
+	Code          string  `json:"code"`
+	DisplayName   string  `json:"displayName"`
+	Category      string  `json:"category"`
+	ValueKind     string  `json:"valueKind"`
+	DefaultValue  float64 `json:"defaultValue"`
+	MinValue      float64 `json:"minValue,omitempty"`
+	MaxValue      float64 `json:"maxValue,omitempty"`
+	ClientVisible bool    `json:"clientVisible"`
+	Description   string  `json:"description,omitempty"`
+}
+
+type CharacterStatsMetadata struct {
+	SchemaVersion int                   `json:"schemaVersion"`
+	ProfileID     string                `json:"profileId"`
+	AttributeDefs []AttributeDefinition `json:"attributeDefs,omitempty"`
+	Warnings      []string              `json:"warnings,omitempty"`
 }
 
 type ItemStack struct {
@@ -352,14 +425,14 @@ type CharacterSkeletonAppearance struct {
 }
 
 type CharacterPaletteAppearance struct {
-	SkinPrimary  string `json:"skinPrimary"`
-	SkinShadow   string `json:"skinShadow"`
-	HairPrimary  string `json:"hairPrimary"`
-	HairShadow   string `json:"hairShadow"`
-	ClothPrimary string `json:"clothPrimary"`
-	ClothShadow  string `json:"clothShadow"`
-	MetalPrimary string `json:"metalPrimary"`
-	MetalShadow  string `json:"metalShadow"`
+	SkinPrimary   string   `json:"skinPrimary"`
+	SkinShadow    string   `json:"skinShadow"`
+	HairPrimary   string   `json:"hairPrimary"`
+	HairShadow    string   `json:"hairShadow"`
+	ClothPrimary  string   `json:"clothPrimary"`
+	ClothShadow   string   `json:"clothShadow"`
+	MetalPrimary  string   `json:"metalPrimary"`
+	MetalShadow   string   `json:"metalShadow"`
 	PixelSwatches []string `json:"pixelSwatches"`
 }
 

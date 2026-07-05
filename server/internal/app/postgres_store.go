@@ -354,6 +354,7 @@ func (s *postgresAccountStore) GetCharacter(ctx context.Context, accountID, char
 }
 
 func (s *postgresAccountStore) SaveCharacter(ctx context.Context, accountID string, character Character) error {
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	statsData, err := json.Marshal(character.Stats)
 	if err != nil {
 		return err
@@ -686,6 +687,7 @@ func scanCharacter(scanner characterScanner) (Character, error) {
 	if err := json.Unmarshal(statsData, &character.Stats); err != nil {
 		return Character{}, err
 	}
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	if err := json.Unmarshal(inventoryData, &character.Inventory); err != nil {
 		return Character{}, err
 	}

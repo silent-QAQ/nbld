@@ -573,14 +573,16 @@ func (s *Server) handleUpdateCharacterAppearance(w http.ResponseWriter, r *http.
 		return
 	}
 
-	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
-		character.Appearance = protocolAppearanceToDomain(req.Appearance)
-	})
-	if !ok {
+	appearance := protocolAppearanceToDomain(req.Appearance)
+	if err := validateCharacterAppearance(appearance); err != nil {
+		writeStoreError(w, err)
 		return
 	}
-	if err := validateCharacterAppearance(character.Appearance); err != nil {
-		writeStoreError(w, err)
+
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+		character.Appearance = appearance
+	})
+	if !ok {
 		return
 	}
 
@@ -1475,35 +1477,115 @@ func toProtocolCharacters(characters []Character) []protocol.CharacterSummary {
 	return out
 }
 
+func toProtocolStats(stats CharacterStats) protocol.CharacterStats {
+	return protocol.CharacterStats{
+		Base: protocol.CharacterBaseStats{
+			Health:    stats.Base.Health,
+			Stamina:   stats.Base.Stamina,
+			Mana:      stats.Base.Mana,
+			MoveSpeed: stats.Base.MoveSPD,
+		},
+		Attack: protocol.CharacterAttackStats{
+			PhysicalAttack:  stats.Attack.PhysicalAttack,
+			SpellAttack:     stats.Attack.SpellAttack,
+			PhysicalCrit:    stats.Attack.PhysicalCrit,
+			SpellCrit:       stats.Attack.SpellCrit,
+			DamageBonus:     stats.Attack.DamageBonus,
+			CritDamageBonus: stats.Attack.CritDamageBonus,
+			BonusDamage:     stats.Attack.BonusDamage,
+		},
+		Defense: protocol.CharacterDefenseStats{
+			PhysicalDefense:  stats.Defense.PhysicalDefense,
+			SpellDefense:     stats.Defense.SpellDefense,
+			CritResistance:   stats.Defense.CritResistance,
+			DamageMitigation: stats.Defense.DamageMitigate,
+			BonusMitigation:  stats.Defense.BonusMitigate,
+		},
+		Level: stats.Level,
+		Sources: protocol.CharacterStatSources{
+			Base:          toProtocolAttributeValues(stats.Sources.Base),
+			LevelGrowth:   toProtocolAttributeValues(stats.Sources.LevelGrowth),
+			Talent:        toProtocolAttributeValues(stats.Sources.Talent),
+			Equipment:     toProtocolAttributeValues(stats.Sources.Equipment),
+			PassiveGem:    toProtocolAttributeValues(stats.Sources.PassiveGem),
+			Buff:          toProtocolAttributeValues(stats.Sources.Buff),
+			System:        toProtocolAttributeValues(stats.Sources.System),
+			Manual:        toProtocolAttributeValues(stats.Sources.Manual),
+			EquipmentNote: stats.Sources.EquipmentNote,
+		},
+		Derived: protocol.CharacterDerivedStats{
+			BaseStats:    toProtocolAttributeValues(stats.Derived.BaseStats),
+			DerivedStats: toProtocolAttributeValues(stats.Derived.DerivedStats),
+			CombatStats:  toProtocolAttributeValues(stats.Derived.CombatStats),
+		},
+		Combat: protocol.CharacterCombatStats{
+			Resources: protocol.CharacterResourceStats{
+				HealthMax:      stats.Combat.Resources.HealthMax,
+				HealthCurrent:  stats.Combat.Resources.HealthCurrent,
+				ManaMax:        stats.Combat.Resources.ManaMax,
+				ManaCurrent:    stats.Combat.Resources.ManaCurrent,
+				StaminaMax:     stats.Combat.Resources.StaminaMax,
+				StaminaCurrent: stats.Combat.Resources.StaminaCurrent,
+			},
+			PhysicalAttack:  stats.Combat.PhysicalAttack,
+			MagicAttack:     stats.Combat.MagicAttack,
+			PhysicalDefense: stats.Combat.PhysicalDefense,
+			MagicDefense:    stats.Combat.MagicDefense,
+			MoveSpeed:       stats.Combat.MoveSpeed,
+			PhysicalCrit:    stats.Combat.PhysicalCrit,
+			MagicCrit:       stats.Combat.MagicCrit,
+			CritDamageBonus: stats.Combat.CritDamageBonus,
+			DamageBonus:     stats.Combat.DamageBonus,
+			ExtraDamage:     stats.Combat.ExtraDamage,
+			CritResist:      stats.Combat.CritResist,
+			DamageImmunity:  stats.Combat.DamageImmunity,
+			ExtraImmunity:   stats.Combat.ExtraImmunity,
+			HealPower:       stats.Combat.HealPower,
+			HealTakenBonus:  stats.Combat.HealTakenBonus,
+			PowerScore:      stats.Combat.PowerScore,
+		},
+		Metadata: protocol.CharacterStatsMetadata{
+			SchemaVersion: stats.Metadata.SchemaVersion,
+			ProfileID:     stats.Metadata.ProfileID,
+			AttributeDefs: toProtocolAttributeDefs(stats.Metadata.AttributeDefs),
+			Warnings:      append([]string(nil), stats.Metadata.Warnings...),
+		},
+	}
+}
+
+func toProtocolAttributeValues(values AttributeValues) protocol.AttributeValues {
+	out := make(protocol.AttributeValues, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func toProtocolAttributeDefs(defs []AttributeDefinition) []protocol.AttributeDefinition {
+	out := make([]protocol.AttributeDefinition, 0, len(defs))
+	for _, def := range defs {
+		out = append(out, protocol.AttributeDefinition{
+			Code:          def.Code,
+			DisplayName:   def.DisplayName,
+			Category:      def.Category,
+			ValueKind:     def.ValueKind,
+			DefaultValue:  def.DefaultValue,
+			MinValue:      def.MinValue,
+			MaxValue:      def.MaxValue,
+			ClientVisible: def.ClientVisible,
+			Description:   def.Description,
+		})
+	}
+	return out
+}
+
 func toProtocolCharacter(character Character) protocol.CharacterSummary {
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	summary := protocol.CharacterSummary{
 		ID:      character.ID,
 		Name:    character.Name,
 		Version: character.Version,
-		Stats: protocol.CharacterStats{
-			Base: protocol.CharacterBaseStats{
-				Health:    character.Stats.Base.Health,
-				Stamina:   character.Stats.Base.Stamina,
-				Mana:      character.Stats.Base.Mana,
-				MoveSpeed: character.Stats.Base.MoveSPD,
-			},
-			Attack: protocol.CharacterAttackStats{
-				PhysicalAttack:  character.Stats.Attack.PhysicalAttack,
-				SpellAttack:     character.Stats.Attack.SpellAttack,
-				PhysicalCrit:    character.Stats.Attack.PhysicalCrit,
-				SpellCrit:       character.Stats.Attack.SpellCrit,
-				DamageBonus:     character.Stats.Attack.DamageBonus,
-				CritDamageBonus: character.Stats.Attack.CritDamageBonus,
-				BonusDamage:     character.Stats.Attack.BonusDamage,
-			},
-			Defense: protocol.CharacterDefenseStats{
-				PhysicalDefense:  character.Stats.Defense.PhysicalDefense,
-				SpellDefense:     character.Stats.Defense.SpellDefense,
-				CritResistance:   character.Stats.Defense.CritResistance,
-				DamageMitigation: character.Stats.Defense.DamageMitigate,
-				BonusMitigation:  character.Stats.Defense.BonusMitigate,
-			},
-		},
+		Stats:   toProtocolStats(character.Stats),
 		Inventory: protocol.ItemContainer{
 			Items: toProtocolItems(character.Inventory.Items),
 		},
@@ -1536,8 +1618,8 @@ func toProtocolCharacter(character Character) protocol.CharacterSummary {
 			},
 		},
 		Appearance: toProtocolAppearance(character.Appearance),
-		CreatedAt: character.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: character.UpdatedAt.Format(time.RFC3339),
+		CreatedAt:  character.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:  character.UpdatedAt.Format(time.RFC3339),
 	}
 
 	if character.DeletedAt != nil {
@@ -1610,14 +1692,14 @@ func toProtocolAppearance(appearance CharacterAppearance) protocol.CharacterAppe
 			RightTorso: appearance.Skeleton.RightTorso,
 		},
 		Palette: protocol.CharacterPaletteAppearance{
-			SkinPrimary:  appearance.Palette.SkinPrimary,
-			SkinShadow:   appearance.Palette.SkinShadow,
-			HairPrimary:  appearance.Palette.HairPrimary,
-			HairShadow:   appearance.Palette.HairShadow,
-			ClothPrimary: appearance.Palette.ClothPrimary,
-			ClothShadow:  appearance.Palette.ClothShadow,
-			MetalPrimary: appearance.Palette.MetalPrimary,
-			MetalShadow:  appearance.Palette.MetalShadow,
+			SkinPrimary:   appearance.Palette.SkinPrimary,
+			SkinShadow:    appearance.Palette.SkinShadow,
+			HairPrimary:   appearance.Palette.HairPrimary,
+			HairShadow:    appearance.Palette.HairShadow,
+			ClothPrimary:  appearance.Palette.ClothPrimary,
+			ClothShadow:   appearance.Palette.ClothShadow,
+			MetalPrimary:  appearance.Palette.MetalPrimary,
+			MetalShadow:   appearance.Palette.MetalShadow,
 			PixelSwatches: appearance.Palette.PixelSwatches,
 		},
 	}
@@ -1700,19 +1782,20 @@ func (s *Server) updateCharacterFromRequest(ctx context.Context, w http.Response
 		return Character{}, false
 	}
 
-	character, err := s.loadCharacterForWorld(ctx, session.AccountID, characterID)
+	if _, err := s.loadCharacterForWorld(ctx, session.AccountID, characterID); err != nil {
+		writeStoreError(w, err)
+		return Character{}, false
+	}
+
+	character, err := s.onlineCharacters.UpdateCharacter(ctx, session.AccountID, characterID, func(character *Character) error {
+		mutate(character)
+		character.Stats = NormalizeCharacterStats(character.Stats)
+		return nil
+	})
 	if err != nil {
 		writeStoreError(w, err)
 		return Character{}, false
 	}
-
-	if err := s.updateOnlineCharacter(ctx, session.AccountID, characterID, mutate); err != nil {
-		writeStoreError(w, err)
-		return Character{}, false
-	}
-
-	mutate(&character)
-	character.UpdatedAt = time.Now().UTC()
 	return character, true
 }
 
@@ -1740,7 +1823,30 @@ func protocolStatsToDomain(stats protocol.CharacterStats) CharacterStats {
 			DamageMitigate:  stats.Defense.DamageMitigation,
 			BonusMitigate:   stats.Defense.BonusMitigation,
 		},
+		Level: stats.Level,
+		Sources: CharacterStatSources{
+			Base:          protocolAttributeValuesToDomain(stats.Sources.Base),
+			LevelGrowth:   protocolAttributeValuesToDomain(stats.Sources.LevelGrowth),
+			Talent:        protocolAttributeValuesToDomain(stats.Sources.Talent),
+			Equipment:     protocolAttributeValuesToDomain(stats.Sources.Equipment),
+			PassiveGem:    protocolAttributeValuesToDomain(stats.Sources.PassiveGem),
+			Buff:          protocolAttributeValuesToDomain(stats.Sources.Buff),
+			System:        protocolAttributeValuesToDomain(stats.Sources.System),
+			Manual:        protocolAttributeValuesToDomain(stats.Sources.Manual),
+			EquipmentNote: stats.Sources.EquipmentNote,
+		},
+		Metadata: CharacterStatsMeta{
+			Warnings: append([]string(nil), stats.Metadata.Warnings...),
+		},
 	}
+}
+
+func protocolAttributeValuesToDomain(values protocol.AttributeValues) AttributeValues {
+	out := make(AttributeValues, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 func protocolItemContainerToDomain(container protocol.ItemContainer) ItemContainer {
@@ -1820,14 +1926,14 @@ func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) Charact
 			RightTorso: appearance.Skeleton.RightTorso,
 		},
 		Palette: CharacterPaletteAppearance{
-			SkinPrimary:  appearance.Palette.SkinPrimary,
-			SkinShadow:   appearance.Palette.SkinShadow,
-			HairPrimary:  appearance.Palette.HairPrimary,
-			HairShadow:   appearance.Palette.HairShadow,
-			ClothPrimary: appearance.Palette.ClothPrimary,
-			ClothShadow:  appearance.Palette.ClothShadow,
-			MetalPrimary: appearance.Palette.MetalPrimary,
-			MetalShadow:  appearance.Palette.MetalShadow,
+			SkinPrimary:   appearance.Palette.SkinPrimary,
+			SkinShadow:    appearance.Palette.SkinShadow,
+			HairPrimary:   appearance.Palette.HairPrimary,
+			HairShadow:    appearance.Palette.HairShadow,
+			ClothPrimary:  appearance.Palette.ClothPrimary,
+			ClothShadow:   appearance.Palette.ClothShadow,
+			MetalPrimary:  appearance.Palette.MetalPrimary,
+			MetalShadow:   appearance.Palette.MetalShadow,
 			PixelSwatches: appearance.Palette.PixelSwatches,
 		},
 	}

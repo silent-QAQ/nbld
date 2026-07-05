@@ -487,6 +487,38 @@ func TestInvalidTokenRejected(t *testing.T) {
 	)
 }
 
+func TestCharacterStatsDerivedSnapshot(t *testing.T) {
+	stats := defaultCharacterStats()
+
+	if stats.Metadata.SchemaVersion == 0 {
+		t.Fatal("expected stats schema version")
+	}
+	if stats.Combat.Resources.HealthMax != 100 {
+		t.Fatalf("expected health max 100, got %d", stats.Combat.Resources.HealthMax)
+	}
+	if stats.Combat.MagicAttack != 10 {
+		t.Fatalf("expected magic attack 10, got %d", stats.Combat.MagicAttack)
+	}
+	if stats.Derived.CombatStats[AttributePhysicalAttack] != 10 {
+		t.Fatalf("expected physical attack attribute 10, got %.2f", stats.Derived.CombatStats[AttributePhysicalAttack])
+	}
+}
+
+func TestEquipmentAndPassiveGemHealthIgnored(t *testing.T) {
+	stats := defaultCharacterStats()
+	stats.Sources.Equipment[AttributeHealth] = 999
+	stats.Sources.PassiveGem[AttributeHealth] = 500
+	stats.Sources.Talent[AttributeHealth] = 25
+	stats = NormalizeCharacterStats(stats)
+
+	if stats.Combat.Resources.HealthMax != 125 {
+		t.Fatalf("expected only base + talent health, got %d", stats.Combat.Resources.HealthMax)
+	}
+	if len(stats.Metadata.Warnings) == 0 {
+		t.Fatal("expected health source warning")
+	}
+}
+
 func mustRegisterAndLogin(t *testing.T, handler http.Handler, email, username string) protocol.LoginRequest {
 	t.Helper()
 

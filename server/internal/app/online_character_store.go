@@ -60,6 +60,7 @@ func (s *memoryOnlineCharacterStore) StoreCharacter(_ context.Context, accountID
 	defer s.mu.Unlock()
 
 	key := onlineCharacterKey(accountID, character.ID)
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	s.characters[key] = character
 	return nil
 }
@@ -76,6 +77,7 @@ func (s *memoryOnlineCharacterStore) UpdateCharacter(_ context.Context, accountI
 	if err := mutate(&character); err != nil {
 		return Character{}, err
 	}
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	character.Version++
 	character.UpdatedAt = time.Now().UTC()
 	s.characters[key] = character
@@ -187,6 +189,7 @@ func (s *redisOnlineCharacterStore) LoadCharacter(ctx context.Context, accountID
 	if err := json.Unmarshal(payload, &character); err != nil {
 		return Character{}, false, err
 	}
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	character.Equipment.syncVisibleArmor()
 	return character, true, nil
 }
@@ -196,6 +199,7 @@ func (s *redisOnlineCharacterStore) Ping(ctx context.Context) error {
 }
 
 func (s *redisOnlineCharacterStore) StoreCharacter(ctx context.Context, accountID string, character Character) error {
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	payload, err := json.Marshal(character)
 	if err != nil {
 		return err
@@ -229,6 +233,7 @@ func (s *redisOnlineCharacterStore) UpdateCharacter(ctx context.Context, account
 			if err := mutate(&character); err != nil {
 				return err
 			}
+			character.Stats = NormalizeCharacterStats(character.Stats)
 			character.Version++
 			character.UpdatedAt = time.Now().UTC()
 			character.Equipment.syncVisibleArmor()

@@ -65,10 +65,83 @@ export type CharacterDefenseStats = {
   bonusMitigation: number;
 };
 
+export type AttributeValues = Record<string, number>;
+
+export type CharacterStatSources = {
+  base: AttributeValues;
+  levelGrowth: AttributeValues;
+  talent: AttributeValues;
+  equipment: AttributeValues;
+  passiveGem: AttributeValues;
+  buff: AttributeValues;
+  system: AttributeValues;
+  manual?: AttributeValues;
+  equipmentNote?: string;
+};
+
+export type CharacterDerivedStats = {
+  baseStats: AttributeValues;
+  derivedStats: AttributeValues;
+  combatStats: AttributeValues;
+};
+
+export type CharacterResourceStats = {
+  healthMax: number;
+  healthCurrent: number;
+  manaMax: number;
+  manaCurrent: number;
+  staminaMax: number;
+  staminaCurrent: number;
+};
+
+export type CharacterCombatStats = {
+  resources: CharacterResourceStats;
+  physicalAttack: number;
+  magicAttack: number;
+  physicalDefense: number;
+  magicDefense: number;
+  moveSpeed: number;
+  physicalCrit: number;
+  magicCrit: number;
+  critDamageBonus: number;
+  damageBonus: number;
+  extraDamage: number;
+  critResist: number;
+  damageImmunity: number;
+  extraImmunity: number;
+  healPower: number;
+  healTakenBonus: number;
+  powerScore: number;
+};
+
+export type AttributeDefinition = {
+  code: string;
+  displayName: string;
+  category: "base" | "attack" | "defense" | "healing" | string;
+  valueKind: "flat" | "ratio" | string;
+  defaultValue: number;
+  minValue?: number;
+  maxValue?: number;
+  clientVisible: boolean;
+  description?: string;
+};
+
+export type CharacterStatsMetadata = {
+  schemaVersion: number;
+  profileId: string;
+  attributeDefs?: AttributeDefinition[];
+  warnings?: string[];
+};
+
 export type CharacterStats = {
   base: CharacterBaseStats;
   attack: CharacterAttackStats;
   defense: CharacterDefenseStats;
+  level?: number;
+  sources?: CharacterStatSources;
+  derived?: CharacterDerivedStats;
+  combat?: CharacterCombatStats;
+  metadata?: CharacterStatsMetadata;
 };
 
 export type ItemStack = {

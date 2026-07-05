@@ -2,9 +2,13 @@ import "./styles.css";
 import { ApiClient } from "./api";
 import { loadAssets, type AssetMaps } from "./assets";
 import type {
+  AttributeDefinition,
+  AttributeValues,
   CharacterAppearance,
   CharacterBodyAppearance,
+  CharacterCombatStats,
   CharacterSummary,
+  CharacterStats,
   ChunkCoord,
   ChunkSnapshot,
   ChunkTile,
@@ -41,6 +45,55 @@ const MAX_PIXEL_SWATCHES = PIXEL_SYMBOLS.length - SWATCH_SYMBOL_OFFSET;
 const AVATAR_LAYER_CACHE_LIMIT = 256;
 const PLAYER_COLLISION_SIZE_TILES = 1;
 const COLLISION_EPSILON = 0.0001;
+
+const ATTRIBUTE_LABELS: Record<string, string> = {
+  health: "生命",
+  stamina: "耐力",
+  mana: "法力",
+  move_speed: "移速",
+  physical_attack: "物攻",
+  magic_attack: "法攻",
+  physical_defense: "物防",
+  magic_defense: "法防",
+  physical_crit: "物暴",
+  magic_crit: "法暴",
+  crit_damage_bonus: "爆伤",
+  damage_bonus: "增伤",
+  extra_damage: "追加",
+  crit_resist: "暴抗",
+  damage_immunity: "免伤",
+  extra_immunity: "追免",
+  heal_power: "治疗",
+  heal_taken_bonus: "受疗",
+};
+
+const CORE_STAT_CODES = [
+  "physical_attack",
+  "magic_attack",
+  "physical_defense",
+  "magic_defense",
+  "move_speed",
+] as const;
+
+const RATIO_STAT_CODES = [
+  "physical_crit",
+  "magic_crit",
+  "crit_damage_bonus",
+  "damage_bonus",
+  "damage_immunity",
+  "extra_immunity",
+] as const;
+
+const SOURCE_LABELS: Record<string, string> = {
+  base: "基础",
+  levelGrowth: "等级",
+  talent: "天赋",
+  equipment: "装备",
+  passiveGem: "魂石",
+  buff: "状态",
+  system: "系统",
+  manual: "手动",
+};
 
 const BLOCKING_BLOCKS = new Set<string>([
   "mountain_rock",
@@ -599,6 +652,7 @@ async function loadCharacters(): Promise<void> {
 function renderCharacterList(characters: CharacterSummary[]): void {
   characterList.innerHTML = "";
   for (const character of characters) {
+    const combat = getCombatStats(character.stats);
     const wrapper = document.createElement("div");
     wrapper.className = "character-entry";
 
@@ -613,9 +667,18 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     const meta = document.createElement("div");
     meta.className = "character-meta";
     meta.innerHTML = `
-      <strong>${escapeHtml(character.name)}</strong>
-      <span>${escapeHtml(character.id)}</span>
-      <span>版本 ${character.version}</span>
+      <div class="character-title-row">
+        <strong>${escapeHtml(character.name)}</strong>
+        <span class="power-chip">战力 ${formatInteger(combat.powerScore)}</span>
+      </div>
+      <span>${escapeHtml(character.id)} · Lv.${character.stats.level ?? 1} · 版本 ${character.version}</span>
+      ${renderMiniResourceBars(combat)}
+      <div class="character-stat-strip">
+        <span>物攻 ${formatInteger(combat.physicalAttack)}</span>
+        <span>法攻 ${formatInteger(combat.magicAttack)}</span>
+        <span>护甲 ${formatInteger(combat.physicalDefense + combat.magicDefense)}</span>
+        <span>移速 ${formatFlat(combat.moveSpeed)}</span>
+      </div>
     `;
 
     const actions = document.createElement("div");
@@ -1986,12 +2049,7 @@ function renderPauseMenu(section: PauseSection): void {
   if (section === "settings") {
     pauseContent.innerHTML = renderSettingsPanel();
   } else if (section === "profile") {
-    pauseContent.innerHTML = `
-      <h2>我的</h2>
-      <p>账号：${escapeHtml(state.accountUsername || state.accountEmail || "-")}</p>
-      <p>角色：${escapeHtml(state.characterName || "-")}</p>
-      <p>地图：${escapeHtml(state.mapId || "-")}</p>
-    `;
+    pauseContent.innerHTML = renderProfilePanel();
   } else {
     pauseContent.innerHTML = `
       <h2>活动</h2>
@@ -2017,6 +2075,51 @@ function renderSettingsPanel(): string {
       <button type="button" class="${state.settingsPage === "keys" ? "active" : ""}" data-settings-page="keys">按键绑定</button>
     </div>
     ${renderSettingsPage()}
+  `;
+}
+
+function renderProfilePanel(): string {
+  const character = currentPlayerCharacter();
+  const stats = character?.stats;
+  const combat = getCombatStats(stats);
+  const warnings = stats?.metadata?.warnings ?? [];
+  return `
+    <div class="profile-panel">
+      <div class="profile-hero-card">
+        <div>
+          <p class="eyebrow">NBLD 角色档案</p>
+          <h2>${escapeHtml(state.characterName || character?.name || "-")}</h2>
+          <p>账号 ${escapeHtml(state.accountUsername || state.accountEmail || "-")} · 地图 ${escapeHtml(state.mapId || "-")}</p>
+        </div>
+        <div class="profile-power">
+          <span>战力</span>
+          <strong>${formatInteger(combat.powerScore)}</strong>
+        </div>
+      </div>
+      <div class="profile-grid">
+        <section class="profile-card resource-card">
+          <h3>资源</h3>
+          ${renderResourceBars(combat)}
+        </section>
+        <section class="profile-card">
+          <h3>核心属性</h3>
+          <div class="stat-grid">
+            ${CORE_STAT_CODES.map((code) => renderStatCell(code, combatAttributeValue(combat, code), false)).join("")}
+          </div>
+        </section>
+        <section class="profile-card">
+          <h3>战斗修正</h3>
+          <div class="stat-grid">
+            ${RATIO_STAT_CODES.map((code) => renderStatCell(code, combatAttributeValue(combat, code), true)).join("")}
+          </div>
+        </section>
+        <section class="profile-card source-card">
+          <h3>来源分层</h3>
+          ${renderSourceBreakdown(stats)}
+        </section>
+      </div>
+      ${warnings.length > 0 ? `<div class="profile-warning">${warnings.map(escapeHtml).join(" / ")}</div>` : ""}
+    </div>
   `;
 }
 
@@ -2823,6 +2926,8 @@ function getLimbMotionState(local: boolean): LimbMotionState {
 
 function updateHud(): void {
   if (!state.token || !state.characterId) return;
+  const character = currentPlayerCharacter();
+  const combat = getCombatStats(character?.stats);
   const occupied = positionToOccupiedTile(state.player);
   const chunkX = worldToChunk(occupied.x);
   const chunkY = worldToChunk(occupied.y);
@@ -2833,11 +2938,33 @@ function updateHud(): void {
     ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
     : PLAYER_WALK_SPEED_TILES_PER_SECOND;
   hud.innerHTML = `
-    <div><b>状态</b> ${state.status}　<b>Socket</b> ${state.socketStatus}</div>
-    <div><b>账号</b> ${escapeHtml(state.accountUsername || state.accountEmail || "-")}　<b>角色</b> ${escapeHtml(state.characterName || "-")}</div>
-    <div><b>玩家</b> ${escapeHtml(state.playerId)}　<b>地图</b> ${escapeHtml(state.mapId)}</div>
-    <div><b>实体中心</b> X:${state.player.x.toFixed(2)} Y:${state.player.y.toFixed(2)}　<b>占地</b> 1x${PLAYER_COLLISION_SIZE_TILES} 格　<b>速度</b> ${speed.toFixed(1)} m/s　<b>区块</b> ${chunkX}, ${chunkY}</div>
-    <div><b>地形</b> ${escapeHtml(tile?.terrain ?? "未加载")}　<b>方块</b> ${escapeHtml(tile?.block ?? "未加载")}　<b>装饰</b> ${escapeHtml(tile?.decoration ?? "-")}</div>
+    <div class="hud-topline">
+      <span class="hud-badge">${escapeHtml(state.status)}</span>
+      <span>${escapeHtml(state.socketStatus)}</span>
+      <span>Lv.${character?.stats.level ?? 1}</span>
+    </div>
+    <div class="hud-identity">
+      <strong>${escapeHtml(state.characterName || "-")}</strong>
+      <span>战力 ${formatInteger(combat.powerScore)}</span>
+    </div>
+    ${renderMiniResourceBars(combat)}
+    <div class="hud-statline">
+      <span>物攻 ${formatInteger(combat.physicalAttack)}</span>
+      <span>法攻 ${formatInteger(combat.magicAttack)}</span>
+      <span>护甲 ${formatInteger(combat.physicalDefense + combat.magicDefense)}</span>
+      <span>移速 ${formatFlat(combat.moveSpeed)}</span>
+    </div>
+    <div class="hud-worldline">
+      <span>地图 ${escapeHtml(state.mapId)}</span>
+      <span>X ${state.player.x.toFixed(2)} / Y ${state.player.y.toFixed(2)}</span>
+      <span>区块 ${chunkX}, ${chunkY}</span>
+      <span>奔跑 ${speed.toFixed(1)} m/s</span>
+    </div>
+    <div class="hud-worldline">
+      <span>地形 ${escapeHtml(tile?.terrain ?? "未加载")}</span>
+      <span>方块 ${escapeHtml(tile?.block ?? "未加载")}</span>
+      <span>装饰 ${escapeHtml(tile?.decoration ?? "-")}</span>
+    </div>
   `;
 
   const dominant = dominantTerrain();
@@ -2866,6 +2993,207 @@ function dominantTerrain(): string {
     }
   }
   return best ? `${best} (${bestCount})` : "";
+}
+
+function currentPlayerCharacter(): CharacterSummary | undefined {
+  return state.availableCharacters.find((item) => item.id === state.characterId)
+    ?? state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
+}
+
+function getCombatStats(stats: CharacterStats | undefined): CharacterCombatStats {
+  if (stats?.combat) return stats.combat;
+  const health = stats?.base.health ?? 100;
+  const mana = stats?.base.mana ?? 60;
+  const stamina = stats?.base.stamina ?? 100;
+  const physicalAttack = stats?.attack.physicalAttack ?? 10;
+  const magicAttack = stats?.attack.spellAttack ?? 10;
+  const physicalDefense = stats?.defense.physicalDefense ?? 5;
+  const magicDefense = stats?.defense.spellDefense ?? 5;
+  const physicalCrit = legacyPercentToRatio(stats?.attack.physicalCrit ?? 0);
+  const magicCrit = legacyPercentToRatio(stats?.attack.spellCrit ?? 0);
+  const critDamageBonus = legacyPercentToRatio(stats?.attack.critDamageBonus ?? 0);
+  const damageBonus = legacyPercentToRatio(stats?.attack.damageBonus ?? 0);
+  const damageImmunity = legacyPercentToRatio(stats?.defense.damageMitigation ?? 0);
+  const extraImmunity = legacyPercentToRatio(stats?.defense.bonusMitigation ?? 0);
+  const powerScore = (physicalAttack + magicAttack) * 8
+    + (physicalDefense + magicDefense) * 6
+    + Math.round(health / 5 + mana / 10 + stamina / 10)
+    + Math.round(100 * (physicalCrit + magicCrit + critDamageBonus + damageBonus + damageImmunity));
+  return {
+    resources: {
+      healthMax: health,
+      healthCurrent: health,
+      manaMax: mana,
+      manaCurrent: mana,
+      staminaMax: stamina,
+      staminaCurrent: stamina,
+    },
+    physicalAttack,
+    magicAttack,
+    physicalDefense,
+    magicDefense,
+    moveSpeed: stats?.base.moveSpeed ?? 5,
+    physicalCrit,
+    magicCrit,
+    critDamageBonus,
+    damageBonus,
+    extraDamage: legacyPercentToRatio(stats?.attack.bonusDamage ?? 0),
+    critResist: legacyPercentToRatio(stats?.defense.critResistance ?? 0),
+    damageImmunity,
+    extraImmunity,
+    healPower: 0,
+    healTakenBonus: 0,
+    powerScore,
+  };
+}
+
+function legacyPercentToRatio(value: number): number {
+  return value > 1 ? value / 100 : value;
+}
+
+function renderMiniResourceBars(combat: CharacterCombatStats): string {
+  return `
+    <div class="resource-bars mini">
+      ${renderResourceBar("hp", "生命", combat.resources.healthCurrent, combat.resources.healthMax)}
+      ${renderResourceBar("mp", "法力", combat.resources.manaCurrent, combat.resources.manaMax)}
+      ${renderResourceBar("sp", "耐力", combat.resources.staminaCurrent, combat.resources.staminaMax)}
+    </div>
+  `;
+}
+
+function renderResourceBars(combat: CharacterCombatStats): string {
+  return `
+    <div class="resource-bars">
+      ${renderResourceBar("hp", "生命", combat.resources.healthCurrent, combat.resources.healthMax)}
+      ${renderResourceBar("mp", "法力", combat.resources.manaCurrent, combat.resources.manaMax)}
+      ${renderResourceBar("sp", "耐力", combat.resources.staminaCurrent, combat.resources.staminaMax)}
+    </div>
+  `;
+}
+
+function renderResourceBar(kind: "hp" | "mp" | "sp", label: string, current: number, max: number): string {
+  const safeMax = Math.max(1, max);
+  const ratio = clamp(current / safeMax, 0, 1);
+  return `
+    <div class="resource-row ${kind}">
+      <div class="resource-label"><span>${label}</span><b>${formatInteger(current)} / ${formatInteger(max)}</b></div>
+      <div class="resource-track"><i style="width:${(ratio * 100).toFixed(1)}%"></i></div>
+    </div>
+  `;
+}
+
+function renderStatCell(code: string, value: number, ratio: boolean): string {
+  return `
+    <div class="stat-cell">
+      <span>${escapeHtml(attributeLabel(code))}</span>
+      <strong>${ratio ? formatRatio(value) : formatFlat(value)}</strong>
+    </div>
+  `;
+}
+
+function renderSourceBreakdown(stats: CharacterStats | undefined): string {
+  const sources = stats?.sources;
+  const defs = stats?.metadata?.attributeDefs ?? [];
+  if (!sources) {
+    return `<p class="muted-line">当前角色仍使用兼容属性结构，等待服务端刷新后会显示来源拆分。</p>`;
+  }
+
+  const rows = Object.entries(SOURCE_LABELS).map(([key, label]) => {
+    const values = sources[key as keyof typeof sources];
+    if (!isAttributeValues(values)) return "";
+    const total = sumVisibleAttributes(values, defs);
+    const filled = Math.min(100, Math.abs(total) * 3);
+    return `
+      <div class="source-row">
+        <span>${label}</span>
+        <div class="source-track"><i style="width:${filled.toFixed(1)}%"></i></div>
+        <b>${formatSourceTotal(total)}</b>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="source-breakdown">
+      ${rows}
+      ${sources.equipmentNote ? `<p class="muted-line">${escapeHtml(sources.equipmentNote)}</p>` : ""}
+    </div>
+  `;
+}
+
+function isAttributeValues(value: unknown): value is AttributeValues {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function sumVisibleAttributes(values: AttributeValues, defs: AttributeDefinition[]): number {
+  const visibleCodes = new Set(defs.filter((def) => def.clientVisible).map((def) => def.code));
+  let total = 0;
+  for (const [code, value] of Object.entries(values)) {
+    if (visibleCodes.size > 0 && !visibleCodes.has(code)) continue;
+    if (code === "move_speed") {
+      total += value * 10;
+      continue;
+    }
+    total += value;
+  }
+  return total;
+}
+
+function combatAttributeValue(combat: CharacterCombatStats, code: string): number {
+  switch (code) {
+    case "physical_attack":
+      return combat.physicalAttack;
+    case "magic_attack":
+      return combat.magicAttack;
+    case "physical_defense":
+      return combat.physicalDefense;
+    case "magic_defense":
+      return combat.magicDefense;
+    case "move_speed":
+      return combat.moveSpeed;
+    case "physical_crit":
+      return combat.physicalCrit;
+    case "magic_crit":
+      return combat.magicCrit;
+    case "crit_damage_bonus":
+      return combat.critDamageBonus;
+    case "damage_bonus":
+      return combat.damageBonus;
+    case "extra_damage":
+      return combat.extraDamage;
+    case "crit_resist":
+      return combat.critResist;
+    case "damage_immunity":
+      return combat.damageImmunity;
+    case "extra_immunity":
+      return combat.extraImmunity;
+    case "heal_power":
+      return combat.healPower;
+    case "heal_taken_bonus":
+      return combat.healTakenBonus;
+    default:
+      return 0;
+  }
+}
+
+function attributeLabel(code: string): string {
+  return ATTRIBUTE_LABELS[code] ?? code;
+}
+
+function formatInteger(value: number): string {
+  return Math.round(value).toLocaleString("zh-CN");
+}
+
+function formatFlat(value: number): string {
+  return Number.isInteger(value) ? formatInteger(value) : value.toFixed(1);
+}
+
+function formatRatio(value: number): string {
+  return `${(value * 100).toFixed(value === 0 ? 0 : 1)}%`;
+}
+
+function formatSourceTotal(value: number): string {
+  if (Math.abs(value) < 0.0001) return "0";
+  return value > 0 ? `+${formatFlat(value)}` : formatFlat(value);
 }
 
 function findTileAt(worldX: number, worldY: number): ChunkTile | undefined {

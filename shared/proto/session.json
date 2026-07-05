@@ -114,7 +114,8 @@
       "request": {
         "token": "string",
         "characterId": "string",
-        "stats": "characterStats"
+        "stats": "characterStats",
+        "note": "开发期兼容接口。服务端只接受基础/来源层，derived/combat 由服务端重算。"
       },
       "response": {
         "character": "characterSummary"
@@ -327,4 +328,94 @@
       }
     }
   ]
+  ,
+  "schemas": {
+    "attributeValues": {
+      "type": "map<string,float64>",
+      "keys": [
+        "health",
+        "stamina",
+        "mana",
+        "move_speed",
+        "physical_attack",
+        "magic_attack",
+        "physical_defense",
+        "magic_defense",
+        "physical_crit",
+        "magic_crit",
+        "crit_damage_bonus",
+        "damage_bonus",
+        "extra_damage",
+        "crit_resist",
+        "damage_immunity",
+        "extra_immunity",
+        "heal_power",
+        "heal_taken_bonus"
+      ]
+    },
+    "characterStats": {
+      "level": "int",
+      "base": "legacyCharacterBaseStats",
+      "attack": "legacyCharacterAttackStats",
+      "defense": "legacyCharacterDefenseStats",
+      "sources": {
+        "base": "attributeValues",
+        "levelGrowth": "attributeValues",
+        "talent": "attributeValues",
+        "equipment": "attributeValues",
+        "passiveGem": "attributeValues",
+        "buff": "attributeValues",
+        "system": "attributeValues",
+        "manual": "attributeValues"
+      },
+      "derived": {
+        "baseStats": "attributeValues",
+        "derivedStats": "attributeValues",
+        "combatStats": "attributeValues"
+      },
+      "combat": {
+        "resources": {
+          "healthMax": "int",
+          "healthCurrent": "int",
+          "manaMax": "int",
+          "manaCurrent": "int",
+          "staminaMax": "int",
+          "staminaCurrent": "int"
+        },
+        "physicalAttack": "int",
+        "magicAttack": "int",
+        "physicalDefense": "int",
+        "magicDefense": "int",
+        "moveSpeed": "float64",
+        "physicalCrit": "ratio",
+        "magicCrit": "ratio",
+        "critDamageBonus": "ratio",
+        "damageBonus": "ratio",
+        "extraDamage": "ratio",
+        "critResist": "ratio",
+        "damageImmunity": "ratio",
+        "extraImmunity": "ratio",
+        "healPower": "ratio",
+        "healTakenBonus": "ratio",
+        "powerScore": "int"
+      },
+      "metadata": {
+        "schemaVersion": "int",
+        "profileId": "string",
+        "attributeDefs": "attributeDefinition[]",
+        "warnings": "string[]"
+      }
+    },
+    "attributeDefinition": {
+      "code": "string",
+      "displayName": "string",
+      "category": "base | attack | defense | healing",
+      "valueKind": "flat | ratio",
+      "defaultValue": "float64",
+      "minValue": "float64",
+      "maxValue": "float64",
+      "clientVisible": "bool",
+      "description": "string"
+    }
+  }
 }

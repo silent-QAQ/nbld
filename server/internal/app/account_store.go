@@ -217,11 +217,11 @@ type CharacterDerivedStats struct {
 }
 
 type CharacterResourceStats struct {
-	HealthMax     int `json:"healthMax"`
-	HealthCurrent int `json:"healthCurrent"`
-	ManaMax       int `json:"manaMax"`
-	ManaCurrent   int `json:"manaCurrent"`
-	StaminaMax    int `json:"staminaMax"`
+	HealthMax      int `json:"healthMax"`
+	HealthCurrent  int `json:"healthCurrent"`
+	ManaMax        int `json:"manaMax"`
+	ManaCurrent    int `json:"manaCurrent"`
+	StaminaMax     int `json:"staminaMax"`
 	StaminaCurrent int `json:"staminaCurrent"`
 }
 
@@ -246,10 +246,10 @@ type CharacterCombatStats struct {
 }
 
 type CharacterStatsMeta struct {
-	SchemaVersion int                    `json:"schemaVersion"`
-	ProfileID     string                 `json:"profileId"`
-	AttributeDefs []AttributeDefinition  `json:"attributeDefs,omitempty"`
-	Warnings      []string               `json:"warnings,omitempty"`
+	SchemaVersion int                   `json:"schemaVersion"`
+	ProfileID     string                `json:"profileId"`
+	AttributeDefs []AttributeDefinition `json:"attributeDefs,omitempty"`
+	Warnings      []string              `json:"warnings,omitempty"`
 }
 
 type ItemContainer struct {
@@ -808,6 +808,7 @@ func (s *memoryAccountStore) SaveCharacter(_ context.Context, accountID string, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	character.Stats = NormalizeCharacterStats(character.Stats)
 	characters := s.characters[accountID]
 	for i := range characters {
 		if characters[i].ID != character.ID {
