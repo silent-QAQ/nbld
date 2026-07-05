@@ -342,6 +342,22 @@ func (s *Server) handleCharacters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prefer the latest online-state snapshot when available so the roster
+	// reflects appearance edits immediately instead of waiting for the next
+	// async Redis -> Postgres flush cycle.
+	for index, character := range roster.Active {
+		live, ok, liveErr := s.onlineCharacters.LoadCharacter(r.Context(), session.AccountID, character.ID)
+		if liveErr == nil && ok {
+			roster.Active[index] = live
+		}
+	}
+	for index, character := range roster.Deleted {
+		live, ok, liveErr := s.onlineCharacters.LoadCharacter(r.Context(), session.AccountID, character.ID)
+		if liveErr == nil && ok {
+			roster.Deleted[index] = live
+		}
+	}
+
 	writeJSON(w, http.StatusOK, protocol.CharacterListResponse{
 		Active:       toProtocolCharacters(roster.Active),
 		Deleted:      toProtocolCharacters(roster.Deleted),
