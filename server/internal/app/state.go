@@ -112,7 +112,7 @@ func (s *stateStore) updateWorldLocation(token, worldID, mapID string, position 
 	return session, true
 }
 
-func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
+func (s *stateStore) listNearbyWorldPlayers(worldID, mapID string, position protocol.Position) []protocol.WorldPlayer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -122,6 +122,9 @@ func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
 		session.advanceRuntimeResources(now, session.Sprinting)
 		s.sessions[token] = session
 		if session.WorldID != worldID {
+			continue
+		}
+		if session.MapID != mapID || !positionsInAOI(session.Position, position) {
 			continue
 		}
 

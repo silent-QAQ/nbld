@@ -31,6 +31,8 @@ type wsClient struct {
 	conn     *wsConn
 	playerID string
 	worldID  string
+	mapID    string
+	position protocol.Position
 	send     chan protocol.WSServerMessage
 }
 
@@ -57,6 +59,14 @@ func (h *wsHub) remove(client *wsClient) {
 	delete(h.clients, client)
 }
 
+func (h *wsHub) updateLocation(client *wsClient, worldID, mapID string, position protocol.Position) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	client.worldID = worldID
+	client.mapID = mapID
+	client.position = position
+}
+
 func (h *wsHub) broadcast(worldID string, message protocol.WSServerMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -71,6 +81,31 @@ func (h *wsHub) broadcast(worldID string, message protocol.WSServerMessage) {
 		default:
 		}
 	}
+}
+
+func (h *wsHub) broadcastNearby(worldID, mapID string, position protocol.Position, message protocol.WSServerMessage) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		if client.worldID != worldID || client.mapID != mapID {
+			continue
+		}
+		if !positionsInAOI(client.position, position) {
+			continue
+		}
+
+		select {
+		case client.send <- message:
+		default:
+		}
+	}
+}
+
+func positionsInAOI(left, right protocol.Position) bool {
+	leftChunkX, leftChunkY := worldToChunk(left.X, left.Y)
+	rightChunkX, rightChunkY := worldToChunk(right.X, right.Y)
+	return absInt(leftChunkX-rightChunkX) <= 1 && absInt(leftChunkY-rightChunkY) <= 1
 }
 
 func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (*wsConn, error) {

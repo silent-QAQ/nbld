@@ -758,7 +758,7 @@ func (s *Server) handleWorldState(w http.ResponseWriter, r *http.Request) {
 		Sprinting:     session.Sprinting,
 		Biome:         "grassland",
 		Seed:          10001,
-		Players:       s.state.listWorldPlayers(session.WorldID),
+		Players:       s.state.listNearbyWorldPlayers(session.WorldID, session.MapID, session.Position),
 	})
 }
 
@@ -860,7 +860,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		Equipment:     toProtocolEquipment(session.Equipment),
 	})
 
-	s.ws.broadcast(session.WorldID, protocol.WSServerMessage{
+	s.ws.broadcastNearby(session.WorldID, session.MapID, session.Position, protocol.WSServerMessage{
 		Type:          "player_moved",
 		PlayerID:      session.PlayerID,
 		CharacterID:   session.CharacterID,
@@ -875,7 +875,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if transitioned {
-		s.ws.broadcast(session.WorldID, protocol.WSServerMessage{
+		s.ws.broadcastNearby(session.WorldID, session.MapID, session.Position, protocol.WSServerMessage{
 			Type:          "map_transition",
 			PlayerID:      session.PlayerID,
 			CharacterID:   session.CharacterID,
@@ -943,6 +943,13 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-ch:
+			session, ok := s.state.getSession(token)
+			if !ok {
+				return
+			}
+			if event.Type == "player_moved" && (session.MapID != event.MapID || !positionsInAOI(session.Position, event.Position)) {
+				continue
+			}
 			if err := writeSSE(w, event); err != nil {
 				return
 			}
@@ -1295,6 +1302,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn:     conn,
 		playerID: session.PlayerID,
 		worldID:  session.WorldID,
+		mapID:    session.MapID,
+		position: session.Position,
 		send:     make(chan protocol.WSServerMessage, 16),
 	}
 	s.ws.add(client)
@@ -1315,7 +1324,7 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 		Sprinting:     session.Sprinting,
 		Appearance:    toProtocolAppearance(session.Appearance),
 		Equipment:     toProtocolEquipment(session.Equipment),
-		Players:       s.state.listWorldPlayers(session.WorldID),
+		Players:       s.state.listNearbyWorldPlayers(session.WorldID, session.MapID, session.Position),
 	}
 
 	for {
@@ -1346,6 +1355,7 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			X: localX,
 			Y: localY,
 		})
+		s.ws.updateLocation(client, updated.WorldID, updated.MapID, updated.Position)
 
 		if updated.AccountID != "" && updated.CharacterID != "" {
 			if err := s.updateOnlineCharacterPosition(r.Context(), updated.AccountID, updated.CharacterID, CharacterPosition{
@@ -1389,7 +1399,7 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			Appearance:    toProtocolAppearance(updated.Appearance),
 			Equipment:     toProtocolEquipment(updated.Equipment),
 		})
-		s.ws.broadcast(updated.WorldID, broadcast)
+		s.ws.broadcastNearby(updated.WorldID, updated.MapID, updated.Position, broadcast)
 
 		if transitioned {
 			s.ws.broadcast(updated.WorldID, protocol.WSServerMessage{
