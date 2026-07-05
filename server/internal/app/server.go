@@ -248,6 +248,7 @@ func (s *Server) handleGuestLogin(w http.ResponseWriter, r *http.Request) {
 		WorldID:  "world-dev-001",
 		MapID:    "map_0_0",
 		Position: protocol.Position{X: 0, Y: 0},
+		Resources: defaultRuntimeResources(),
 	})
 
 	writeJSON(w, http.StatusOK, resp)
@@ -618,6 +619,8 @@ func (s *Server) handleEnterWorld(w http.ResponseWriter, r *http.Request) {
 			WorldID:  session.WorldID,
 			MapID:    session.MapID,
 			Position: session.Position,
+			Resources: session.Resources.toProtocol(),
+			Sprinting: session.Sprinting,
 		})
 		return
 	}
@@ -654,8 +657,10 @@ func (s *Server) handleEnterWorld(w http.ResponseWriter, r *http.Request) {
 		WorldID:       worldID,
 		MapID:         mapID,
 		Position:      position,
+		Resources:     runtimeResourcesFromCombat(character.Stats.Combat),
 	}
 	s.state.putSession(updated)
+	updated, _ = s.state.getSession(session.Token)
 
 	if err := s.onlineCharacters.StoreCharacter(r.Context(), session.AccountID, character); err != nil {
 		writeStoreError(w, err)
@@ -680,6 +685,8 @@ func (s *Server) handleEnterWorld(w http.ResponseWriter, r *http.Request) {
 		WorldID:       updated.WorldID,
 		MapID:         updated.MapID,
 		Position:      updated.Position,
+		Resources:     updated.Resources.toProtocol(),
+		Sprinting:     updated.Sprinting,
 	})
 }
 
@@ -747,6 +754,8 @@ func (s *Server) handleWorldState(w http.ResponseWriter, r *http.Request) {
 		CharacterID:   session.CharacterID,
 		CharacterName: session.CharacterName,
 		Position:      session.Position,
+		Resources:     session.Resources.toProtocol(),
+		Sprinting:     session.Sprinting,
 		Biome:         "grassland",
 		Seed:          10001,
 		Players:       s.state.listWorldPlayers(session.WorldID),
@@ -803,7 +812,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, ok := s.state.updatePosition(req.Token, req.Position)
+	session, ok := s.state.updateMovement(req.Token, req.Position, req.Sprinting)
 	if !ok {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -833,6 +842,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		CharacterID: session.CharacterID,
 		MapID:       session.MapID,
 		Position:    session.Position,
+		Resources:   session.Resources.toProtocol(),
+		Sprinting:   session.Sprinting,
 	})
 
 	s.events.broadcast(protocol.WorldEvent{
@@ -842,6 +853,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		CharacterName: session.CharacterName,
 		MapID:         session.MapID,
 		Position:      session.Position,
+		Resources:     session.Resources.toProtocol(),
+		Sprinting:     session.Sprinting,
 		OccurredAt:    time.Now().UTC().Format(time.RFC3339),
 		Appearance:    toProtocolAppearance(session.Appearance),
 		Equipment:     toProtocolEquipment(session.Equipment),
@@ -855,6 +868,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		WorldID:       session.WorldID,
 		MapID:         session.MapID,
 		Position:      session.Position,
+		Resources:     session.Resources.toProtocol(),
+		Sprinting:     session.Sprinting,
 		Appearance:    toProtocolAppearance(session.Appearance),
 		Equipment:     toProtocolEquipment(session.Equipment),
 	})

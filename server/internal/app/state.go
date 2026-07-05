@@ -3,6 +3,7 @@ package app
 import (
 	"sort"
 	"sync"
+	"time"
 
 	"nbld/server/internal/protocol"
 )
@@ -18,6 +19,10 @@ type sessionState struct {
 	WorldID       string
 	MapID         string
 	Position      protocol.Position
+	Resources     runtimeResources
+	Sprinting     bool
+	ResourceAt    time.Time
+	SprintEndedAt time.Time
 }
 
 type stateStore struct {
@@ -34,13 +39,18 @@ func newStateStore() *stateStore {
 func (s *stateStore) putSession(session sessionState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	session.ensureRuntimeResources(time.Now().UTC())
 	s.sessions[session.Token] = session
 }
 
 func (s *stateStore) getSession(token string) (sessionState, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	session, ok := s.sessions[token]
+	if ok {
+		session.advanceRuntimeResources(time.Now().UTC(), session.Sprinting)
+		s.sessions[token] = session
+	}
 	return session, ok
 }
 
@@ -71,6 +81,21 @@ func (s *stateStore) updatePosition(token string, position protocol.Position) (s
 	return session, true
 }
 
+func (s *stateStore) updateMovement(token string, position protocol.Position, sprinting bool) (sessionState, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[token]
+	if !ok {
+		return session, false
+	}
+
+	session.advanceRuntimeResources(time.Now().UTC(), sprinting)
+	session.Position = position
+	s.sessions[token] = session
+	return session, true
+}
+
 func (s *stateStore) updateWorldLocation(token, worldID, mapID string, position protocol.Position) (sessionState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -83,16 +108,20 @@ func (s *stateStore) updateWorldLocation(token, worldID, mapID string, position 
 	session.WorldID = worldID
 	session.MapID = mapID
 	session.Position = position
+	session.advanceRuntimeResources(time.Now().UTC(), session.Sprinting)
 	s.sessions[token] = session
 	return session, true
 }
 
 func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	players := make([]protocol.WorldPlayer, 0, len(s.sessions))
-	for _, session := range s.sessions {
+	now := time.Now().UTC()
+	for token, session := range s.sessions {
+		session.advanceRuntimeResources(now, session.Sprinting)
+		s.sessions[token] = session
 		if session.WorldID != worldID {
 			continue
 		}
@@ -103,6 +132,8 @@ func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
 			CharacterName: session.CharacterName,
 			MapID:         session.MapID,
 			Position:      session.Position,
+			Resources:     session.Resources.toProtocol(),
+			Sprinting:     session.Sprinting,
 			Appearance:    toProtocolAppearance(session.Appearance),
 			Equipment:     toProtocolEquipment(session.Equipment),
 		})
@@ -112,11 +143,14 @@ func (s *stateStore) listWorldPlayers(worldID string) []protocol.WorldPlayer {
 }
 
 func (s *stateStore) listSessions() []sessionState {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	out := make([]sessionState, 0, len(s.sessions))
-	for _, session := range s.sessions {
+	now := time.Now().UTC()
+	for token, session := range s.sessions {
+		session.advanceRuntimeResources(now, session.Sprinting)
+		s.sessions[token] = session
 		out = append(out, session)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -126,14 +160,69 @@ func (s *stateStore) listSessions() []sessionState {
 }
 
 func (s *stateStore) getSessionByPlayerID(playerID string) (sessionState, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	for _, session := range s.sessions {
+	now := time.Now().UTC()
+	for token, session := range s.sessions {
+		session.advanceRuntimeResources(now, session.Sprinting)
+		s.sessions[token] = session
 		if session.PlayerID == playerID {
 			return session, true
 		}
 	}
 
 	return sessionState{}, false
+}
+
+func (s *sessionState) ensureRuntimeResources(now time.Time) {
+	if s.Resources.StaminaMax <= 0 {
+		s.Resources = defaultRuntimeResources()
+	}
+	if s.ResourceAt.IsZero() {
+		s.ResourceAt = now
+	}
+	if s.SprintEndedAt.IsZero() {
+		s.SprintEndedAt = now.Add(-staminaRecentStopWindow)
+	}
+	s.Resources.StaminaMax = maxRuntimeInt(1, s.Resources.StaminaMax)
+	s.Resources.StaminaCurrent = clampRuntimeFloat(s.Resources.StaminaCurrent, 0, float64(s.Resources.StaminaMax))
+}
+
+func (s *sessionState) advanceRuntimeResources(now time.Time, wantsSprint bool) {
+	s.ensureRuntimeResources(now)
+	if now.Before(s.ResourceAt) {
+		s.ResourceAt = now
+		return
+	}
+
+	elapsed := now.Sub(s.ResourceAt).Seconds()
+	if elapsed <= 0 {
+		s.Sprinting = wantsSprint && s.Resources.StaminaCurrent > 0
+		return
+	}
+
+	wasSprinting := s.Sprinting
+	canSprint := wantsSprint && s.Resources.StaminaCurrent > 0
+	if canSprint {
+		s.Resources.StaminaCurrent += (staminaRegenWhileRunning - sprintStaminaCostPerSecond) * elapsed
+		s.Resources.StaminaCurrent = clampRuntimeFloat(s.Resources.StaminaCurrent, 0, float64(s.Resources.StaminaMax))
+		s.Sprinting = s.Resources.StaminaCurrent > 0
+		if !s.Sprinting {
+			s.SprintEndedAt = now
+		}
+	} else {
+		if wasSprinting {
+			s.SprintEndedAt = now
+		}
+		s.Sprinting = false
+		regen := staminaRegenRested
+		if now.Sub(s.SprintEndedAt) <= staminaRecentStopWindow {
+			regen = staminaRegenRecentlyStopped
+		}
+		s.Resources.StaminaCurrent += regen * elapsed
+		s.Resources.StaminaCurrent = clampRuntimeFloat(s.Resources.StaminaCurrent, 0, float64(s.Resources.StaminaMax))
+	}
+
+	s.ResourceAt = now
 }

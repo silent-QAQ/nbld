@@ -130,6 +130,8 @@ type EnterWorldResponse struct {
 	WorldID       string   `json:"worldId"`
 	MapID         string   `json:"mapId,omitempty"`
 	Position      Position `json:"position"`
+	Resources     RuntimeResources `json:"resources,omitempty"`
+	Sprinting     bool             `json:"sprinting,omitempty"`
 }
 
 type WorldStateResponse struct {
@@ -139,6 +141,8 @@ type WorldStateResponse struct {
 	CharacterID   string        `json:"characterId,omitempty"`
 	CharacterName string        `json:"characterName,omitempty"`
 	Position      Position      `json:"position"`
+	Resources     RuntimeResources `json:"resources,omitempty"`
+	Sprinting     bool             `json:"sprinting,omitempty"`
 	Biome         string        `json:"biome"`
 	Seed          int64         `json:"seed"`
 	Players       []WorldPlayer `json:"players"`
@@ -147,6 +151,7 @@ type WorldStateResponse struct {
 type MoveRequest struct {
 	Token    string   `json:"token"`
 	Position Position `json:"position"`
+	Sprinting bool    `json:"sprinting,omitempty"`
 }
 
 type LeaveWorldRequest struct {
@@ -158,6 +163,8 @@ type MoveResponse struct {
 	CharacterID string   `json:"characterId,omitempty"`
 	MapID       string   `json:"mapId,omitempty"`
 	Position    Position `json:"position"`
+	Resources   RuntimeResources `json:"resources,omitempty"`
+	Sprinting   bool             `json:"sprinting,omitempty"`
 }
 
 type LeaveWorldResponse struct {
@@ -172,6 +179,8 @@ type WorldPlayer struct {
 	CharacterName string              `json:"characterName,omitempty"`
 	MapID         string              `json:"mapId,omitempty"`
 	Position      Position            `json:"position"`
+	Resources     RuntimeResources    `json:"resources,omitempty"`
+	Sprinting     bool                `json:"sprinting,omitempty"`
 	Appearance    CharacterAppearance `json:"appearance"`
 	Equipment     CharacterEquipment  `json:"equipment"`
 }
@@ -183,6 +192,8 @@ type WorldEvent struct {
 	CharacterName string              `json:"characterName,omitempty"`
 	MapID         string              `json:"mapId,omitempty"`
 	Position      Position            `json:"position"`
+	Resources     RuntimeResources    `json:"resources,omitempty"`
+	Sprinting     bool                `json:"sprinting,omitempty"`
 	OccurredAt    string              `json:"occurredAt"`
 	Appearance    CharacterAppearance `json:"appearance,omitempty"`
 	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
@@ -192,6 +203,7 @@ type WSClientMessage struct {
 	Type     string   `json:"type"`
 	Token    string   `json:"token,omitempty"`
 	Position Position `json:"position,omitempty"`
+	Sprinting bool    `json:"sprinting,omitempty"`
 }
 
 type WSServerMessage struct {
@@ -202,10 +214,21 @@ type WSServerMessage struct {
 	WorldID       string              `json:"worldId,omitempty"`
 	MapID         string              `json:"mapId,omitempty"`
 	Position      Position            `json:"position,omitempty"`
+	Resources     RuntimeResources    `json:"resources,omitempty"`
+	Sprinting     bool                `json:"sprinting,omitempty"`
 	Players       []WorldPlayer       `json:"players,omitempty"`
 	Appearance    CharacterAppearance `json:"appearance,omitempty"`
 	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
 	Error         string              `json:"error,omitempty"`
+}
+
+type RuntimeResources struct {
+	HealthMax      int `json:"healthMax,omitempty"`
+	HealthCurrent  int `json:"healthCurrent,omitempty"`
+	ManaMax        int `json:"manaMax,omitempty"`
+	ManaCurrent    int `json:"manaCurrent,omitempty"`
+	StaminaMax     int `json:"staminaMax,omitempty"`
+	StaminaCurrent int `json:"staminaCurrent,omitempty"`
 }
 
 type CharacterStats struct {
