@@ -539,7 +539,6 @@ function renderCharacterList(characters: CharacterSummary[]): void {
 function renderAppearanceEditor(character: CharacterSummary): void {
   appearanceEditor.classList.remove("hidden");
   appearanceModal.classList.remove("hidden");
-  state.editorHoverCell = null;
   state.selectedCharacterId = character.id;
   state.appearanceDraft = normalizeAppearance(character.appearance);
   renderAppearancePreview(state.appearanceDraft);
@@ -927,93 +926,106 @@ function getAvatarEditorCellSize(): number {
   );
 }
 
+function paintPixelMatrixCell(matrix: boolean[][], x: number, y: number, mask: boolean[][]): boolean {
+  if (x < 0 || x >= AVATAR_EDITOR_WIDTH || y < 0 || y >= AVATAR_EDITOR_HEIGHT) return false;
+  if (!isEditingHairLayer() && !mask[y]?.[x]) return false;
+  if (state.paintMode === "bucket") {
+    floodFillMatrix(matrix, x, y, !matrix[y][x], isEditingHairLayer() ? undefined : mask);
+    return true;
+  }
+  const nextValue = state.paintMode === "fill";
+  if (matrix[y][x] === nextValue) return false;
+  matrix[y][x] = nextValue;
+  return true;
+}
+
+function buildEditorDisplayMatrix(): { outline: boolean[][]; body: boolean[][]; hair: boolean[][] } {
+  const outline = buildAvatarOutlineMatrix((state.appearanceDraft ?? defaultAppearance()).body, state.appearanceFacing);
+  const bodyRows = maskBodyRows(state.appearanceDraft?.skeleton[activeBodyLayerKey()] ?? []);
+  if (state.appearanceDraft) state.appearanceDraft.skeleton[activeBodyLayerKey()] = bodyRows;
+  const hairRows = state.appearanceDraft?.hair[activeHairLayerKey()] ?? [];
+  return {
+    outline,
+    body: rowsToMatrix(bodyRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT),
+    hair: rowsToMatrix(hairRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT),
+  };
+}
+
 function renderPixelEditorGrid(rows: string[]): void {
-  const width = AVATAR_EDITOR_WIDTH;
-  const height = AVATAR_EDITOR_HEIGHT;
   const normalized = normalizeHairRows(rows);
-  const matrix = Array.from({ length: height }, (_, y) => {
+  const matrix = Array.from({ length: AVATAR_EDITOR_HEIGHT }, (_, y) => {
     const row = normalized[y] ?? "";
-    return Array.from({ length: width }, (_, x) => row[x] === "1");
+    return Array.from({ length: AVATAR_EDITOR_WIDTH }, (_, x) => row[x] === "1");
   });
   const cellSize = getAvatarEditorCellSize();
-  const gridCtx = hairGrid.getContext("2d", { alpha: true })!;
-  hairGrid.width = width * cellSize;
-  hairGrid.height = height * cellSize;
-  hairGrid.style.width = `${width * cellSize}px`;
-  hairGrid.style.height = `${height * cellSize}px`;
-  hairGrid.style.touchAction = "none";
-  gridCtx.imageSmoothingEnabled = false;
-  let activePointerId: number | null = null;
-
-  const paintAt = (x: number, y: number) => {
-    if (x < 0 || x >= width || y < 0 || y >= height) return;
-    const mask = bodyPaintMask();
-    if (!isEditingHairLayer() && !mask[y][x]) return;
-    if (state.paintMode === "bucket") {
-      floodFillMatrix(matrix, x, y, !matrix[y][x], isEditingHairLayer() ? undefined : mask);
-    } else {
-      matrix[y][x] = state.paintMode === "fill";
-    }
-    updateDraftHairFromMatrix(matrix);
-    drawAppearanceEditorCanvas(gridCtx, cellSize);
-  };
-
-  const pointerToCell = (event: PointerEvent): { x: number; y: number } => {
-    const rect = hairGrid.getBoundingClientRect();
-    const contentLeft = rect.left + hairGrid.clientLeft;
-    const contentTop = rect.top + hairGrid.clientTop;
-    const contentWidth = Math.max(1, hairGrid.clientWidth);
-    const contentHeight = Math.max(1, hairGrid.clientHeight);
-    const cellWidth = contentWidth / width;
-    const cellHeight = contentHeight / height;
-    const pixelX = clamp(event.clientX - contentLeft, 0, Math.max(0, contentWidth - 0.001));
-    const pixelY = clamp(event.clientY - contentTop, 0, Math.max(0, contentHeight - 0.001));
-    return {
-      x: clamp(Math.floor(pixelX / cellWidth), 0, width - 1),
-      y: clamp(Math.floor(pixelY / cellHeight), 0, height - 1),
-    };
-  };
-
-  hairGrid.onpointerdown = (event) => {
-    event.preventDefault();
-    hairGrid.setPointerCapture(event.pointerId);
-    activePointerId = event.pointerId;
-    dragging = true;
-    const cell = pointerToCell(event);
-    state.editorHoverCell = cell;
-    paintAt(cell.x, cell.y);
-  };
-  hairGrid.onpointermove = (event) => {
-    const cell = pointerToCell(event);
-    state.editorHoverCell = cell;
-    if (!dragging || state.paintMode === "bucket") {
-      drawAppearanceEditorCanvas(gridCtx, cellSize);
-      return;
-    }
-    paintAt(cell.x, cell.y);
-  };
-  hairGrid.onpointerup = (event) => {
-    dragging = false;
-    activePointerId = null;
-    if (hairGrid.hasPointerCapture(event.pointerId)) hairGrid.releasePointerCapture(event.pointerId);
-  };
-  hairGrid.onpointercancel = (event) => {
-    dragging = false;
-    activePointerId = null;
-    state.editorHoverCell = null;
-    if (hairGrid.hasPointerCapture(event.pointerId)) hairGrid.releasePointerCapture(event.pointerId);
-    drawAppearanceEditorCanvas(gridCtx, cellSize);
-  };
-  hairGrid.onpointerleave = () => {
-    if (activePointerId === null || !hairGrid.hasPointerCapture(activePointerId)) {
-      dragging = false;
-      state.editorHoverCell = null;
-      drawAppearanceEditorCanvas(gridCtx, cellSize);
-    }
-  };
+  const mask = bodyPaintMask();
+  hairGrid.innerHTML = "";
+  hairGrid.style.setProperty("--cell-size", `${cellSize}px`);
+  hairGrid.style.setProperty("--grid-width", String(AVATAR_EDITOR_WIDTH));
+  hairGrid.style.setProperty("--grid-height", String(AVATAR_EDITOR_HEIGHT));
 
   let dragging = false;
-  drawAppearanceEditorCanvas(gridCtx, cellSize);
+
+  const repaintGrid = () => {
+    const nextDisplay = buildEditorDisplayMatrix();
+    for (const cell of hairGrid.querySelectorAll<HTMLElement>(".pixel-cell")) {
+      const x = Number(cell.dataset.x);
+      const y = Number(cell.dataset.y);
+      const outlineFilled = nextDisplay.outline[y]?.[x] ?? false;
+      const bodyFilled = nextDisplay.body[y]?.[x] ?? false;
+      const hairFilled = nextDisplay.hair[y]?.[x] ?? false;
+      cell.classList.toggle("outline", outlineFilled);
+      cell.classList.toggle("body-filled", bodyFilled);
+      cell.classList.toggle("hair-filled", hairFilled && state.showHairLayer);
+      cell.classList.toggle("blocked", !isEditingHairLayer() && !outlineFilled);
+      cell.style.setProperty("--body-color", state.appearanceDraft?.palette.clothPrimary ?? "#ff4040");
+      cell.style.setProperty("--hair-color", state.appearanceDraft?.palette.hairPrimary ?? "#2d1a13");
+    }
+  };
+
+  const paintAt = (x: number, y: number) => {
+    const changed = paintPixelMatrixCell(matrix, x, y, mask);
+    if (!changed) return;
+    updateDraftHairFromMatrix(matrix);
+    repaintGrid();
+  };
+
+  const fragment = document.createDocumentFragment();
+  for (let y = 0; y < AVATAR_EDITOR_HEIGHT; y += 1) {
+    for (let x = 0; x < AVATAR_EDITOR_WIDTH; x += 1) {
+      const cell = document.createElement("div");
+      cell.className = "pixel-cell";
+      cell.dataset.x = String(x);
+      cell.dataset.y = String(y);
+      cell.setAttribute("draggable", "false");
+
+      cell.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dragging = true;
+        paintAt(x, y);
+      });
+      cell.addEventListener("pointerenter", () => {
+        if (!dragging || state.paintMode === "bucket") return;
+        paintAt(x, y);
+      });
+
+      fragment.appendChild(cell);
+    }
+  }
+  hairGrid.appendChild(fragment);
+
+  hairGrid.onpointerup = () => {
+    dragging = false;
+  };
+  hairGrid.onpointerleave = () => {
+    dragging = false;
+  };
+  hairGrid.onpointercancel = () => {
+    dragging = false;
+  };
+
+  repaintGrid();
 }
 
 function updateDraftHairFromMatrix(matrix: boolean[][]): void {
@@ -1071,63 +1083,6 @@ function floodFillMatrix(matrix: boolean[][], startX: number, startY: number, va
     matrix[y][x] = value;
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
   }
-}
-
-function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, cellSize: number): void {
-  target.clearRect(0, 0, hairGrid.width, hairGrid.height);
-  target.fillStyle = "#0a0f14";
-  target.fillRect(0, 0, hairGrid.width, hairGrid.height);
-
-  const outline = buildAvatarOutlineMatrix((state.appearanceDraft ?? defaultAppearance()).body, state.appearanceFacing);
-  drawMatrix(target, outline, cellSize, "rgba(255,255,255,0.85)");
-
-  if (state.appearanceDraft) {
-    const bodyRows = maskBodyRows(state.appearanceDraft.skeleton[activeBodyLayerKey()] ?? []);
-    state.appearanceDraft.skeleton[activeBodyLayerKey()] = bodyRows;
-    const bodyMatrix = rowsToMatrix(bodyRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
-    drawMatrix(target, bodyMatrix, cellSize, state.appearanceDraft.palette.clothPrimary);
-
-    if (state.showHairLayer) {
-      const hairRows = state.appearanceDraft.hair[activeHairLayerKey()] ?? [];
-      const hairMatrix = rowsToMatrix(hairRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
-      drawMatrix(target, hairMatrix, cellSize, state.appearanceDraft.palette.hairPrimary);
-    }
-  }
-
-  target.strokeStyle = "rgba(255,255,255,0.07)";
-  target.lineWidth = 1;
-  for (let x = 0; x <= AVATAR_EDITOR_WIDTH; x += 1) {
-    target.beginPath();
-    target.moveTo(x * cellSize + 0.5, 0);
-    target.lineTo(x * cellSize + 0.5, AVATAR_EDITOR_HEIGHT * cellSize);
-    target.stroke();
-  }
-  for (let y = 0; y <= AVATAR_EDITOR_HEIGHT; y += 1) {
-    target.beginPath();
-    target.moveTo(0, y * cellSize + 0.5);
-    target.lineTo(AVATAR_EDITOR_WIDTH * cellSize, y * cellSize + 0.5);
-    target.stroke();
-  }
-
-  if (state.editorHoverCell) {
-    target.strokeStyle = "rgba(255, 224, 138, 0.95)";
-    target.lineWidth = 2;
-    target.strokeRect(
-      state.editorHoverCell.x * cellSize + 1,
-      state.editorHoverCell.y * cellSize + 1,
-      Math.max(1, cellSize - 2),
-      Math.max(1, cellSize - 2),
-    );
-  }
-}
-
-function drawMatrix(target: CanvasRenderingContext2D, matrix: boolean[][], cellSize: number, color: string): void {
-  target.fillStyle = color;
-  matrix.forEach((row, y) => {
-    row.forEach((filled, x) => {
-      if (filled) target.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-    });
-  });
 }
 
 function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing): boolean[][] {
