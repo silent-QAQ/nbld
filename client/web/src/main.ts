@@ -216,6 +216,9 @@ type AppState = {
   recentPaintColors: string[];
   bodyControlPage: BodyControlPage;
   menuOpen: boolean;
+  inventoryOpen: boolean;
+  inventoryFacing: Facing;
+  selectedHotbarIndex: number;
   settingsPage: "audio" | "video" | "keys";
   audioSettings: {
     masterVolume: number;
@@ -321,7 +324,7 @@ app.innerHTML = `
     <div class="error toast-error" id="loginError"></div>
     <section class="hud hidden"></section>
     <section class="debug-panel hidden"></section>
-    <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
+    <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，B 背包，Esc 菜单，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
     <section class="orientation-overlay hidden" id="orientationOverlay">
       <div>请横屏游玩</div>
     </section>
@@ -331,6 +334,7 @@ app.innerHTML = `
         <div class="pause-content" id="pauseContent"></div>
       </div>
     </section>
+    <section class="modal inventory-modal hidden" id="inventoryModal"></section>
   </div>
 `;
 
@@ -375,6 +379,7 @@ const orientationOverlay = app.querySelector<HTMLElement>("#orientationOverlay")
 const pauseMenu = app.querySelector<HTMLElement>("#pauseMenu")!;
 const pauseNav = app.querySelector<HTMLElement>("#pauseNav")!;
 const pauseContent = app.querySelector<HTMLElement>("#pauseContent")!;
+const inventoryModal = app.querySelector<HTMLElement>("#inventoryModal")!;
 const avatarLayerRasterCache = new Map<string, HTMLCanvasElement>();
 
 const state: AppState = {
@@ -425,6 +430,9 @@ const state: AppState = {
   paintColor: "#ff4040",
   bodyControlPage: "overall",
   menuOpen: false,
+  inventoryOpen: false,
+  inventoryFacing: "front",
+  selectedHotbarIndex: 4,
   settingsPage: "audio",
   audioSettings: {
     masterVolume: 100,
@@ -535,11 +543,20 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "Escape" && state.characterId) {
     event.preventDefault();
+    if (state.inventoryOpen) {
+      toggleInventory(false);
+      return;
+    }
     togglePauseMenu();
     return;
   }
-  if (state.menuOpen) return;
   if (isTypingTarget(event.target)) return;
+  if (event.code === "KeyB" && state.characterId) {
+    event.preventDefault();
+    toggleInventory();
+    return;
+  }
+  if (state.menuOpen || state.inventoryOpen) return;
   if (event.code === "KeyH") {
     hud.classList.toggle("hidden");
     debugPanel.classList.toggle("hidden");
@@ -551,7 +568,7 @@ window.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("keyup", (event) => {
-  if (state.menuOpen) return;
+  if (state.menuOpen || state.inventoryOpen) return;
   if (isTypingTarget(event.target)) return;
   state.pressed.delete(event.code);
 });
@@ -1917,6 +1934,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     registerModal.classList.add("hidden");
     characterModal.classList.add("hidden");
     appearanceModal.classList.add("hidden");
+    toggleInventory(false);
     hud.classList.remove("hidden");
     debugPanel.classList.remove("hidden");
     helpPanel.classList.remove("hidden");
@@ -2025,7 +2043,9 @@ function logoutToLogin(): void {
   orientationOverlay.classList.add("hidden");
   loginError.textContent = "";
   pauseMenu.classList.add("hidden");
+  inventoryModal.classList.add("hidden");
   state.menuOpen = false;
+  state.inventoryOpen = false;
 }
 
 type PauseSection = "settings" | "profile" | "events";
@@ -2034,7 +2054,122 @@ function togglePauseMenu(): void {
   state.menuOpen = !state.menuOpen;
   pauseMenu.classList.toggle("hidden", !state.menuOpen);
   if (state.menuOpen) {
+    toggleInventory(false);
     renderPauseMenu("settings");
+  }
+}
+
+function toggleInventory(open = !state.inventoryOpen): void {
+  state.inventoryOpen = open;
+  inventoryModal.classList.toggle("hidden", !open);
+  if (!open) return;
+  state.menuOpen = false;
+  pauseMenu.classList.add("hidden");
+  renderInventoryModal();
+}
+
+function renderInventoryModal(): void {
+  const character = currentPlayerCharacter();
+  const combat = getCombatStats(character?.stats);
+  inventoryModal.innerHTML = `
+    <div class="inventory-frame">
+      <div class="inventory-titlebar">
+        <div>
+          <p class="eyebrow">Inventory</p>
+          <h2>${escapeHtml(character?.name || state.characterName || "角色")}</h2>
+        </div>
+        <button type="button" class="inventory-close" data-inventory-close>关闭 B</button>
+      </div>
+      <div class="inventory-top">
+        <section class="equipment-panel">
+          <h3>穿戴</h3>
+          ${renderEquipmentSlots(character)}
+        </section>
+        <section class="character-preview-panel">
+          <div class="preview-stage">
+            <canvas id="inventoryAvatarCanvas" width="220" height="260"></canvas>
+          </div>
+          <div class="preview-controls">
+            <button type="button" data-preview-rotate="-1">左转</button>
+            <span>${facingLabel(state.inventoryFacing)}</span>
+            <button type="button" data-preview-rotate="1">右转</button>
+          </div>
+        </section>
+        <section class="inventory-stats-panel">
+          <h3>属性</h3>
+          <div class="inventory-stat-list">
+            ${renderInventoryStat("等级", `${character?.stats.level ?? 1}`)}
+            ${renderInventoryStat("战力", formatInteger(combat.powerScore))}
+            ${renderInventoryStat("生命", `${formatInteger(combat.resources.healthCurrent)} / ${formatInteger(combat.resources.healthMax)}`)}
+            ${renderInventoryStat("法力", `${formatInteger(combat.resources.manaCurrent)} / ${formatInteger(combat.resources.manaMax)}`)}
+            ${renderInventoryStat("物攻", formatInteger(combat.physicalAttack))}
+            ${renderInventoryStat("法攻", formatInteger(combat.magicAttack))}
+            ${renderInventoryStat("物防", formatInteger(combat.physicalDefense))}
+            ${renderInventoryStat("法防", formatInteger(combat.magicDefense))}
+          </div>
+        </section>
+      </div>
+      <div class="inventory-bottom">
+        <div class="inventory-section-header">
+          <h3>背包储物区</h3>
+          <span>54 格 · 3 行 x 18 列</span>
+        </div>
+        <div class="bag-grid">
+          ${renderBagSlots(character)}
+        </div>
+        <div class="inventory-section-header hotbar-header">
+          <h3>快捷物品栏同步</h3>
+          <span>按 B 关闭</span>
+        </div>
+        ${renderHotbar(character, true)}
+      </div>
+    </div>
+  `;
+
+  inventoryModal.querySelector<HTMLButtonElement>("[data-inventory-close]")?.addEventListener("click", () => toggleInventory(false));
+  for (const button of inventoryModal.querySelectorAll<HTMLButtonElement>("[data-preview-rotate]")) {
+    button.addEventListener("click", () => {
+      rotateInventoryFacing(Number(button.dataset.previewRotate || 1));
+      renderInventoryModal();
+    });
+  }
+  renderInventoryAvatar(character);
+}
+
+function renderInventoryAvatar(character: CharacterSummary | undefined): void {
+  const canvas = inventoryModal.querySelector<HTMLCanvasElement>("#inventoryAvatarCanvas");
+  if (!canvas) return;
+  const target = canvas.getContext("2d", { alpha: true });
+  if (!target) return;
+  target.imageSmoothingEnabled = false;
+  target.clearRect(0, 0, canvas.width, canvas.height);
+  target.save();
+  target.translate(canvas.width / 2, canvas.height - 38);
+  target.scale(3.2, 3.2);
+  const previousScale = state.tileScale;
+  state.tileScale = 18;
+  renderAvatarSkeleton(target, { x: 0, y: 0 }, character, state.inventoryFacing, true, IDLE_LIMB_STATE);
+  state.tileScale = previousScale;
+  target.restore();
+}
+
+function rotateInventoryFacing(direction: number): void {
+  const facings: Facing[] = ["front", "right", "back", "left"];
+  const index = facings.indexOf(state.inventoryFacing);
+  state.inventoryFacing = facings[(index + direction + facings.length) % facings.length];
+}
+
+function facingLabel(facing: Facing): string {
+  switch (facing) {
+    case "back":
+      return "背面";
+    case "left":
+      return "左侧";
+    case "right":
+      return "右侧";
+    case "front":
+    default:
+      return "正面";
   }
 }
 
@@ -2937,35 +3072,7 @@ function updateHud(): void {
   const speed = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight")
     ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
     : PLAYER_WALK_SPEED_TILES_PER_SECOND;
-  hud.innerHTML = `
-    <div class="hud-topline">
-      <span class="hud-badge">${escapeHtml(state.status)}</span>
-      <span>${escapeHtml(state.socketStatus)}</span>
-      <span>Lv.${character?.stats.level ?? 1}</span>
-    </div>
-    <div class="hud-identity">
-      <strong>${escapeHtml(state.characterName || "-")}</strong>
-      <span>战力 ${formatInteger(combat.powerScore)}</span>
-    </div>
-    ${renderMiniResourceBars(combat)}
-    <div class="hud-statline">
-      <span>物攻 ${formatInteger(combat.physicalAttack)}</span>
-      <span>法攻 ${formatInteger(combat.magicAttack)}</span>
-      <span>护甲 ${formatInteger(combat.physicalDefense + combat.magicDefense)}</span>
-      <span>移速 ${formatFlat(combat.moveSpeed)}</span>
-    </div>
-    <div class="hud-worldline">
-      <span>地图 ${escapeHtml(state.mapId)}</span>
-      <span>X ${state.player.x.toFixed(2)} / Y ${state.player.y.toFixed(2)}</span>
-      <span>区块 ${chunkX}, ${chunkY}</span>
-      <span>奔跑 ${speed.toFixed(1)} m/s</span>
-    </div>
-    <div class="hud-worldline">
-      <span>地形 ${escapeHtml(tile?.terrain ?? "未加载")}</span>
-      <span>方块 ${escapeHtml(tile?.block ?? "未加载")}</span>
-      <span>装饰 ${escapeHtml(tile?.decoration ?? "-")}</span>
-    </div>
-  `;
+  hud.innerHTML = renderGameHud(character, combat);
 
   const dominant = dominantTerrain();
   debugPanel.innerHTML = `
@@ -2975,7 +3082,32 @@ function updateHud(): void {
     <div><b>最近区块刷新</b> ${state.lastChunkRefreshMs.toFixed(2)} ms / ${state.lastChunkRefreshCount} 块</div>
     <div><b>最近区块渲染</b> ${state.lastChunkRenderMs.toFixed(2)} ms / ${state.lastChunkRenderCount} 块</div>
     <div><b>主要地形</b> ${escapeHtml(dominant || "-")}</div>
+    <div><b>坐标</b> X:${state.player.x.toFixed(2)} Y:${state.player.y.toFixed(2)}　<b>区块</b> ${chunkX}, ${chunkY}　<b>速度</b> ${speed.toFixed(1)} m/s</div>
+    <div><b>地形</b> ${escapeHtml(tile?.terrain ?? "未加载")}　<b>方块</b> ${escapeHtml(tile?.block ?? "未加载")}　<b>装饰</b> ${escapeHtml(tile?.decoration ?? "-")}</div>
     <div><b>最后错误</b> ${escapeHtml(state.lastError || "无")}</div>
+  `;
+}
+
+function renderGameHud(character: CharacterSummary | undefined, combat: CharacterCombatStats): string {
+  return `
+    <div class="combat-hud">
+      <div class="hud-bars-row">
+        <div class="heart-resource">
+          <div class="icon-meter" aria-label="生命">${renderIconRepeats("❤", 10, combat.resources.healthCurrent / Math.max(1, combat.resources.healthMax))}</div>
+          <div class="compact-resource-track hp"><i style="width:${resourcePercent(combat.resources.healthCurrent, combat.resources.healthMax)}%"></i></div>
+        </div>
+        <div class="mana-resource">
+          <div class="icon-meter" aria-label="法力">${renderIconRepeats("💧", 10, combat.resources.manaCurrent / Math.max(1, combat.resources.manaMax))}</div>
+          <div class="compact-resource-track mp"><i style="width:${resourcePercent(combat.resources.manaCurrent, combat.resources.manaMax)}%"></i></div>
+        </div>
+        <div class="level-plate">Lv.${character?.stats.level ?? 1}</div>
+      </div>
+      ${renderHotbar(character, false)}
+      <div class="experience-track" title="经验条占位，待接入等级经验协议">
+        <i style="width:${experiencePercent(character)}%"></i>
+      </div>
+      <div class="hud-hint">B 背包 · Esc 菜单 · ${escapeHtml(state.socketStatus)}</div>
+    </div>
   `;
 }
 
@@ -3059,6 +3191,88 @@ function renderMiniResourceBars(combat: CharacterCombatStats): string {
       ${renderResourceBar("sp", "耐力", combat.resources.staminaCurrent, combat.resources.staminaMax)}
     </div>
   `;
+}
+
+function renderHotbar(character: CharacterSummary | undefined, inventoryMode: boolean): string {
+  const items = character?.inventory?.items ?? [];
+  return `
+    <div class="hotbar ${inventoryMode ? "inventory-hotbar" : ""}">
+      ${Array.from({ length: 9 }, (_, index) => renderItemSlot(items[index], index, index === state.selectedHotbarIndex, "hotbar")).join("")}
+    </div>
+  `;
+}
+
+function renderBagSlots(character: CharacterSummary | undefined): string {
+  const items = character?.inventory?.items ?? [];
+  return Array.from({ length: 54 }, (_, index) => renderItemSlot(items[index + 9], index, false, "bag")).join("");
+}
+
+function renderEquipmentSlots(character: CharacterSummary | undefined): string {
+  const equipment = character?.equipment;
+  const slots: Array<[string, string | undefined]> = [
+    ["头盔", equipment?.helmet],
+    ["胸甲", equipment?.chest],
+    ["护腿", equipment?.pants],
+    ["鞋子", equipment?.shoes],
+    ["肩甲", equipment?.shoulders],
+  ];
+  return `
+    <div class="equipment-slots">
+      ${slots.map(([label, itemId]) => `
+        <div class="equipment-slot">
+          <span>${label}</span>
+          <strong>${itemId ? escapeHtml(itemId) : "空"}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderItemSlot(item: { itemId: string; quantity: number } | undefined, index: number, selected: boolean, kind: "hotbar" | "bag"): string {
+  const label = item ? compactItemName(item.itemId) : "";
+  const quantity = item && item.quantity > 1 ? item.quantity : "";
+  return `
+    <div class="item-slot ${kind}-slot ${selected ? "selected" : ""}">
+      <span class="slot-index">${kind === "hotbar" ? index + 1 : ""}</span>
+      <span class="slot-icon">${item ? "●" : "□"}</span>
+      <strong>${escapeHtml(label)}</strong>
+      <em>${quantity}</em>
+    </div>
+  `;
+}
+
+function renderInventoryStat(label: string, value: string): string {
+  return `
+    <div class="inventory-stat">
+      <span>${label}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function compactItemName(itemId: string): string {
+  return itemId
+    .replace(/^item_/, "")
+    .replace(/^potion_/, "")
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 3))
+    .join(".");
+}
+
+function renderIconRepeats(icon: string, count: number, ratio: number): string {
+  const filled = Math.round(clamp(ratio, 0, 1) * count);
+  return Array.from({ length: count }, (_, index) => `<span class="${index < filled ? "filled" : "empty"}">${icon}</span>`).join("");
+}
+
+function resourcePercent(current: number, max: number): string {
+  return (clamp(current / Math.max(1, max), 0, 1) * 100).toFixed(1);
+}
+
+function experiencePercent(character: CharacterSummary | undefined): string {
+  const version = character?.version ?? 0;
+  return String(18 + (version % 7) * 9);
 }
 
 function renderResourceBars(combat: CharacterCombatStats): string {
