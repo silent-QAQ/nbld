@@ -649,7 +649,7 @@ function syncSelectedLayersToFacing(): void {
 function getActiveLayerRows(): string[] {
   if (!state.appearanceDraft) return [];
   syncSelectedLayersToFacing();
-  return state.showHairLayer
+  return isEditingHairLayer()
     ? state.appearanceDraft.hair[state.selectedHairLayer] ?? []
     : state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? [];
 }
@@ -657,17 +657,18 @@ function getActiveLayerRows(): string[] {
 function setActiveLayerRows(rows: string[]): void {
   if (!state.appearanceDraft) return;
   syncSelectedLayersToFacing();
-  if (state.showHairLayer) {
-    state.appearanceDraft.hair[state.selectedHairLayer] = normalizeHairRows(rows);
+  const normalized = isEditingHairLayer() ? normalizeHairRows(rows) : maskBodyRows(normalizeHairRows(rows));
+  if (isEditingHairLayer()) {
+    state.appearanceDraft.hair[state.selectedHairLayer] = normalized;
   } else {
-    state.appearanceDraft.skeleton[state.selectedSkeletonLayer] = normalizeHairRows(rows);
+    state.appearanceDraft.skeleton[state.selectedSkeletonLayer] = normalized;
   }
 }
 
 function applyPaintColorToPalette(color: string): void {
   if (!state.appearanceDraft) return;
   const normalized = normalizeHexColor(color, state.paintColor);
-  if (state.showHairLayer) {
+  if (isEditingHairLayer()) {
     state.appearanceDraft.palette.hairPrimary = normalized;
   } else {
     state.appearanceDraft.palette.clothPrimary = normalized;
@@ -680,6 +681,21 @@ function pushRecentPaintColor(color: string): void {
     normalized,
     ...state.recentPaintColors.filter((item) => item.toLowerCase() !== normalized.toLowerCase()),
   ].slice(0, 20);
+}
+
+function isEditingHairLayer(): boolean {
+  return state.showHairLayer;
+}
+
+function bodyPaintMask(): boolean[][] {
+  return buildAvatarOutlineMatrix((state.appearanceDraft ?? defaultAppearance()).body, state.appearanceFacing);
+}
+
+function maskBodyRows(rows: string[]): string[] {
+  const mask = bodyPaintMask();
+  return rowsToMatrix(rows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT)
+    .map((row, y) => row.map((cell, x) => (cell && mask[y][x] ? "1" : "0")).join("").replace(/0+$/g, ""))
+    .filter((row) => row.length > 0);
 }
 
 function renderAppearanceControls(body: CharacterBodyAppearance): void {
@@ -764,7 +780,7 @@ function bodyControlFields(page: BodyControlPage): Array<[keyof CharacterBodyApp
 }
 
 function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
-  state.paintColor = state.showHairLayer ? palette.hairPrimary : palette.clothPrimary;
+  state.paintColor = isEditingHairLayer() ? palette.hairPrimary : palette.clothPrimary;
   appearancePalette.innerHTML = `
     <label class="appearance-field">
       <span>当前颜料</span>
@@ -787,7 +803,7 @@ function renderLayerControls(): void {
   state.appearanceDraft = normalizeAppearance(state.appearanceDraft);
   const hairStyle = state.appearanceDraft.style.hairStyle;
   syncSelectedLayersToFacing();
-  state.selectedLayerMode = state.showHairLayer ? "hair" : "skeleton";
+  state.selectedLayerMode = isEditingHairLayer() ? "hair" : "skeleton";
 
   hairToolbar.innerHTML = `
     <label class="appearance-field">
@@ -891,10 +907,10 @@ function renderPixelEditorGrid(rows: string[]): void {
 
   const paintAt = (x: number, y: number) => {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
-    const outline = buildAvatarOutlineMatrix((state.appearanceDraft ?? defaultAppearance()).body, state.appearanceFacing);
-    if (!state.showHairLayer && !outline[y][x]) return;
+    const mask = bodyPaintMask();
+    if (!isEditingHairLayer() && !mask[y][x]) return;
     if (state.paintMode === "bucket") {
-      floodFillMatrix(matrix, x, y, !matrix[y][x], state.showHairLayer ? undefined : outline);
+      floodFillMatrix(matrix, x, y, !matrix[y][x], isEditingHairLayer() ? undefined : mask);
     } else {
       matrix[y][x] = state.paintMode === "fill";
     }
@@ -938,7 +954,7 @@ function updateDraftHairFromMatrix(matrix: boolean[][]): void {
   if (!state.appearanceDraft) return;
   const outline = buildAvatarOutlineMatrix(state.appearanceDraft.body, state.appearanceFacing);
   const rows = matrix
-    .map((row, y) => row.map((cell, x) => (cell && (state.showHairLayer || outline[y][x]) ? "1" : "0")).join("").replace(/0+$/g, ""))
+    .map((row, y) => row.map((cell, x) => (cell && (isEditingHairLayer() || outline[y][x]) ? "1" : "0")).join("").replace(/0+$/g, ""))
     .filter((row) => row.length > 0);
   setActiveLayerRows(rows);
 }
@@ -1156,7 +1172,7 @@ function exportActiveLayerPng(): void {
   output.height = AVATAR_EDITOR_HEIGHT;
   const outputCtx = output.getContext("2d")!;
   outputCtx.clearRect(0, 0, output.width, output.height);
-  outputCtx.fillStyle = state.showHairLayer
+  outputCtx.fillStyle = isEditingHairLayer()
     ? (state.appearanceDraft?.palette.hairPrimary ?? state.paintColor)
     : (state.appearanceDraft?.palette.clothPrimary ?? state.paintColor);
   matrix.forEach((row, y) => {
@@ -1165,7 +1181,7 @@ function exportActiveLayerPng(): void {
     });
   });
   const link = document.createElement("a");
-  link.download = `${state.appearanceFacing}-${state.showHairLayer ? "hair" : "body"}.png`;
+  link.download = `${state.appearanceFacing}-${isEditingHairLayer() ? "hair" : "body"}.png`;
   link.href = output.toDataURL("image/png");
   link.click();
 }
