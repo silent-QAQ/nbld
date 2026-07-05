@@ -476,8 +476,9 @@ func (s *Server) handleUpdateCharacterStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) error {
 		character.Stats = protocolStatsToDomain(req.Stats)
+		return nil
 	})
 	if !ok {
 		return
@@ -500,8 +501,9 @@ func (s *Server) handleUpdateCharacterInventory(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) error {
 		character.Inventory = protocolItemContainerToDomain(req.Inventory)
+		return nil
 	})
 	if !ok {
 		return
@@ -524,8 +526,9 @@ func (s *Server) handleUpdateCharacterWarehouse(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) error {
 		character.Warehouse = protocolItemContainerToDomain(req.Warehouse)
+		return nil
 	})
 	if !ok {
 		return
@@ -548,9 +551,10 @@ func (s *Server) handleUpdateCharacterEquipment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) error {
 		character.Equipment = protocolEquipmentToDomain(req.Equipment)
 		character.Equipment.syncVisibleArmor()
+		return nil
 	})
 	if !ok {
 		return
@@ -573,14 +577,13 @@ func (s *Server) handleUpdateCharacterAppearance(w http.ResponseWriter, r *http.
 		return
 	}
 
-	appearance := protocolAppearanceToDomain(req.Appearance)
-	if err := validateCharacterAppearance(appearance); err != nil {
-		writeStoreError(w, err)
-		return
-	}
-
-	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) {
+	character, ok := s.updateCharacterFromRequest(r.Context(), w, req.Token, req.CharacterID, func(character *Character) error {
+		appearance := protocolAppearanceToDomain(req.Appearance)
+		if err := validateCharacterAppearance(appearance); err != nil {
+			return err
+		}
 		character.Appearance = appearance
+		return nil
 	})
 	if !ok {
 		return
@@ -1771,7 +1774,7 @@ func (s *Server) flushCharacterNow(ctx context.Context, accountID, characterID s
 	return s.accounts.SaveCharacter(ctx, accountID, character)
 }
 
-func (s *Server) updateCharacterFromRequest(ctx context.Context, w http.ResponseWriter, token, characterID string, mutate func(*Character)) (Character, bool) {
+func (s *Server) updateCharacterFromRequest(ctx context.Context, w http.ResponseWriter, token, characterID string, mutate func(*Character) error) (Character, bool) {
 	if characterID == "" {
 		writeStoreError(w, ErrCharacterSelectionEmpty)
 		return Character{}, false
@@ -1788,7 +1791,9 @@ func (s *Server) updateCharacterFromRequest(ctx context.Context, w http.Response
 	}
 
 	character, err := s.onlineCharacters.UpdateCharacter(ctx, session.AccountID, characterID, func(character *Character) error {
-		mutate(character)
+		if err := mutate(character); err != nil {
+			return err
+		}
 		character.Stats = NormalizeCharacterStats(character.Stats)
 		return nil
 	})
