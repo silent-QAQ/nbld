@@ -283,7 +283,21 @@ func (s *postgresAccountStore) SoftDeleteCharacter(ctx context.Context, accountI
 		return Character{}, err
 	}
 	if deletedCount >= maxDeletedCharacters {
-		return Character{}, ErrDeletedLimitReached
+		if _, err := tx.Exec(
+			ctx,
+			`DELETE FROM characters
+			 WHERE id = (
+			   SELECT id
+			     FROM characters
+			    WHERE account_id = $1
+			      AND deleted_at IS NOT NULL
+			    ORDER BY deleted_at ASC, created_at ASC
+			    LIMIT 1
+			 )`,
+			accountID,
+		); err != nil {
+			return Character{}, err
+		}
 	}
 
 	row := tx.QueryRow(

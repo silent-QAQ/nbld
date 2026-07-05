@@ -149,14 +149,14 @@ type CharacterSkeletonAppearance struct {
 }
 
 type CharacterPaletteAppearance struct {
-	SkinPrimary  string `json:"skinPrimary"`
-	SkinShadow   string `json:"skinShadow"`
-	HairPrimary  string `json:"hairPrimary"`
-	HairShadow   string `json:"hairShadow"`
-	ClothPrimary string `json:"clothPrimary"`
-	ClothShadow  string `json:"clothShadow"`
-	MetalPrimary string `json:"metalPrimary"`
-	MetalShadow  string `json:"metalShadow"`
+	SkinPrimary   string   `json:"skinPrimary"`
+	SkinShadow    string   `json:"skinShadow"`
+	HairPrimary   string   `json:"hairPrimary"`
+	HairShadow    string   `json:"hairShadow"`
+	ClothPrimary  string   `json:"clothPrimary"`
+	ClothShadow   string   `json:"clothShadow"`
+	MetalPrimary  string   `json:"metalPrimary"`
+	MetalShadow   string   `json:"metalShadow"`
 	PixelSwatches []string `json:"pixelSwatches"`
 }
 
@@ -676,17 +676,9 @@ func (s *memoryAccountStore) SoftDeleteCharacter(_ context.Context, accountID, c
 	now := time.Now().UTC()
 	s.purgeExpiredLocked(accountID, now)
 
-	deletedCount := 0
-	for _, character := range s.characters[accountID] {
-		if character.DeletedAt != nil {
-			deletedCount++
-		}
-	}
-	if deletedCount >= maxDeletedCharacters {
-		return Character{}, ErrDeletedLimitReached
-	}
-
 	characters := s.characters[accountID]
+	s.purgeOldestDeletedIfLimitReachedLocked(accountID)
+	characters = s.characters[accountID]
 	for i := range characters {
 		if characters[i].ID != characterID {
 			continue
@@ -706,6 +698,28 @@ func (s *memoryAccountStore) SoftDeleteCharacter(_ context.Context, accountID, c
 	}
 
 	return Character{}, ErrCharacterNotFound
+}
+
+func (s *memoryAccountStore) purgeOldestDeletedIfLimitReachedLocked(accountID string) {
+	deletedCount := 0
+	oldestIndex := -1
+	var oldestDeletedAt time.Time
+	for i, character := range s.characters[accountID] {
+		if character.DeletedAt == nil {
+			continue
+		}
+		deletedCount++
+		if oldestIndex == -1 || character.DeletedAt.Before(oldestDeletedAt) {
+			oldestIndex = i
+			oldestDeletedAt = *character.DeletedAt
+		}
+	}
+	if deletedCount < maxDeletedCharacters || oldestIndex < 0 {
+		return
+	}
+
+	characters := s.characters[accountID]
+	s.characters[accountID] = append(characters[:oldestIndex], characters[oldestIndex+1:]...)
 }
 
 func (s *memoryAccountStore) GetCharacter(_ context.Context, accountID, characterID string) (Character, error) {

@@ -404,6 +404,69 @@ func TestCharacterLimitEnforced(t *testing.T) {
 	)
 }
 
+func TestDeletedCharacterLimitPurgesOldest(t *testing.T) {
+	server := NewServer(":0", "test-instance")
+	mux := server.routes()
+
+	loginResp := performJSONRequest[protocol.LoginResponse](
+		t,
+		mux,
+		http.MethodPost,
+		"/api/v1/session/login",
+		mustRegisterAndLogin(t, mux, "deleted-limit@example.com", "deleted_limit"),
+		http.StatusOK,
+	)
+
+	created := make([]protocol.CharacterSummary, 0, maxDeletedCharacters+1)
+	for i := 0; i < maxDeletedCharacters+1; i++ {
+		resp := performJSONRequest[protocol.CharacterMutationResponse](
+			t,
+			mux,
+			http.MethodPost,
+			"/api/v1/characters/create",
+			protocol.CreateCharacterRequest{
+				Token: loginResp.Token,
+				Name:  string(rune('A'+i)) + "Deleted",
+			},
+			http.StatusCreated,
+		)
+		created = append(created, resp.Character)
+	}
+
+	for _, character := range created {
+		performJSONRequest[protocol.DeleteCharacterResponse](
+			t,
+			mux,
+			http.MethodPost,
+			"/api/v1/characters/delete",
+			protocol.DeleteCharacterRequest{
+				Token:       loginResp.Token,
+				CharacterID: character.ID,
+			},
+			http.StatusOK,
+		)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/characters?token="+loginResp.Token, nil)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, listRec.Code, listRec.Body.String())
+	}
+	var listResp protocol.CharacterListResponse
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode character list: %v", err)
+	}
+	if len(listResp.Deleted) != maxDeletedCharacters {
+		t.Fatalf("expected %d deleted characters, got %d", maxDeletedCharacters, len(listResp.Deleted))
+	}
+	for _, character := range listResp.Deleted {
+		if character.ID == created[0].ID {
+			t.Fatalf("expected oldest deleted character %q to be purged", created[0].ID)
+		}
+	}
+}
+
 func TestInvalidTokenRejected(t *testing.T) {
 	server := NewServer(":0", "test-instance")
 	mux := server.routes()

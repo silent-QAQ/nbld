@@ -74,7 +74,7 @@ type ChunkRender = {
 
 type Facing = "front" | "back" | "left" | "right";
 type LayerEditorMode = "hair" | "skeleton";
-type PaintMode = "fill" | "erase" | "bucket";
+type PaintMode = "fill" | "erase" | "bucket" | "picker";
 type BodyControlPage = "overall" | "body" | "arms" | "legs";
 type GameViewport = { x: number; y: number; width: number; height: number };
 
@@ -333,7 +333,7 @@ const state: AppState = {
     sfxVolume: 80,
   },
   videoSettings: {
-    chunkRenderBudget: CHUNK_RENDER_BUDGET_PER_FRAME,
+    chunkRenderBudget: 1,
     showDebug: true,
     showHelp: true,
   },
@@ -597,6 +597,10 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     deleteButton.addEventListener("click", async (event) => {
       event.stopPropagation();
       if (!state.api || !state.token) return;
+      const firstConfirmed = window.confirm(`确定要删除角色「${character.name}」吗？删除后会进入待清除列表。`);
+      if (!firstConfirmed) return;
+      const secondConfirmed = window.confirm(`再次确认：将删除角色「${character.name}」。如果待清除角色数量已满，最早删除的角色会被永久清除。`);
+      if (!secondConfirmed) return;
       setLoginBusy(true, "删除角色中...");
       loginError.textContent = "";
       try {
@@ -968,16 +972,45 @@ function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
       <span>当前颜料</span>
       <input type="color" id="paintColorInput" value="${state.paintColor}">
     </label>
+    <div class="custom-color-panel">
+      <label class="appearance-field">
+        <span>自定义颜色</span>
+        <input type="color" id="customPaintColorInput" value="${state.paintColor}">
+      </label>
+      <button type="button" class="secondary" id="applyCustomPaintColor">使用自定义颜色</button>
+    </div>
+    <div class="recent-color-panel">
+      <span>历史使用颜色</span>
+      <div class="recent-colors">
+        ${state.recentPaintColors.slice(0, 20).map((color) => `<button type="button" class="color-swatch" data-color="${color}" style="background:${color}" aria-label="${color}"></button>`).join("")}
+      </div>
+    </div>
   `;
+
+  const applyColor = (color: string) => {
+    state.paintColor = color;
+    applyPaintColorToPalette(color);
+    pushRecentPaintColor(color);
+    renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
+    renderPixelTools();
+    renderPixelEditorGrid(getActiveLayerRows());
+  };
 
   appearancePalette.querySelector<HTMLInputElement>("#paintColorInput")?.addEventListener("input", (event) => {
     const input = event.currentTarget as HTMLInputElement;
-    state.paintColor = input.value;
-    applyPaintColorToPalette(input.value);
-    pushRecentPaintColor(input.value);
-    renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
-    renderPixelTools();
+    applyColor(input.value);
   });
+
+  appearancePalette.querySelector<HTMLButtonElement>("#applyCustomPaintColor")?.addEventListener("click", () => {
+    const input = appearancePalette.querySelector<HTMLInputElement>("#customPaintColorInput");
+    applyColor(input?.value ?? state.paintColor);
+  });
+
+  for (const button of appearancePalette.querySelectorAll<HTMLButtonElement>("[data-color]")) {
+    button.addEventListener("click", () => {
+      applyColor(button.dataset.color ?? state.paintColor);
+    });
+  }
 }
 
 function renderLayerControls(): void {
@@ -1009,13 +1042,11 @@ function renderPixelTools(): void {
     <button type="button" class="secondary ${state.paintMode === "fill" ? "active" : ""}" data-paint-mode="fill" aria-pressed="${state.paintMode === "fill"}">画笔</button>
     <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase" aria-pressed="${state.paintMode === "erase"}">橡皮</button>
     <button type="button" class="secondary ${state.paintMode === "bucket" ? "active" : ""}" data-paint-mode="bucket" aria-pressed="${state.paintMode === "bucket"}">涂料桶</button>
+    <button type="button" class="secondary ${state.paintMode === "picker" ? "active" : ""}" data-paint-mode="picker" aria-pressed="${state.paintMode === "picker"}">取色器</button>
     <button type="button" class="secondary" data-tool="clear">清空</button>
     <button type="button" class="secondary" data-tool="export-json">导出JSON</button>
     <button type="button" class="secondary" data-tool="import">导入</button>
     <button type="button" class="secondary" data-tool="export-png">导出PNG</button>
-    <div class="recent-colors">
-      ${state.recentPaintColors.slice(0, 20).map((color) => `<button type="button" class="color-swatch" data-color="${color}" style="background:${color}" aria-label="${color}"></button>`).join("")}
-    </div>
   `;
 
   for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-paint-mode]")) {
@@ -1033,15 +1064,6 @@ function renderPixelTools(): void {
     });
   }
 
-  for (const button of pixelTools.querySelectorAll<HTMLButtonElement>("[data-color]")) {
-    button.addEventListener("click", () => {
-      const color = button.dataset.color ?? state.paintColor;
-      state.paintColor = color;
-      applyPaintColorToPalette(color);
-      renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
-      renderPixelTools();
-    });
-  }
 }
 
 function readAppearanceFromEditor(): CharacterAppearance {
@@ -1086,6 +1108,7 @@ function getAvatarEditorCellSize(): number {
 function paintPixelMatrixCell(matrix: string[][], x: number, y: number, mask: boolean[][]): boolean {
   if (x < 0 || x >= AVATAR_EDITOR_WIDTH || y < 0 || y >= AVATAR_EDITOR_HEIGHT) return false;
   if (!isEditingHairLayer() && !mask[y]?.[x]) return false;
+  if (state.paintMode === "picker") return false;
   if (state.paintMode === "bucket") {
     floodFillMatrix(matrix, x, y, getCurrentPaintSymbol(), isEditingHairLayer() ? undefined : mask);
     return true;
@@ -1141,6 +1164,10 @@ function renderPixelEditorGrid(rows: string[]): void {
   };
 
   const paintAt = (x: number, y: number) => {
+    if (state.paintMode === "picker") {
+      pickColorAt(matrix, x, y);
+      return;
+    }
     const changed = paintPixelMatrixCell(matrix, x, y, mask);
     if (!changed) return;
     updateDraftHairFromMatrix(matrix);
@@ -1170,6 +1197,18 @@ function renderPixelEditorGrid(rows: string[]): void {
   hairGrid.appendChild(fragment);
 
   repaintGrid();
+}
+
+function pickColorAt(matrix: string[][], x: number, y: number): void {
+  if (!state.appearanceDraft) return;
+  const symbol = matrix[y]?.[x] ?? EMPTY_PIXEL_SYMBOL;
+  if (symbol === EMPTY_PIXEL_SYMBOL) return;
+  const color = pixelSymbolToColor(symbol, state.appearanceDraft.palette.pixelSwatches);
+  if (color === "transparent") return;
+  state.paintColor = normalizeHexColor(color, state.paintColor);
+  pushRecentPaintColor(state.paintColor);
+  renderPaletteControls(state.appearanceDraft.palette);
+  renderPixelTools();
 }
 
 function updateDraftHairFromMatrix(matrix: string[][]): void {
@@ -1743,6 +1782,128 @@ function logoutToLogin(): void {
   debugPanel.classList.add("hidden");
   helpPanel.classList.add("hidden");
   loginError.textContent = "";
+  pauseMenu.classList.add("hidden");
+  state.menuOpen = false;
+}
+
+type PauseSection = "settings" | "profile" | "events";
+
+function togglePauseMenu(): void {
+  state.menuOpen = !state.menuOpen;
+  pauseMenu.classList.toggle("hidden", !state.menuOpen);
+  if (state.menuOpen) {
+    renderPauseMenu("settings");
+  }
+}
+
+function renderPauseMenu(section: PauseSection): void {
+  pauseNav.innerHTML = `
+    <button type="button" class="${section === "settings" ? "active" : ""}" data-section="settings">设置</button>
+    <button type="button" class="${section === "profile" ? "active" : ""}" data-section="profile">我的</button>
+    <button type="button" class="${section === "events" ? "active" : ""}" data-section="events">活动</button>
+    <button type="button" data-action="logout">退出游戏</button>
+  `;
+
+  if (section === "settings") {
+    pauseContent.innerHTML = renderSettingsPanel();
+  } else if (section === "profile") {
+    pauseContent.innerHTML = `
+      <h2>我的</h2>
+      <p>账号：${escapeHtml(state.accountUsername || state.accountEmail || "-")}</p>
+      <p>角色：${escapeHtml(state.characterName || "-")}</p>
+      <p>地图：${escapeHtml(state.mapId || "-")}</p>
+    `;
+  } else {
+    pauseContent.innerHTML = `
+      <h2>活动</h2>
+      <p>当前没有接入活动数据。</p>
+    `;
+  }
+
+  for (const button of pauseNav.querySelectorAll<HTMLButtonElement>("[data-section]")) {
+    button.addEventListener("click", () => renderPauseMenu(button.dataset.section as PauseSection));
+  }
+  pauseNav.querySelector<HTMLButtonElement>("[data-action='logout']")?.addEventListener("click", () => {
+    logoutToLogin();
+  });
+
+  bindSettingsPanelEvents();
+}
+
+function renderSettingsPanel(): string {
+  return `
+    <div class="settings-tabs">
+      <button type="button" class="${state.settingsPage === "audio" ? "active" : ""}" data-settings-page="audio">声音设置</button>
+      <button type="button" class="${state.settingsPage === "video" ? "active" : ""}" data-settings-page="video">画面设置</button>
+      <button type="button" class="${state.settingsPage === "keys" ? "active" : ""}" data-settings-page="keys">按键绑定</button>
+    </div>
+    ${renderSettingsPage()}
+  `;
+}
+
+function renderSettingsPage(): string {
+  if (state.settingsPage === "audio") {
+    return `
+      <div class="settings-group">
+        <label>主音量 <input type="range" min="0" max="100" value="${state.audioSettings.masterVolume}" data-audio="masterVolume"></label>
+        <label>音乐音量 <input type="range" min="0" max="100" value="${state.audioSettings.musicVolume}" data-audio="musicVolume"></label>
+        <label>音效音量 <input type="range" min="0" max="100" value="${state.audioSettings.sfxVolume}" data-audio="sfxVolume"></label>
+      </div>
+    `;
+  }
+  if (state.settingsPage === "video") {
+    return `
+      <div class="settings-group">
+        <label>区块渲染预算 <input type="range" min="1" max="4" value="${state.videoSettings.chunkRenderBudget}" data-video="chunkRenderBudget"></label>
+        <label><input type="checkbox" ${state.videoSettings.showDebug ? "checked" : ""} data-video-toggle="showDebug"> 显示调试面板</label>
+        <label><input type="checkbox" ${state.videoSettings.showHelp ? "checked" : ""} data-video-toggle="showHelp"> 显示帮助</label>
+      </div>
+    `;
+  }
+  return `
+    <div class="settings-group keybind-grid">
+      ${Object.entries(state.keyBindings).map(([action, code]) => `
+        <button type="button" data-bind-key="${action}">${escapeHtml(action)}: ${escapeHtml(code)}</button>
+      `).join("")}
+      <p>${state.awaitingKeyBinding ? `按下按键绑定 ${escapeHtml(state.awaitingKeyBinding)}` : "点击按钮后按下新按键"}</p>
+    </div>
+  `;
+}
+
+function bindSettingsPanelEvents(): void {
+  for (const button of pauseContent.querySelectorAll<HTMLButtonElement>("[data-settings-page]")) {
+    button.addEventListener("click", () => {
+      state.settingsPage = button.dataset.settingsPage as AppState["settingsPage"];
+      renderPauseMenu("settings");
+    });
+  }
+  for (const input of pauseContent.querySelectorAll<HTMLInputElement>("[data-audio]")) {
+    input.addEventListener("input", () => {
+      const key = input.dataset.audio as keyof AppState["audioSettings"];
+      state.audioSettings[key] = Number(input.value);
+    });
+  }
+  for (const input of pauseContent.querySelectorAll<HTMLInputElement>("[data-video]")) {
+    input.addEventListener("input", () => {
+      const key = input.dataset.video as keyof AppState["videoSettings"];
+      const value = Number(input.value);
+      state.videoSettings[key] = value as never;
+    });
+  }
+  for (const input of pauseContent.querySelectorAll<HTMLInputElement>("[data-video-toggle]")) {
+    input.addEventListener("change", () => {
+      const key = input.dataset.videoToggle as "showDebug" | "showHelp";
+      state.videoSettings[key] = input.checked;
+      debugPanel.classList.toggle("hidden", !state.videoSettings.showDebug);
+      helpPanel.classList.toggle("hidden", !state.videoSettings.showHelp);
+    });
+  }
+  for (const button of pauseContent.querySelectorAll<HTMLButtonElement>("[data-bind-key]")) {
+    button.addEventListener("click", () => {
+      state.awaitingKeyBinding = button.dataset.bindKey as keyof AppState["keyBindings"];
+      renderPauseMenu("settings");
+    });
+  }
 }
 
 function connectWebSocket(api: ApiClient): void {
@@ -1831,14 +1992,12 @@ function handleServerMessage(message: WSServerMessage): void {
 }
 
 let lastFrameAt = performance.now();
-const CHUNK_RENDER_BUDGET_PER_FRAME = 1;
-
 function loop(now: number): void {
   const deltaSeconds = Math.min(0.05, (now - lastFrameAt) / 1000);
   state.lastFrameMs = now - lastFrameAt;
   lastFrameAt = now;
 
-  processPendingChunkRenders(CHUNK_RENDER_BUDGET_PER_FRAME);
+  processPendingChunkRenders(state.videoSettings.chunkRenderBudget);
   updatePlayer(deltaSeconds, now);
   updatePlayerVisual(deltaSeconds);
   updateCamera(deltaSeconds);
@@ -1885,14 +2044,14 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 
   let dx = 0;
   let dy = 0;
-  if (state.pressed.has("KeyA") || state.pressed.has("ArrowLeft")) dx -= 1;
-  if (state.pressed.has("KeyD") || state.pressed.has("ArrowRight")) dx += 1;
-  if (state.pressed.has("KeyW") || state.pressed.has("ArrowUp")) dy += 1;
-  if (state.pressed.has("KeyS") || state.pressed.has("ArrowDown")) dy -= 1;
+  if (state.pressed.has(state.keyBindings.moveLeft) || state.pressed.has("ArrowLeft")) dx -= 1;
+  if (state.pressed.has(state.keyBindings.moveRight) || state.pressed.has("ArrowRight")) dx += 1;
+  if (state.pressed.has(state.keyBindings.moveUp) || state.pressed.has("ArrowUp")) dy += 1;
+  if (state.pressed.has(state.keyBindings.moveDown) || state.pressed.has("ArrowDown")) dy -= 1;
 
   if (dx !== 0 || dy !== 0) {
     const length = Math.hypot(dx, dy);
-    const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
+    const speed = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight")
       ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
       : PLAYER_WALK_SPEED_TILES_PER_SECOND;
     state.facing = facingFromVector(dx / length, dy / length, state.facing);
@@ -2375,7 +2534,7 @@ function updateHud(): void {
   const tile = state.currentTile;
   const visibleTilesX = TARGET_VISIBLE_TILES_X;
   const visibleTilesY = TARGET_VISIBLE_TILES_Y;
-  const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
+  const speed = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight")
     ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
     : PLAYER_WALK_SPEED_TILES_PER_SECOND;
   hud.innerHTML = `
