@@ -9,20 +9,21 @@ import (
 )
 
 type sessionState struct {
-	PlayerID      string
-	AccountID     string
-	CharacterID   string
-	CharacterName string
-	Appearance    CharacterAppearance
-	Equipment     CharacterEquipment
-	Token         string
-	WorldID       string
-	MapID         string
-	Position      protocol.Position
-	Resources     runtimeResources
-	Sprinting     bool
-	ResourceAt    time.Time
-	SprintEndedAt time.Time
+	PlayerID          string
+	AccountID         string
+	CharacterID       string
+	CharacterName     string
+	Appearance        CharacterAppearance
+	Equipment         CharacterEquipment
+	Token             string
+	WorldID           string
+	MapID             string
+	Position          protocol.Position
+	Resources         runtimeResources
+	Sprinting         bool
+	ResourceAt        time.Time
+	SprintEndedAt     time.Time
+	SprintIntentUntil time.Time
 }
 
 type stateStore struct {
@@ -67,20 +68,6 @@ func (s *stateStore) deleteSession(token string) (sessionState, bool) {
 	return session, true
 }
 
-func (s *stateStore) updatePosition(token string, position protocol.Position) (sessionState, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	session, ok := s.sessions[token]
-	if !ok {
-		return session, false
-	}
-
-	session.Position = position
-	s.sessions[token] = session
-	return session, true
-}
-
 func (s *stateStore) updateMovement(token string, position protocol.Position, sprinting bool) (sessionState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -90,7 +77,19 @@ func (s *stateStore) updateMovement(token string, position protocol.Position, sp
 		return session, false
 	}
 
-	session.advanceRuntimeResources(time.Now().UTC(), sprinting)
+	now := time.Now().UTC()
+	wasSprinting := session.Sprinting
+	session.advanceRuntimeResources(now, session.Sprinting)
+	if sprinting && session.Resources.StaminaCurrent > 0 {
+		session.Sprinting = true
+		session.SprintIntentUntil = now.Add(750 * time.Millisecond)
+	} else {
+		if wasSprinting {
+			session.SprintEndedAt = now
+		}
+		session.Sprinting = false
+		session.SprintIntentUntil = time.Time{}
+	}
 	session.Position = position
 	s.sessions[token] = session
 	return session, true
@@ -196,6 +195,20 @@ func (s *sessionState) advanceRuntimeResources(now time.Time, wantsSprint bool) 
 		return
 	}
 
+	if wantsSprint && !s.SprintIntentUntil.IsZero() && now.After(s.SprintIntentUntil) {
+		expiresAt := s.SprintIntentUntil
+		if expiresAt.After(s.ResourceAt) {
+			s.advanceRuntimeResources(expiresAt, true)
+		}
+		if s.Sprinting {
+			s.SprintEndedAt = expiresAt
+		}
+		s.Sprinting = false
+		s.SprintIntentUntil = time.Time{}
+		s.advanceRuntimeResources(now, false)
+		return
+	}
+
 	elapsed := now.Sub(s.ResourceAt).Seconds()
 	if elapsed <= 0 {
 		s.Sprinting = wantsSprint && s.Resources.StaminaCurrent > 0
@@ -216,9 +229,9 @@ func (s *sessionState) advanceRuntimeResources(now time.Time, wantsSprint bool) 
 			s.SprintEndedAt = now
 		}
 		s.Sprinting = false
-		regen := staminaRegenRested
+		regen := float64(staminaRegenRested)
 		if now.Sub(s.SprintEndedAt) <= staminaRecentStopWindow {
-			regen = staminaRegenRecentlyStopped
+			regen = float64(staminaRegenRecentlyStopped)
 		}
 		s.Resources.StaminaCurrent += regen * elapsed
 		s.Resources.StaminaCurrent = clampRuntimeFloat(s.Resources.StaminaCurrent, 0, float64(s.Resources.StaminaMax))

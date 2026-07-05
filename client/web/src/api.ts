@@ -45,8 +45,8 @@ export class ApiClient {
     return this.post("/api/v1/world/enter", { token, characterId });
   }
 
-  async move(token: string, x: number, y: number): Promise<MoveResponse> {
-    return this.post("/api/v1/world/move", { token, position: { x, y } });
+  async move(token: string, x: number, y: number, sprinting: boolean): Promise<MoveResponse> {
+    return this.post("/api/v1/world/move", { token, position: { x, y }, sprinting });
   }
 
   async chunks(token: string, position?: { x: number; y: number }): Promise<ChunkWindowResponse> {

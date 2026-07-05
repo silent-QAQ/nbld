@@ -16,6 +16,7 @@ import type {
   LoginResponse,
   Position,
   RegisterResponse,
+  RuntimeResources,
   WorldPlayer,
   WSServerMessage,
 } from "./protocol";
@@ -27,7 +28,6 @@ const SPRINT_STAMINA_COST_PER_SECOND = 10;
 const STAMINA_REGEN_WHILE_RUNNING = 2;
 const STAMINA_REGEN_RECENTLY_STOPPED = 4;
 const STAMINA_REGEN_RESTED = 8;
-const STAMINA_RECENT_STOP_SECONDS = 3;
 const IDLE_CHUNK_REFRESH_INTERVAL_MS = 5000;
 const MOVE_SEND_INTERVAL_MS = 90;
 const HUD_REFRESH_INTERVAL_MS = 120;
@@ -183,9 +183,9 @@ type AppState = {
   playerVisual: Position;
   camera: Position;
   facing: Facing;
+  runtimeResources: RuntimeResources;
   currentStamina: number;
   sprinting: boolean;
-  lastSprintEndedAt: number;
   tileScale: number;
   chunks: Map<string, ChunkRender>;
   pendingChunkRenders: Array<{ key: string; snapshot: ChunkSnapshot }>;
@@ -405,9 +405,9 @@ const state: AppState = {
   playerVisual: { x: 0, y: 0 },
   camera: { x: 0, y: 0 },
   facing: "front",
+  runtimeResources: {},
   currentStamina: 100,
   sprinting: false,
-  lastSprintEndedAt: -Infinity,
   tileScale: 1,
   chunks: new Map(),
   pendingChunkRenders: [],
@@ -583,6 +583,10 @@ window.addEventListener("keyup", (event) => {
   state.pressed.delete(event.code);
   if (state.menuOpen || state.inventoryOpen) return;
   if (isTypingTarget(event.target)) return;
+});
+window.addEventListener("blur", releaseGameplayInput);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) releaseGameplayInput();
 });
 resizeCanvas();
 restoreSessionFromStorage();
@@ -1928,9 +1932,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.player = { ...entered.position };
     state.playerVisual = { ...entered.position };
     state.camera = { ...entered.position };
-    state.currentStamina = getCombatStats(character.stats).resources.staminaMax;
-    state.sprinting = false;
-    state.lastSprintEndedAt = -Infinity;
+    applyRuntimeResources(entered.resources, getCombatStats(character.stats), entered.sprinting);
     state.players.clear();
     state.chunks.clear();
     state.pendingChunkRenders = [];
@@ -2029,9 +2031,9 @@ function logoutToLogin(): void {
   state.characterName = "";
   state.worldId = "";
   state.mapId = "map_0_0";
+  state.runtimeResources = {};
   state.currentStamina = 100;
   state.sprinting = false;
-  state.lastSprintEndedAt = -Infinity;
   state.players.clear();
   state.chunks.clear();
   state.pendingChunkRenders = [];
@@ -2366,6 +2368,7 @@ function connectWebSocket(api: ApiClient): void {
 function handleServerMessage(message: WSServerMessage): void {
   if (message.type === "auth_ok") {
     state.socketStatus = "认证完成";
+    applyRuntimeResources(message.resources, getCombatStats(currentPlayerCharacter()?.stats), message.sprinting);
     if (message.players) {
       state.players.clear();
       state.remoteVisuals.clear();
@@ -2390,6 +2393,8 @@ function handleServerMessage(message: WSServerMessage): void {
       characterName: message.characterName,
       mapId: message.mapId,
       position: message.position,
+      resources: message.resources,
+      sprinting: message.sprinting,
     };
     state.players.set(player.playerId, player);
     if (!state.remoteVisuals.has(player.playerId)) {
@@ -2397,12 +2402,14 @@ function handleServerMessage(message: WSServerMessage): void {
     }
     if (message.playerId === state.playerId) {
       state.mapId = message.mapId || state.mapId;
+      applyRuntimeResources(message.resources, getCombatStats(currentPlayerCharacter()?.stats), message.sprinting);
     }
     return;
   }
 
   if (message.type === "map_transition" && message.playerId === state.playerId && message.position) {
     state.mapId = message.mapId || state.mapId;
+    applyRuntimeResources(message.resources, getCombatStats(currentPlayerCharacter()?.stats), message.sprinting);
     state.player = { ...message.position };
     state.playerVisual = { ...message.position };
     state.camera = { ...message.position };
@@ -2483,8 +2490,7 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 
   const moving = dx !== 0 || dy !== 0;
   const wantsSprint = isSprintPressed();
-  const canSprint = moving && wantsSprint && state.currentStamina > 0;
-  updateStamina(deltaSeconds, now, canSprint, staminaMax);
+  state.sprinting = moving && wantsSprint && state.currentStamina > 0;
 
   if (moving) {
     const length = Math.hypot(dx, dy);
@@ -2515,28 +2521,6 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   }
 
   state.currentTile = findTileAt(state.player.x, state.player.y);
-}
-
-function updateStamina(deltaSeconds: number, now: number, sprinting: boolean, staminaMax: number): void {
-  if (sprinting) {
-    const staminaDelta = (STAMINA_REGEN_WHILE_RUNNING - SPRINT_STAMINA_COST_PER_SECOND) * deltaSeconds;
-    state.currentStamina = clamp(state.currentStamina + staminaDelta, 0, staminaMax);
-    state.sprinting = state.currentStamina > 0;
-    if (!state.sprinting) {
-      state.lastSprintEndedAt = now;
-    }
-    return;
-  }
-
-  if (state.sprinting) {
-    state.lastSprintEndedAt = now;
-  }
-  state.sprinting = false;
-  const stoppedSeconds = (now - state.lastSprintEndedAt) / 1000;
-  const regen = stoppedSeconds <= STAMINA_RECENT_STOP_SECONDS
-    ? STAMINA_REGEN_RECENTLY_STOPPED
-    : STAMINA_REGEN_RESTED;
-  state.currentStamina = clamp(state.currentStamina + regen * deltaSeconds, 0, staminaMax);
 }
 
 function getCurrentMoveSpeed(combat: CharacterCombatStats, sprinting: boolean): number {
@@ -2570,14 +2554,25 @@ function facingFromVector(dx: number, dy: number, fallback: Facing): Facing {
 
 function sendMove(): void {
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: "move", position: state.player }));
+    state.ws.send(JSON.stringify({ type: "move", position: state.player, sprinting: state.sprinting }));
     return;
   }
 
   if (state.api) {
-    void state.api.move(state.token, state.player.x, state.player.y).catch((error) => {
-      state.lastError = errorToString(error);
-    });
+    void state.api.move(state.token, state.player.x, state.player.y, state.sprinting)
+      .then((response) => applyRuntimeResources(response.resources, getCombatStats(currentPlayerCharacter()?.stats), response.sprinting))
+      .catch((error) => {
+        state.lastError = errorToString(error);
+      });
+  }
+}
+
+function releaseGameplayInput(): void {
+  if (state.pressed.size === 0 && !state.sprinting) return;
+  state.pressed.clear();
+  if (state.sprinting) {
+    state.sprinting = false;
+    sendMove();
   }
 }
 
@@ -3182,11 +3177,7 @@ function staminaStatusLabel(current: number, max: number): string {
     return `消耗 ${formatInteger(SPRINT_STAMINA_COST_PER_SECOND)}/秒 · 恢复 ${formatInteger(STAMINA_REGEN_WHILE_RUNNING)}/秒`;
   }
   if (current >= max - 0.01) return "已满";
-  const secondsSinceSprint = (performance.now() - state.lastSprintEndedAt) / 1000;
-  const regen = secondsSinceSprint <= STAMINA_RECENT_STOP_SECONDS
-    ? STAMINA_REGEN_RECENTLY_STOPPED
-    : STAMINA_REGEN_RESTED;
-  return `恢复 ${formatInteger(regen)}/秒`;
+  return `恢复 ${formatInteger(STAMINA_REGEN_RECENTLY_STOPPED)}-${formatInteger(STAMINA_REGEN_RESTED)}/秒`;
 }
 
 function dominantTerrain(): string {
@@ -3258,15 +3249,36 @@ function getCombatStats(stats: CharacterStats | undefined): CharacterCombatStats
 }
 
 function withRuntimeResources(combat: CharacterCombatStats): CharacterCombatStats {
-  const staminaMax = Math.max(1, combat.resources.staminaMax);
+  const runtime = state.runtimeResources;
+  const staminaMax = Math.max(1, runtime.staminaMax ?? combat.resources.staminaMax);
   state.currentStamina = clamp(state.currentStamina, 0, staminaMax);
   return {
     ...combat,
     resources: {
       ...combat.resources,
+      healthMax: runtime.healthMax ?? combat.resources.healthMax,
+      healthCurrent: runtime.healthCurrent ?? combat.resources.healthCurrent,
+      manaMax: runtime.manaMax ?? combat.resources.manaMax,
+      manaCurrent: runtime.manaCurrent ?? combat.resources.manaCurrent,
+      staminaMax,
       staminaCurrent: state.currentStamina,
     },
   };
+}
+
+function applyRuntimeResources(resources: RuntimeResources | undefined, combat: CharacterCombatStats, sprinting = state.sprinting): void {
+  const staminaMax = Math.max(1, resources?.staminaMax ?? combat.resources.staminaMax);
+  const staminaCurrent = clamp(resources?.staminaCurrent ?? state.currentStamina, 0, staminaMax);
+  state.runtimeResources = {
+    healthMax: resources?.healthMax ?? state.runtimeResources.healthMax ?? combat.resources.healthMax,
+    healthCurrent: resources?.healthCurrent ?? state.runtimeResources.healthCurrent ?? combat.resources.healthCurrent,
+    manaMax: resources?.manaMax ?? state.runtimeResources.manaMax ?? combat.resources.manaMax,
+    manaCurrent: resources?.manaCurrent ?? state.runtimeResources.manaCurrent ?? combat.resources.manaCurrent,
+    staminaMax,
+    staminaCurrent,
+  };
+  state.currentStamina = staminaCurrent;
+  state.sprinting = Boolean(sprinting) && state.currentStamina > 0;
 }
 
 function legacyPercentToRatio(value: number): number {

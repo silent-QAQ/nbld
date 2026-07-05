@@ -24,6 +24,15 @@ export type LoginResponse = {
   serverTime: string;
 };
 
+export type RuntimeResources = {
+  healthMax?: number;
+  healthCurrent?: number;
+  manaMax?: number;
+  manaCurrent?: number;
+  staminaMax?: number;
+  staminaCurrent?: number;
+};
+
 export type EnterWorldResponse = {
   playerId: string;
   characterId?: string;
@@ -31,6 +40,8 @@ export type EnterWorldResponse = {
   worldId: string;
   mapId?: string;
   position: Position;
+  resources?: RuntimeResources;
+  sprinting?: boolean;
 };
 
 export type MoveResponse = {
@@ -38,6 +49,8 @@ export type MoveResponse = {
   characterId?: string;
   mapId?: string;
   position: Position;
+  resources?: RuntimeResources;
+  sprinting?: boolean;
 };
 
 export type CharacterBaseStats = {
@@ -285,6 +298,8 @@ export type WorldPlayer = {
   characterName?: string;
   mapId?: string;
   position: Position;
+  resources?: RuntimeResources;
+  sprinting?: boolean;
   appearance?: CharacterAppearance;
   equipment?: CharacterEquipment;
 };
@@ -297,6 +312,8 @@ export type WSServerMessage = {
   worldId?: string;
   mapId?: string;
   position?: Position;
+  resources?: RuntimeResources;
+  sprinting?: boolean;
   players?: WorldPlayer[];
   error?: string;
 };

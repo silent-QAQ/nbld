@@ -243,11 +243,11 @@ func (s *Server) handleGuestLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.state.putSession(sessionState{
-		PlayerID: resp.PlayerID,
-		Token:    resp.Token,
-		WorldID:  "world-dev-001",
-		MapID:    "map_0_0",
-		Position: protocol.Position{X: 0, Y: 0},
+		PlayerID:  resp.PlayerID,
+		Token:     resp.Token,
+		WorldID:   "world-dev-001",
+		MapID:     "map_0_0",
+		Position:  protocol.Position{X: 0, Y: 0},
 		Resources: defaultRuntimeResources(),
 	})
 
@@ -615,10 +615,10 @@ func (s *Server) handleEnterWorld(w http.ResponseWriter, r *http.Request) {
 
 	if session.AccountID == "" {
 		writeJSON(w, http.StatusOK, protocol.EnterWorldResponse{
-			PlayerID: session.PlayerID,
-			WorldID:  session.WorldID,
-			MapID:    session.MapID,
-			Position: session.Position,
+			PlayerID:  session.PlayerID,
+			WorldID:   session.WorldID,
+			MapID:     session.MapID,
+			Position:  session.Position,
 			Resources: session.Resources.toProtocol(),
 			Sprinting: session.Sprinting,
 		})
@@ -883,6 +883,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 			WorldID:       session.WorldID,
 			MapID:         session.MapID,
 			Position:      session.Position,
+			Resources:     session.Resources.toProtocol(),
+			Sprinting:     session.Sprinting,
 		})
 	}
 }
@@ -925,6 +927,8 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 		CharacterName: session.CharacterName,
 		MapID:         session.MapID,
 		Position:      session.Position,
+		Resources:     session.Resources.toProtocol(),
+		Sprinting:     session.Sprinting,
 		OccurredAt:    time.Now().UTC().Format(time.RFC3339),
 	}); err != nil {
 		return
@@ -1307,6 +1311,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 		WorldID:       session.WorldID,
 		MapID:         session.MapID,
 		Position:      session.Position,
+		Resources:     session.Resources.toProtocol(),
+		Sprinting:     session.Sprinting,
 		Appearance:    toProtocolAppearance(session.Appearance),
 		Equipment:     toProtocolEquipment(session.Equipment),
 		Players:       s.state.listWorldPlayers(session.WorldID),
@@ -1326,7 +1332,7 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		updated, ok := s.state.updatePosition(hello.Token, message.Position)
+		updated, ok := s.state.updateMovement(hello.Token, message.Position, message.Sprinting)
 		if !ok {
 			client.send <- protocol.WSServerMessage{
 				Type:  "error",
@@ -1364,6 +1370,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			WorldID:       updated.WorldID,
 			MapID:         updated.MapID,
 			Position:      updated.Position,
+			Resources:     updated.Resources.toProtocol(),
+			Sprinting:     updated.Sprinting,
 			Appearance:    toProtocolAppearance(updated.Appearance),
 			Equipment:     toProtocolEquipment(updated.Equipment),
 		}
@@ -1375,6 +1383,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			CharacterName: updated.CharacterName,
 			MapID:         updated.MapID,
 			Position:      updated.Position,
+			Resources:     updated.Resources.toProtocol(),
+			Sprinting:     updated.Sprinting,
 			OccurredAt:    time.Now().UTC().Format(time.RFC3339),
 			Appearance:    toProtocolAppearance(updated.Appearance),
 			Equipment:     toProtocolEquipment(updated.Equipment),
@@ -1390,6 +1400,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 				WorldID:       updated.WorldID,
 				MapID:         updated.MapID,
 				Position:      updated.Position,
+				Resources:     updated.Resources.toProtocol(),
+				Sprinting:     updated.Sprinting,
 			})
 		}
 	}

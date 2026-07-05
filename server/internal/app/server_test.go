@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"nbld/server/internal/protocol"
 )
@@ -516,6 +517,42 @@ func TestEquipmentAndPassiveGemHealthIgnored(t *testing.T) {
 	}
 	if len(stats.Metadata.Warnings) == 0 {
 		t.Fatal("expected health source warning")
+	}
+}
+
+func TestRuntimeStaminaRecoversAfterSprintIntentExpires(t *testing.T) {
+	store := newStateStore()
+	store.putSession(sessionState{
+		PlayerID:  "p1",
+		Token:     "token",
+		WorldID:   "world-dev-001",
+		MapID:     "map_0_0",
+		Position:  protocol.Position{X: 0, Y: 0},
+		Resources: defaultRuntimeResources(),
+	})
+
+	session, ok := store.updateMovement("token", protocol.Position{X: 1, Y: 0}, true)
+	if !ok {
+		t.Fatal("expected movement update")
+	}
+
+	now := time.Now().UTC()
+	session.ResourceAt = now.Add(-2 * time.Second)
+	session.SprintIntentUntil = now.Add(-1 * time.Second)
+	store.sessions["token"] = session
+
+	session, ok = store.getSession("token")
+	if !ok {
+		t.Fatal("expected session")
+	}
+	if session.Sprinting {
+		t.Fatal("expected sprinting to stop after intent expires")
+	}
+	if session.Resources.StaminaCurrent >= float64(session.Resources.StaminaMax) {
+		t.Fatalf("expected stamina to have been spent, got %.2f/%d", session.Resources.StaminaCurrent, session.Resources.StaminaMax)
+	}
+	if session.Resources.StaminaCurrent <= 90 {
+		t.Fatalf("expected stamina to recover after sprint intent expiry, got %.2f", session.Resources.StaminaCurrent)
 	}
 }
 

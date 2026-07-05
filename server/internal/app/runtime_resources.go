@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	sprintStaminaCostPerSecond = 10
-	staminaRegenWhileRunning   = 2
+	sprintStaminaCostPerSecond  = 10
+	staminaRegenWhileRunning    = 2
 	staminaRegenRecentlyStopped = 4
-	staminaRegenRested         = 8
-	staminaRecentStopWindow    = 3 * time.Second
+	staminaRegenRested          = 8
+	staminaRecentStopWindow     = 3 * time.Second
 )
 
 type runtimeResources struct {
