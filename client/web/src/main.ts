@@ -36,6 +36,7 @@ const EMPTY_PIXEL_SYMBOL = "0";
 const LEGACY_FILLED_PIXEL_SYMBOL = "1";
 const SWATCH_SYMBOL_OFFSET = 2;
 const MAX_PIXEL_SWATCHES = PIXEL_SYMBOLS.length - SWATCH_SYMBOL_OFFSET;
+const AVATAR_LAYER_CACHE_LIMIT = 256;
 const PLAYER_COLLISION_SIZE_TILES = 1;
 const COLLISION_EPSILON = 0.0001;
 
@@ -243,6 +244,7 @@ const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
 const debugPanel = app.querySelector<HTMLElement>(".debug-panel")!;
 const helpPanel = app.querySelector<HTMLElement>(".help-panel")!;
+const avatarLayerRasterCache = new Map<string, HTMLCanvasElement>();
 
 const state: AppState = {
   accountId: "",
@@ -753,6 +755,35 @@ function pixelSymbolToColor(symbol: string, swatches: string[]): string {
   const index = PIXEL_SYMBOLS.indexOf(symbol) - SWATCH_SYMBOL_OFFSET;
   if (index < 0) return swatches[0] ?? "#ff4040";
   return swatches[index] ?? swatches[0] ?? "#ff4040";
+}
+
+function getAvatarLayerRaster(rows: string[] | undefined, swatches: string[]): HTMLCanvasElement | null {
+  if (!rows || rows.length === 0) return null;
+  const cacheKey = `${swatches.join(",")}::${rows.join("|")}`;
+  const cached = avatarLayerRasterCache.get(cacheKey);
+  if (cached) return cached;
+
+  const raster = document.createElement("canvas");
+  raster.width = AVATAR_EDITOR_WIDTH;
+  raster.height = AVATAR_EDITOR_HEIGHT;
+  const rasterCtx = raster.getContext("2d", { alpha: true })!;
+  rasterCtx.imageSmoothingEnabled = false;
+  rasterCtx.clearRect(0, 0, raster.width, raster.height);
+
+  rows.slice(0, AVATAR_EDITOR_HEIGHT).forEach((row, y) => {
+    [...row.slice(0, AVATAR_EDITOR_WIDTH)].forEach((ch, x) => {
+      if (ch === EMPTY_PIXEL_SYMBOL) return;
+      rasterCtx.fillStyle = pixelSymbolToColor(ch, swatches);
+      rasterCtx.fillRect(x, y, 1, 1);
+    });
+  });
+
+  avatarLayerRasterCache.set(cacheKey, raster);
+  if (avatarLayerRasterCache.size > AVATAR_LAYER_CACHE_LIMIT) {
+    const oldest = avatarLayerRasterCache.keys().next().value;
+    if (oldest) avatarLayerRasterCache.delete(oldest);
+  }
+  return raster;
 }
 
 function getCurrentPaintSymbol(): string {
@@ -2121,19 +2152,16 @@ function drawHairLayer(target: CanvasRenderingContext2D, centerX: number, topY: 
   });
 }
 
-function drawAvatarImageLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, rows: string[] | undefined, swatches: string[], fallbackFill: string, stroke: string): void {
+function drawAvatarImageLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, rows: string[] | undefined, swatches: string[], fallbackFill: string, _stroke: string): void {
   if (!rows || rows.length === 0) return;
+  const raster = getAvatarLayerRaster(rows, swatches);
+  if (!raster) return;
   const pixel = state.tileScale / TILE_TEXTURE_SIZE_PX;
   const width = AVATAR_EDITOR_WIDTH * pixel;
+  const height = AVATAR_EDITOR_HEIGHT * pixel;
   const startX = centerX - width / 2;
-  rows.slice(0, AVATAR_EDITOR_HEIGHT).forEach((row, y) => {
-    [...row.slice(0, AVATAR_EDITOR_WIDTH)].forEach((ch, x) => {
-      if (ch === EMPTY_PIXEL_SYMBOL) return;
-      const fill = pixelSymbolToColor(ch, swatches) || fallbackFill;
-      target.fillStyle = fill;
-      target.fillRect(startX + x * pixel, topY + y * pixel, pixel, pixel);
-    });
-  });
+  target.imageSmoothingEnabled = false;
+  target.drawImage(raster, startX, topY, width, height);
 }
 
 function drawTorsoLayer(
