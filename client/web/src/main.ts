@@ -2087,7 +2087,7 @@ function renderInventoryModal(): void {
         </section>
         <section class="character-preview-panel">
           <div class="preview-stage">
-            <canvas id="inventoryAvatarCanvas" width="220" height="260"></canvas>
+            <canvas id="inventoryAvatarCanvas" width="120" height="150"></canvas>
           </div>
           <div class="preview-controls">
             <button type="button" data-preview-rotate="-1">左转</button>
@@ -2135,10 +2135,10 @@ function renderInventoryAvatar(character: CharacterSummary | undefined): void {
   target.imageSmoothingEnabled = false;
   target.clearRect(0, 0, canvas.width, canvas.height);
   target.save();
-  target.translate(canvas.width / 2, canvas.height - 78);
-  target.scale(1.08, 1.08);
+  target.translate(canvas.width / 2, canvas.height - 28);
+  target.scale(2.6, 2.6);
   const previousScale = state.tileScale;
-  state.tileScale = 18;
+  state.tileScale = 14;
   renderAvatarSkeleton(target, { x: 0, y: 0 }, character, state.inventoryFacing, true, IDLE_LIMB_STATE);
   state.tileScale = previousScale;
   target.restore();

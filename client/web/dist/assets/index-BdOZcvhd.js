@@ -171,7 +171,7 @@
         </section>
         <section class="character-preview-panel">
           <div class="preview-stage">
-            <canvas id="inventoryAvatarCanvas" width="220" height="260"></canvas>
+            <canvas id="inventoryAvatarCanvas" width="120" height="150"></canvas>
           </div>
           <div class="preview-controls">
             <button type="button" data-preview-rotate="-1">左转</button>
@@ -199,7 +199,7 @@
         ${ba(e,!0)}
       </div>
     </div>
-  `,(n=ve.querySelector("[data-inventory-close]"))==null||n.addEventListener("click",()=>Te(!1));for(const r of ve.querySelectorAll("[data-preview-rotate]"))r.addEventListener("click",()=>{Sn(Number(r.dataset.previewRotate||1)),ma()});kn(e)}function kn(e){const t=ve.querySelector("#inventoryAvatarCanvas");if(!t)return;const n=t.getContext("2d",{alpha:!0});if(!n)return;n.imageSmoothingEnabled=!1,n.clearRect(0,0,t.width,t.height),n.save(),n.translate(t.width/2,t.height-78),n.scale(1.08,1.08);const r=a.tileScale;a.tileScale=18,Qe(n,{x:0,y:0},e,a.inventoryFacing,!0,ht),a.tileScale=r,n.restore()}function Sn(e){const t=["front","right","back","left"],n=t.indexOf(a.inventoryFacing);a.inventoryFacing=t[(n+e+t.length)%t.length]}function xn(e){switch(e){case"back":return"背面";case"left":return"左侧";case"right":return"右侧";case"front":default:return"正面"}}function Re(e){var t;ot.innerHTML=`
+  `,(n=ve.querySelector("[data-inventory-close]"))==null||n.addEventListener("click",()=>Te(!1));for(const r of ve.querySelectorAll("[data-preview-rotate]"))r.addEventListener("click",()=>{Sn(Number(r.dataset.previewRotate||1)),ma()});kn(e)}function kn(e){const t=ve.querySelector("#inventoryAvatarCanvas");if(!t)return;const n=t.getContext("2d",{alpha:!0});if(!n)return;n.imageSmoothingEnabled=!1,n.clearRect(0,0,t.width,t.height),n.save(),n.translate(t.width/2,t.height-28),n.scale(2.6,2.6);const r=a.tileScale;a.tileScale=14,Qe(n,{x:0,y:0},e,a.inventoryFacing,!0,ht),a.tileScale=r,n.restore()}function Sn(e){const t=["front","right","back","left"],n=t.indexOf(a.inventoryFacing);a.inventoryFacing=t[(n+e+t.length)%t.length]}function xn(e){switch(e){case"back":return"背面";case"left":return"左侧";case"right":return"右侧";case"front":default:return"正面"}}function Re(e){var t;ot.innerHTML=`
     <button type="button" class="${e==="settings"?"active":""}" data-section="settings">设置</button>
     <button type="button" class="${e==="profile"?"active":""}" data-section="profile">我的</button>
     <button type="button" class="${e==="events"?"active":""}" data-section="events">活动</button>
