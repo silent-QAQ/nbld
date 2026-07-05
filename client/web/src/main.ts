@@ -705,9 +705,16 @@ function maskBodyRows(rows: string[]): string[] {
 }
 
 function maskRowsWithMatrix(rows: string[], mask: boolean[][]): string[] {
-  return rowsToMatrix(rows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT)
-    .map((row, y) => row.map((cell, x) => (cell && mask[y][x] ? "1" : "0")).join("").replace(/0+$/g, ""))
-    .filter((row) => row.length > 0);
+  return trimTrailingEmptyRows(
+    rowsToMatrix(rows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT)
+      .map((row, y) => row.map((cell, x) => (cell && mask[y][x] ? "1" : "0")).join("").replace(/0+$/g, "")),
+  );
+}
+
+function trimTrailingEmptyRows(rows: string[]): string[] {
+  let end = rows.length;
+  while (end > 0 && rows[end - 1].length === 0) end -= 1;
+  return rows.slice(0, end);
 }
 
 function sanitizeAppearanceBodyLayers(appearance: CharacterAppearance): CharacterAppearance {
@@ -907,7 +914,6 @@ function readAppearanceFromEditor(): CharacterAppearance {
 function normalizeHairRows(rows: string[]): string[] {
   return rows
     .map((row) => row.replace(/[^01]/g, ""))
-    .filter((row) => row.length > 0)
     .slice(0, AVATAR_EDITOR_HEIGHT)
     .map((row) => row.slice(0, AVATAR_EDITOR_WIDTH));
 }
@@ -964,10 +970,6 @@ function renderPixelEditorGrid(rows: string[]): void {
   hairGrid.style.setProperty("--grid-width", String(AVATAR_EDITOR_WIDTH));
   hairGrid.style.setProperty("--grid-height", String(AVATAR_EDITOR_HEIGHT));
 
-  let dragging = false;
-  let activePointerId: number | null = null;
-  let lastPaintedKey = "";
-
   const repaintGrid = () => {
     const nextDisplay = buildEditorDisplayMatrix();
     for (const cell of hairGrid.querySelectorAll<HTMLElement>(".pixel-cell")) {
@@ -992,30 +994,6 @@ function renderPixelEditorGrid(rows: string[]): void {
     repaintGrid();
   };
 
-  const readCellCoords = (cell: HTMLElement | null): { x: number; y: number } | null => {
-    if (!cell || !hairGrid.contains(cell)) return null;
-    const x = Number(cell.dataset.x);
-    const y = Number(cell.dataset.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x, y };
-  };
-
-  const findCellFromPoint = (clientX: number, clientY: number): HTMLElement | null => {
-    const hit = document.elementFromPoint(clientX, clientY);
-    if (!(hit instanceof HTMLElement)) return null;
-    const cell = hit.closest<HTMLElement>(".pixel-cell");
-    return cell && hairGrid.contains(cell) ? cell : null;
-  };
-
-  const paintEventCell = (cell: HTMLElement | null) => {
-    const coords = readCellCoords(cell);
-    if (!coords) return;
-    const key = `${coords.x}:${coords.y}`;
-    if (state.paintMode !== "bucket" && lastPaintedKey === key) return;
-    lastPaintedKey = key;
-    paintAt(coords.x, coords.y);
-  };
-
   const fragment = document.createDocumentFragment();
   for (let y = 0; y < AVATAR_EDITOR_HEIGHT; y += 1) {
     for (let x = 0; x < AVATAR_EDITOR_WIDTH; x += 1) {
@@ -1024,55 +1002,15 @@ function renderPixelEditorGrid(rows: string[]): void {
       cell.dataset.x = String(x);
       cell.dataset.y = String(y);
       cell.setAttribute("draggable", "false");
+      cell.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        paintAt(x, y);
+      });
       fragment.appendChild(cell);
     }
   }
   hairGrid.appendChild(fragment);
-
-  hairGrid.onpointerdown = (event) => {
-    const cell = findCellFromPoint(event.clientX, event.clientY);
-    if (!cell) return;
-    event.preventDefault();
-    event.stopPropagation();
-    dragging = true;
-    activePointerId = event.pointerId;
-    lastPaintedKey = "";
-    hairGrid.setPointerCapture(event.pointerId);
-    paintEventCell(cell);
-  };
-  hairGrid.onpointermove = (event) => {
-    if (!dragging) return;
-    const cell = findCellFromPoint(event.clientX, event.clientY);
-    if (!cell) return;
-    paintEventCell(cell);
-  };
-  hairGrid.onpointerup = (event) => {
-    dragging = false;
-    lastPaintedKey = "";
-    if (activePointerId === event.pointerId && hairGrid.hasPointerCapture(event.pointerId)) {
-      hairGrid.releasePointerCapture(event.pointerId);
-    }
-    activePointerId = null;
-  };
-  hairGrid.onpointerleave = () => {
-    if (activePointerId === null) {
-      dragging = false;
-      lastPaintedKey = "";
-    }
-  };
-  hairGrid.onpointercancel = (event) => {
-    dragging = false;
-    lastPaintedKey = "";
-    if (activePointerId === event.pointerId && hairGrid.hasPointerCapture(event.pointerId)) {
-      hairGrid.releasePointerCapture(event.pointerId);
-    }
-    activePointerId = null;
-  };
-  hairGrid.onlostpointercapture = () => {
-    dragging = false;
-    lastPaintedKey = "";
-    activePointerId = null;
-  };
 
   repaintGrid();
 }
@@ -1080,9 +1018,9 @@ function renderPixelEditorGrid(rows: string[]): void {
 function updateDraftHairFromMatrix(matrix: boolean[][]): void {
   if (!state.appearanceDraft) return;
   const outline = buildAvatarOutlineMatrix(state.appearanceDraft.body, state.appearanceFacing);
-  const rows = matrix
-    .map((row, y) => row.map((cell, x) => (cell && (isEditingHairLayer() || outline[y][x]) ? "1" : "0")).join("").replace(/0+$/g, ""))
-    .filter((row) => row.length > 0);
+  const rows = trimTrailingEmptyRows(
+    matrix.map((row, y) => row.map((cell, x) => (cell && (isEditingHairLayer() || outline[y][x]) ? "1" : "0")).join("").replace(/0+$/g, "")),
+  );
   setActiveLayerRows(rows);
 }
 
@@ -1230,7 +1168,7 @@ async function importAppearanceFile(file: File): Promise<void> {
     sourceCtx.clearRect(0, 0, source.width, source.height);
     sourceCtx.drawImage(bitmap, 0, 0, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
     const pixels = sourceCtx.getImageData(0, 0, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT).data;
-    const rows = Array.from({ length: AVATAR_EDITOR_HEIGHT }, (_, y) => {
+    const rows = trimTrailingEmptyRows(Array.from({ length: AVATAR_EDITOR_HEIGHT }, (_, y) => {
       let row = "";
       for (let x = 0; x < AVATAR_EDITOR_WIDTH; x += 1) {
         const offset = (y * AVATAR_EDITOR_WIDTH + x) * 4;
@@ -1239,7 +1177,7 @@ async function importAppearanceFile(file: File): Promise<void> {
         row += alpha > 32 && bright > 48 ? "1" : "0";
       }
       return row.replace(/0+$/g, "");
-    }).filter((row) => row.length > 0);
+    }));
     setActiveLayerRows(rows);
     renderPixelEditorGrid(getActiveLayerRows());
   } catch (error) {
