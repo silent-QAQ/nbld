@@ -81,6 +81,13 @@ type GameViewport = { x: number; y: number; width: number; height: number };
 type LimbPose = -90 | -45 | 0 | 45 | 90 | "disabled";
 type LimbDisableMode = "none" | "arms" | "legs" | "all";
 type LimbMotionState = { leftArm: LimbPose; rightArm: LimbPose; leftLeg: LimbPose; rightLeg: LimbPose };
+type AvatarLayerRect = { x: number; y: number; width: number; height: number };
+type AvatarLimbSegment = {
+  poseKey: keyof LimbMotionState;
+  source: AvatarLayerRect;
+  target: AvatarLayerRect;
+  anchor: { x: number; y: number };
+};
 const IDLE_LIMB_STATE: LimbMotionState = { leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 };
 type SkinExportPackage = {
   format: "nbld.skin";
@@ -599,12 +606,7 @@ function renderCharacterList(characters: CharacterSummary[]): void {
     preview.className = "character-card-canvas";
     const previewCtx = preview.getContext("2d", { alpha: true })!;
     previewCtx.imageSmoothingEnabled = false;
-    renderAvatarSkeleton(previewCtx, { x: 48, y: 104 }, character, "front", true, {
-      leftArm: 0,
-      rightArm: 0,
-      leftLeg: 0,
-      rightLeg: 0,
-    } satisfies LimbMotionState);
+    renderAvatarSkeleton(previewCtx, { x: 48, y: 104 }, character, "front", true, IDLE_LIMB_STATE);
 
     const meta = document.createElement("div");
     meta.className = "character-meta";
@@ -1308,6 +1310,13 @@ function floodFillMatrix(matrix: string[][], startX: number, startY: number, val
 
 function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing): boolean[][] {
   const matrix = Array.from({ length: AVATAR_EDITOR_HEIGHT }, () => Array.from({ length: AVATAR_EDITOR_WIDTH }, () => false));
+  const parts = getAvatarPartRects(body, facing, "edit");
+  for (const rect of parts.static) fillOutlineRect(matrix, rect.x, rect.y, rect.width, rect.height);
+  for (const limb of parts.limbs) fillOutlineRect(matrix, limb.source.x, limb.source.y, limb.source.width, limb.source.height);
+  return matrix;
+}
+
+function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode: "edit" | "render"): { static: AvatarLayerRect[]; limbs: AvatarLimbSegment[] } {
   const side = facing === "left" || facing === "right";
   const centerX = Math.floor(AVATAR_EDITOR_WIDTH / 2);
   const totalHeight = clamp(body.height, 42, 58);
@@ -1325,8 +1334,14 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
   const armH = clamp(body.upperArmLength + body.forearmLength, 11, 24);
   const legW = clamp(side ? body.thighSideWidth : body.thighWidth, 2, 9);
   const calfW = clamp(side ? body.calfSideWidth : body.calfWidth, 2, 8);
-
-  fillOutlineRect(matrix, centerX - Math.floor(headW / 2), top, headW, headH);
+  const thighH = clamp(body.thighLength, 7, 20);
+  const calfH = clamp(body.calfLength, 6, 19);
+  const upperArmH = clamp(body.upperArmLength, 6, 18);
+  const forearmH = clamp(body.forearmLength, 5, 17);
+  const staticParts: AvatarLayerRect[] = [
+    { x: centerX - Math.floor(headW / 2), y: top, width: headW, height: headH },
+  ];
+  const limbs: AvatarLimbSegment[] = [];
   const torsoTop = top + headH;
   const torsoX = (width: number, section: "chest" | "waist" | "hip" | "shoulder") => {
     if (!side) return centerX - Math.floor(width / 2);
@@ -1338,36 +1353,92 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
     }
     return frontSign > 0 ? centerX - Math.floor(shoulderW / 2) : centerX + Math.floor(shoulderW / 2) - width;
   };
-  fillOutlineRect(matrix, torsoX(shoulderW, "shoulder"), torsoTop, shoulderW, Math.max(2, Math.round(torsoH * 0.2)));
-  fillOutlineRect(matrix, torsoX(chestW, "chest"), torsoTop + Math.round(torsoH * 0.2), chestW, Math.max(3, Math.round(torsoH * 0.35)));
-  fillOutlineRect(matrix, torsoX(waistW, "waist"), torsoTop + Math.round(torsoH * 0.55), waistW, Math.max(2, Math.round(torsoH * 0.2)));
-  fillOutlineRect(matrix, torsoX(hipW, "hip"), torsoTop + Math.round(torsoH * 0.75), hipW, Math.max(3, Math.round(torsoH * 0.25)));
+  staticParts.push(
+    { x: torsoX(shoulderW, "shoulder"), y: torsoTop, width: shoulderW, height: Math.max(2, Math.round(torsoH * 0.2)) },
+    { x: torsoX(chestW, "chest"), y: torsoTop + Math.round(torsoH * 0.2), width: chestW, height: Math.max(3, Math.round(torsoH * 0.35)) },
+    { x: torsoX(waistW, "waist"), y: torsoTop + Math.round(torsoH * 0.55), width: waistW, height: Math.max(2, Math.round(torsoH * 0.2)) },
+    { x: torsoX(hipW, "hip"), y: torsoTop + Math.round(torsoH * 0.75), width: hipW, height: Math.max(3, Math.round(torsoH * 0.25)) },
+  );
 
   const limbTop = torsoTop + 3;
   if (side) {
     const frontSign = facing === "left" ? 1 : -1;
     const armGap = 3;
-    const armX = frontSign > 0
+    const editArmX = frontSign > 0
       ? centerX + Math.floor(shoulderW / 2) + armGap
       : centerX - Math.floor(shoulderW / 2) - armGap - armW;
-    const forearmX = frontSign > 0
+    const editForearmX = frontSign > 0
       ? centerX + Math.floor(shoulderW / 2) + armGap
       : centerX - Math.floor(shoulderW / 2) - armGap - forearmW;
-    fillOutlineRect(matrix, armX, limbTop, armW, body.upperArmLength);
-    fillOutlineRect(matrix, forearmX, limbTop + body.upperArmLength, forearmW, body.forearmLength);
-    fillOutlineRect(matrix, centerX - Math.floor(legW / 2), torsoTop + torsoH, legW, body.thighLength);
-    fillOutlineRect(matrix, centerX - Math.floor(calfW / 2), torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
+    const renderArmX = frontSign > 0
+      ? centerX + Math.floor(shoulderW * 0.18)
+      : centerX - Math.floor(shoulderW * 0.18) - armW;
+    const renderForearmX = frontSign > 0
+      ? centerX + Math.floor(shoulderW * 0.18)
+      : centerX - Math.floor(shoulderW * 0.18) - forearmW;
+    const armX = mode === "edit" ? editArmX : renderArmX;
+    const forearmX = mode === "edit" ? editForearmX : renderForearmX;
+    limbs.push({
+      poseKey: "rightArm",
+      source: { x: editArmX, y: limbTop, width: armW, height: upperArmH + forearmH },
+      target: { x: armX, y: limbTop, width: Math.max(armW, forearmW), height: upperArmH + forearmH },
+      anchor: { x: armX + armW / 2, y: limbTop },
+    });
+    if (forearmX !== armX || forearmW > armW) {
+      limbs.push({
+        poseKey: "rightArm",
+        source: { x: editForearmX, y: limbTop + upperArmH, width: forearmW, height: forearmH },
+        target: { x: forearmX, y: limbTop + upperArmH, width: forearmW, height: forearmH },
+        anchor: { x: armX + armW / 2, y: limbTop },
+      });
+    }
+    limbs.push({
+      poseKey: "rightLeg",
+      source: { x: centerX - Math.floor(legW / 2), y: torsoTop + torsoH, width: legW, height: thighH + calfH },
+      target: { x: centerX - Math.floor(legW / 2), y: torsoTop + torsoH, width: Math.max(legW, calfW), height: thighH + calfH },
+      anchor: { x: centerX, y: torsoTop + torsoH },
+    });
+    if (calfW > legW) {
+      limbs.push({
+        poseKey: "rightLeg",
+        source: { x: centerX - Math.floor(calfW / 2), y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
+        target: { x: centerX - Math.floor(calfW / 2), y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
+        anchor: { x: centerX, y: torsoTop + torsoH },
+      });
+    }
   } else {
-    fillOutlineRect(matrix, centerX - Math.floor(shoulderW / 2) - armW, limbTop, armW, body.upperArmLength);
-    fillOutlineRect(matrix, centerX - Math.floor(shoulderW / 2) - forearmW, limbTop + body.upperArmLength, forearmW, body.forearmLength);
-    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop, armW, body.upperArmLength);
-    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop + body.upperArmLength, forearmW, body.forearmLength);
-    fillOutlineRect(matrix, centerX - legW - 1, torsoTop + torsoH, legW, body.thighLength);
-    fillOutlineRect(matrix, centerX - calfW - 1, torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
-    fillOutlineRect(matrix, centerX + 1, torsoTop + torsoH, legW, body.thighLength);
-    fillOutlineRect(matrix, centerX + 1, torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
+    const leftArmX = centerX - Math.floor(shoulderW / 2) - Math.max(armW, forearmW);
+    const rightArmX = centerX + Math.floor(shoulderW / 2);
+    const leftLegX = centerX - Math.max(legW, calfW) - 1;
+    const rightLegX = centerX + 1;
+    limbs.push(
+      {
+        poseKey: "leftArm",
+        source: { x: leftArmX, y: limbTop, width: Math.max(armW, forearmW), height: upperArmH + forearmH },
+        target: { x: leftArmX, y: limbTop, width: Math.max(armW, forearmW), height: upperArmH + forearmH },
+        anchor: { x: leftArmX + Math.max(armW, forearmW) / 2, y: limbTop },
+      },
+      {
+        poseKey: "rightArm",
+        source: { x: rightArmX, y: limbTop, width: Math.max(armW, forearmW), height: upperArmH + forearmH },
+        target: { x: rightArmX, y: limbTop, width: Math.max(armW, forearmW), height: upperArmH + forearmH },
+        anchor: { x: rightArmX + Math.max(armW, forearmW) / 2, y: limbTop },
+      },
+      {
+        poseKey: "leftLeg",
+        source: { x: leftLegX, y: torsoTop + torsoH, width: Math.max(legW, calfW), height: thighH + calfH },
+        target: { x: leftLegX, y: torsoTop + torsoH, width: Math.max(legW, calfW), height: thighH + calfH },
+        anchor: { x: leftLegX + Math.max(legW, calfW) / 2, y: torsoTop + torsoH },
+      },
+      {
+        poseKey: "rightLeg",
+        source: { x: rightLegX, y: torsoTop + torsoH, width: Math.max(legW, calfW), height: thighH + calfH },
+        target: { x: rightLegX, y: torsoTop + torsoH, width: Math.max(legW, calfW), height: thighH + calfH },
+        anchor: { x: rightLegX + Math.max(legW, calfW) / 2, y: torsoTop + torsoH },
+      },
+    );
   }
-  return matrix;
+  return { static: staticParts, limbs };
 }
 
 function fillOutlineRect(matrix: boolean[][], x: number, y: number, width: number, height: number): void {
@@ -1376,6 +1447,54 @@ function fillOutlineRect(matrix: boolean[][], x: number, y: number, width: numbe
       if (yy >= 0 && yy < AVATAR_EDITOR_HEIGHT && xx >= 0 && xx < AVATAR_EDITOR_WIDTH) {
         matrix[yy][xx] = true;
       }
+    }
+  }
+}
+
+function attachSideArmToBodyForRender(rows: string[] | undefined, body: CharacterBodyAppearance, facing: Facing): string[] {
+  if (!rows || rows.length === 0 || (facing !== "left" && facing !== "right")) return rows ?? [];
+  const matrix = rowsToMatrix(rows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
+  const centerX = Math.floor(AVATAR_EDITOR_WIDTH / 2);
+  const totalHeight = clamp(body.height, 42, 58);
+  const top = AVATAR_EDITOR_HEIGHT - totalHeight;
+  const headH = clamp(Math.round(9 * body.headScale / 100), 7, 13);
+  const torsoTop = top + headH;
+  const limbTop = torsoTop + 3;
+  const shoulderW = clamp(body.sideWidth, 10, 16);
+  const armW = clamp(body.upperArmSideWidth, 2, 8);
+  const forearmW = clamp(body.forearmSideWidth, 2, 8);
+  const frontSign = facing === "left" ? 1 : -1;
+  const sourceUpperX = frontSign > 0
+    ? centerX + Math.floor(shoulderW / 2) + 3
+    : centerX - Math.floor(shoulderW / 2) - 3 - armW;
+  const sourceForearmX = frontSign > 0
+    ? centerX + Math.floor(shoulderW / 2) + 3
+    : centerX - Math.floor(shoulderW / 2) - 3 - forearmW;
+  const targetUpperX = frontSign > 0
+    ? centerX + Math.floor(shoulderW * 0.18)
+    : centerX - Math.floor(shoulderW * 0.18) - armW;
+  const targetForearmX = frontSign > 0
+    ? centerX + Math.floor(shoulderW * 0.18)
+    : centerX - Math.floor(shoulderW * 0.18) - forearmW;
+  moveMatrixRect(matrix, sourceUpperX, limbTop, armW, body.upperArmLength, targetUpperX, limbTop);
+  moveMatrixRect(matrix, sourceForearmX, limbTop + body.upperArmLength, forearmW, body.forearmLength, targetForearmX, limbTop + body.upperArmLength);
+  return trimTrailingEmptyRows(matrix.map((row) => row.join("").replace(/0+$/g, "")));
+}
+
+function moveMatrixRect(matrix: string[][], fromX: number, fromY: number, width: number, height: number, toX: number, toY: number): void {
+  const copied = Array.from({ length: height }, (_, y) => (
+    Array.from({ length: width }, (_, x) => matrix[fromY + y]?.[fromX + x] ?? EMPTY_PIXEL_SYMBOL)
+  ));
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (matrix[fromY + y]?.[fromX + x] !== undefined) matrix[fromY + y][fromX + x] = EMPTY_PIXEL_SYMBOL;
+    }
+  }
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const value = copied[y][x];
+      if (value === EMPTY_PIXEL_SYMBOL || matrix[toY + y]?.[toX + x] === undefined) continue;
+      matrix[toY + y][toX + x] = value;
     }
   }
 }
@@ -2453,13 +2572,14 @@ function renderAvatarSkeleton(
       : facing === "left"
         ? appearance.skeleton.leftTorso
         : appearance.skeleton.rightTorso;
+  const renderSkinLayer = side ? attachSideArmToBodyForRender(skinLayer, body, facing) : skinLayer;
 
   const skinPixel = state.tileScale / TILE_TEXTURE_SIZE_PX;
   const imageTopY = screen.y - AVATAR_EDITOR_HEIGHT * skinPixel;
   drawAvatarImageLayer(target, screen.x, imageTopY, backHairLayer, appearance.palette.pixelSwatches, palette.hairPrimary, palette.hairShadow);
 
-  if (skinLayer.length > 0) {
-    drawAvatarImageLayer(target, screen.x, imageTopY, skinLayer, appearance.palette.pixelSwatches, palette.clothPrimary, palette.clothShadow);
+  if (renderSkinLayer.length > 0) {
+    drawAvatarImageLayer(target, screen.x, imageTopY, renderSkinLayer, appearance.palette.pixelSwatches, palette.clothPrimary, palette.clothShadow);
   } else {
     drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
     drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary, [], scale);
@@ -2467,7 +2587,7 @@ function renderAvatarSkeleton(
 
   const armWidth = Math.max(3, body.upperArmWidth * 0.18 * scale);
   const armLength = Math.max(10, (body.upperArmLength + body.forearmLength) * 0.12 * scale);
-  if (skinLayer.length === 0) {
+  if (renderSkinLayer.length === 0) {
     if (side) {
       const sideArmX = screen.x + (facing === "left" ? shoulder * 0.18 : -shoulder * 0.18);
       drawLimb(target, sideArmX, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
@@ -2478,7 +2598,7 @@ function renderAvatarSkeleton(
   }
 
   const legWidth = Math.max(4, body.thighWidth * 0.18 * scale);
-  if (skinLayer.length === 0) {
+  if (renderSkinLayer.length === 0) {
     if (side) {
       drawLimb(target, screen.x, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothShadow, palette.metalShadow);
     } else {
@@ -2575,7 +2695,7 @@ function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: nu
   target.restore();
 }
 
-function normalizeLimbAngle(angle: number): -90 | -45 | 0 | 45 | 90 {
+function normalizeLimbAngle(angle: Exclude<LimbPose, "disabled">): -90 | -45 | 0 | 45 | 90 {
   if (angle <= -67.5) return -90;
   if (angle < -22.5) return -45;
   if (angle < 22.5) return 0;
@@ -2593,13 +2713,13 @@ function applyLimbDisableMode(state: LimbMotionState, mode: LimbDisableMode): Li
 function getLimbMotionState(local: boolean): LimbMotionState {
   const moving = local ? state.characterId !== "" && state.pressed.size > 0 : true;
   if (!moving) {
-    return applyLimbDisableMode({ leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0 }, "none");
+    return applyLimbDisableMode(IDLE_LIMB_STATE, "none");
   }
 
   const phase = Math.sin(performance.now() / 110);
   const swing: 45 | 90 = Math.abs(phase) > 0.4 ? 90 : 45;
-  const forwardSwing = swing as LimbPose;
-  const backwardSwing = -swing as LimbPose;
+  const forwardSwing: 45 | 90 = swing;
+  const backwardSwing: -45 | -90 = swing === 45 ? -45 : -90;
   return applyLimbDisableMode({
     leftArm: phase > 0 ? backwardSwing : forwardSwing,
     rightArm: phase > 0 ? forwardSwing : backwardSwing,
