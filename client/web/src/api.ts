@@ -8,6 +8,7 @@ import type {
   LoginResponse,
   MoveResponse,
   RegisterResponse,
+  WorldStateResponse,
 } from "./protocol";
 
 export class ApiClient {
@@ -47,6 +48,10 @@ export class ApiClient {
 
   async move(token: string, x: number, y: number, sprinting: boolean): Promise<MoveResponse> {
     return this.post("/api/v1/world/move", { token, position: { x, y }, sprinting });
+  }
+
+  async worldState(token: string): Promise<WorldStateResponse> {
+    return this.get(`/api/v1/world/state?token=${encodeURIComponent(token)}`);
   }
 
   async chunks(token: string, position?: { x: number; y: number }): Promise<ChunkWindowResponse> {

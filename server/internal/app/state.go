@@ -78,8 +78,8 @@ func (s *stateStore) updateMovement(token string, position protocol.Position, sp
 	}
 
 	now := time.Now().UTC()
-	wasSprinting := session.Sprinting
 	session.advanceRuntimeResources(now, session.Sprinting)
+	wasSprinting := session.Sprinting
 	if sprinting && session.Resources.StaminaCurrent > 0 {
 		session.Sprinting = true
 		session.SprintIntentUntil = now.Add(750 * time.Millisecond)

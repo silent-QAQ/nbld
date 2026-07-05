@@ -31,6 +31,7 @@ const STAMINA_REGEN_RESTED = 8;
 const IDLE_CHUNK_REFRESH_INTERVAL_MS = 5000;
 const MOVE_SEND_INTERVAL_MS = 90;
 const HUD_REFRESH_INTERVAL_MS = 120;
+const RESOURCE_SYNC_INTERVAL_MS = 2000;
 const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
 const GAME_ASPECT_RATIO = TARGET_VISIBLE_TILES_X / TARGET_VISIBLE_TILES_Y;
@@ -203,6 +204,8 @@ type AppState = {
   lastChunkRefreshAt: number;
   lastMoveSendAt: number;
   lastHudUpdateAt: number;
+  lastResourceSyncAt: number;
+  resourceSyncInFlight: boolean;
   lastFrameMs: number;
   lastChunkRefreshMs: number;
   lastChunkRefreshCount: number;
@@ -424,6 +427,8 @@ const state: AppState = {
   lastChunkRefreshAt: 0,
   lastMoveSendAt: 0,
   lastHudUpdateAt: 0,
+  lastResourceSyncAt: 0,
+  resourceSyncInFlight: false,
   lastFrameMs: 0,
   lastChunkRefreshMs: 0,
   lastChunkRefreshCount: 0,
@@ -586,7 +591,11 @@ window.addEventListener("keyup", (event) => {
 });
 window.addEventListener("blur", releaseGameplayInput);
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) releaseGameplayInput();
+  if (document.hidden) {
+    releaseGameplayInput();
+  } else {
+    void syncRuntimeResources(true);
+  }
 });
 resizeCanvas();
 restoreSessionFromStorage();
@@ -1940,6 +1949,8 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.currentTile = undefined;
     state.lastChunkKey = "";
     state.lastChunkWindowKey = "";
+    state.lastResourceSyncAt = performance.now();
+    state.resourceSyncInFlight = false;
     state.status = "已连接";
     state.lastError = "";
     persistSession();
@@ -2046,6 +2057,8 @@ function logoutToLogin(): void {
   state.currentTile = undefined;
   state.lastChunkKey = "";
   state.lastChunkWindowKey = "";
+  state.lastResourceSyncAt = 0;
+  state.resourceSyncInFlight = false;
 
   localStorage.removeItem("nbld_session");
   loginEmailInput.value = state.accountEmail;
@@ -2434,6 +2447,10 @@ function loop(now: number): void {
 
   processPendingChunkRenders(state.videoSettings.chunkRenderBudget);
   updatePlayer(deltaSeconds, now);
+  if (!isMovementPressed() && now - state.lastResourceSyncAt >= RESOURCE_SYNC_INTERVAL_MS) {
+    void syncRuntimeResources();
+    state.lastResourceSyncAt = now;
+  }
   updatePlayerVisual(deltaSeconds);
   updateCamera(deltaSeconds);
   if (now - state.lastHudUpdateAt >= HUD_REFRESH_INTERVAL_MS) {
@@ -2573,6 +2590,31 @@ function releaseGameplayInput(): void {
   if (state.sprinting) {
     state.sprinting = false;
     sendMove();
+  }
+}
+
+async function syncRuntimeResources(force = false): Promise<void> {
+  if (!state.api || !state.token || !state.characterId) return;
+  if (state.resourceSyncInFlight) return;
+  if (!force && isMovementPressed()) return;
+
+  state.lastResourceSyncAt = performance.now();
+  state.resourceSyncInFlight = true;
+  try {
+    const world = await state.api.worldState(state.token);
+    state.mapId = world.mapId || state.mapId;
+    if (world.position) {
+      state.player = { ...world.position };
+    }
+    applyRuntimeResources(world.resources, getCombatStats(currentPlayerCharacter()?.stats), world.sprinting);
+    if (world.players) {
+      state.players.clear();
+      for (const player of world.players) state.players.set(player.playerId, player);
+    }
+  } catch (error) {
+    state.lastError = errorToString(error);
+  } finally {
+    state.resourceSyncInFlight = false;
   }
 }
 

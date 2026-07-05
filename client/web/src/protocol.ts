@@ -53,6 +53,18 @@ export type MoveResponse = {
   sprinting?: boolean;
 };
 
+export type WorldStateResponse = {
+  worldId: string;
+  mapId?: string;
+  playerId: string;
+  characterId?: string;
+  characterName?: string;
+  position: Position;
+  resources?: RuntimeResources;
+  sprinting?: boolean;
+  players: WorldPlayer[];
+};
+
 export type CharacterBaseStats = {
   health: number;
   stamina: number;
