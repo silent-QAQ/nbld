@@ -179,6 +179,7 @@ app.innerHTML = `
             <div class="hair-toolbar" id="hairToolbar"></div>
             <div class="appearance-palette" id="appearancePalette"></div>
             <div class="pixel-tools" id="pixelTools"></div>
+            <input class="hidden" id="appearanceFileInput" type="file" accept="application/json,image/png,image/*" />
           </div>
         </div>
         <div class="login-actions">
@@ -223,6 +224,7 @@ const appearancePalette = app.querySelector<HTMLElement>("#appearancePalette")!;
 const hairToolbar = app.querySelector<HTMLElement>("#hairToolbar")!;
 const hairGrid = app.querySelector<HTMLCanvasElement>("#hairGrid")!;
 const pixelTools = app.querySelector<HTMLElement>("#pixelTools")!;
+const appearanceFileInput = app.querySelector<HTMLInputElement>("#appearanceFileInput")!;
 const saveAppearanceButton = app.querySelector<HTMLButtonElement>("#saveAppearanceButton")!;
 const closeAppearanceButton = app.querySelector<HTMLButtonElement>("#closeAppearanceButton")!;
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
@@ -322,6 +324,12 @@ saveAppearanceButton.addEventListener("click", () => {
 closeAppearanceButton.addEventListener("click", (event) => {
   event.stopPropagation();
   appearanceModal.classList.add("hidden");
+});
+
+appearanceFileInput.addEventListener("change", () => {
+  const file = appearanceFileInput.files?.[0];
+  if (!file) return;
+  void importAppearanceFile(file);
 });
 
 baseUrlInput.addEventListener("keydown", (event) => {
@@ -676,35 +684,33 @@ function pushRecentPaintColor(color: string): void {
 }
 
 function renderAppearanceControls(body: CharacterBodyAppearance): void {
-  const fields: Array<[keyof CharacterBodyAppearance, string, number, number]> = [
-    ["height", "总身高", 42, 58],
-    ["frontShoulderWidth", "正面肩宽", 22, 28],
-    ["sideWidth", "侧身厚度", 10, 16],
-    ["chestWidth", "胸围", 14, 28],
-    ["waistWidth", "腰围", 10, 26],
-    ["hipWidth", "臀围", 12, 27],
-    ["torsoHeight", "躯干高度", 14, 26],
-    ["upperArmWidth", "上臂宽度", 2, 8],
-    ["upperArmLength", "上臂长度", 6, 18],
-    ["forearmWidth", "小臂宽度", 2, 7],
-    ["forearmLength", "小臂长度", 5, 17],
-    ["thighWidth", "大腿宽度", 3, 9],
-    ["thighLength", "大腿长度", 7, 20],
-    ["calfWidth", "小腿宽度", 2, 8],
-    ["calfLength", "小腿长度", 6, 19],
-    ["chestDepth", "胸纵深", 7, 16],
-    ["waistDepth", "腰纵深", 6, 15],
-    ["hipDepth", "臀纵深", 7, 16],
-    ["headScale", "头身比例", 70, 140],
+  const pages: Array<[BodyControlPage, string]> = [
+    ["overall", "整体"],
+    ["body", "身体"],
+    ["arms", "手臂"],
+    ["legs", "腿"],
   ];
+  const fields = bodyControlFields(state.bodyControlPage);
 
-  appearanceGrid.innerHTML = fields.map(([key, label, min, max]) => `
+  appearanceGrid.innerHTML = `
+    <div class="body-page-tabs">
+      ${pages.map(([page, label]) => `<button type="button" class="secondary hair-layer-btn ${state.bodyControlPage === page ? "active" : ""}" data-body-page="${page}" aria-pressed="${state.bodyControlPage === page}">${label}</button>`).join("")}
+    </div>
+    ${fields.map(([key, label, min, max]) => `
     <label class="appearance-field">
       <span>${label}</span>
       <input type="range" data-appearance-key="${key}" data-min="${min}" data-max="${max}" min="${min}" max="${max}" value="${body[key]}">
       <output>${body[key]}</output>
     </label>
-  `).join("");
+    `).join("")}
+  `;
+
+  for (const button of appearanceGrid.querySelectorAll<HTMLButtonElement>("[data-body-page]")) {
+    button.addEventListener("click", () => {
+      state.bodyControlPage = button.dataset.bodyPage as BodyControlPage;
+      renderAppearanceControls((state.appearanceDraft ?? defaultAppearance()).body);
+    });
+  }
 
   for (const input of appearanceGrid.querySelectorAll<HTMLInputElement>("input[data-appearance-key]")) {
     input.addEventListener("input", () => {
@@ -714,6 +720,47 @@ function renderAppearanceControls(body: CharacterBodyAppearance): void {
       if (output) output.textContent = input.value;
       renderPixelEditorGrid(getActiveLayerRows());
     });
+  }
+}
+
+function bodyControlFields(page: BodyControlPage): Array<[keyof CharacterBodyAppearance, string, number, number]> {
+  switch (page) {
+    case "overall":
+      return [
+        ["height", "身高", 42, 58],
+        ["headWidth", "头宽", 8, 18],
+        ["headSideWidth", "头侧宽", 7, 14],
+      ];
+    case "body":
+      return [
+        ["torsoHeight", "躯干长", 14, 26],
+        ["chestWidth", "胸围", 14, 28],
+        ["waistWidth", "腰围", 10, 26],
+        ["hipWidth", "臀围", 12, 27],
+        ["frontShoulderWidth", "肩宽", 22, 28],
+        ["sideWidth", "肩侧宽", 10, 16],
+        ["chestDepth", "侧胸围", 7, 16],
+        ["waistDepth", "侧腰围", 6, 15],
+        ["hipDepth", "侧臀围", 7, 16],
+      ];
+    case "arms":
+      return [
+        ["upperArmLength", "上臂长", 6, 18],
+        ["upperArmWidth", "上臂宽", 2, 8],
+        ["forearmLength", "小臂长", 5, 17],
+        ["forearmWidth", "小臂宽", 2, 7],
+        ["upperArmSideWidth", "上臂侧宽", 2, 8],
+        ["forearmSideWidth", "小臂侧宽", 2, 7],
+      ];
+    case "legs":
+      return [
+        ["thighLength", "大腿长", 7, 20],
+        ["thighWidth", "大腿宽", 3, 9],
+        ["calfLength", "小腿长", 6, 19],
+        ["calfWidth", "小腿宽", 2, 8],
+        ["thighSideWidth", "大腿侧宽", 3, 9],
+        ["calfSideWidth", "小腿侧宽", 2, 8],
+      ];
   }
 }
 
@@ -766,6 +813,9 @@ function renderPixelTools(): void {
     <button type="button" class="secondary ${state.paintMode === "erase" ? "active" : ""}" data-paint-mode="erase" aria-pressed="${state.paintMode === "erase"}">橡皮</button>
     <button type="button" class="secondary ${state.paintMode === "bucket" ? "active" : ""}" data-paint-mode="bucket" aria-pressed="${state.paintMode === "bucket"}">涂料桶</button>
     <button type="button" class="secondary" data-tool="clear">清空</button>
+    <button type="button" class="secondary" data-tool="export-json">导出JSON</button>
+    <button type="button" class="secondary" data-tool="import">导入</button>
+    <button type="button" class="secondary" data-tool="export-png">导出PNG</button>
     <div class="recent-colors">
       ${state.recentPaintColors.slice(0, 20).map((color) => `<button type="button" class="color-swatch" data-color="${color}" style="background:${color}" aria-label="${color}"></button>`).join("")}
     </div>
@@ -842,8 +892,10 @@ function renderPixelEditorGrid(rows: string[]): void {
 
   const paintAt = (x: number, y: number) => {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const outline = buildAvatarOutlineMatrix((state.appearanceDraft ?? defaultAppearance()).body, state.appearanceFacing);
+    if (!state.showHairLayer && !outline[y][x]) return;
     if (state.paintMode === "bucket") {
-      floodFillMatrix(matrix, x, y, !matrix[y][x]);
+      floodFillMatrix(matrix, x, y, !matrix[y][x], state.showHairLayer ? undefined : outline);
     } else {
       matrix[y][x] = state.paintMode === "fill";
     }
@@ -885,8 +937,9 @@ function renderPixelEditorGrid(rows: string[]): void {
 
 function updateDraftHairFromMatrix(matrix: boolean[][]): void {
   if (!state.appearanceDraft) return;
+  const outline = buildAvatarOutlineMatrix(state.appearanceDraft.body, state.appearanceFacing);
   const rows = matrix
-    .map((row) => row.map((cell) => (cell ? "1" : "0")).join("").replace(/0+$/g, ""))
+    .map((row, y) => row.map((cell, x) => (cell && (state.showHairLayer || outline[y][x]) ? "1" : "0")).join("").replace(/0+$/g, ""))
     .filter((row) => row.length > 0);
   setActiveLayerRows(rows);
 }
@@ -899,6 +952,16 @@ function applyPixelTool(tool: string): void {
     case "clear":
       for (const row of matrix) row.fill(false);
       break;
+    case "export-json":
+      void copyTextToClipboard(JSON.stringify(normalizeAppearance(state.appearanceDraft), null, 2));
+      return;
+    case "export-png":
+      exportActiveLayerPng();
+      return;
+    case "import":
+      appearanceFileInput.value = "";
+      appearanceFileInput.click();
+      return;
     default:
       return;
   }
@@ -915,12 +978,14 @@ function rowsToMatrix(rows: string[], width: number, height: number): boolean[][
   });
 }
 
-function floodFillMatrix(matrix: boolean[][], startX: number, startY: number, value: boolean): void {
+function floodFillMatrix(matrix: boolean[][], startX: number, startY: number, value: boolean, mask?: boolean[][]): void {
+  if (mask && !mask[startY]?.[startX]) return;
   const target = matrix[startY]?.[startX];
   if (target === undefined || target === value) return;
   const stack: Array<[number, number]> = [[startX, startY]];
   while (stack.length > 0) {
     const [x, y] = stack.pop()!;
+    if (mask && !mask[y]?.[x]) continue;
     if (matrix[y]?.[x] !== target) continue;
     matrix[y][x] = value;
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
@@ -983,33 +1048,48 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
   const totalHeight = clamp(body.height, 42, 58);
   const top = AVATAR_EDITOR_HEIGHT - totalHeight;
   const headH = clamp(Math.round(9 * body.headScale / 100), 7, 13);
-  const headW = side ? clamp(Math.round(body.sideWidth * 0.8), 7, 12) : clamp(Math.round(body.frontShoulderWidth * 0.55), 10, 16);
+  const headW = side ? body.headSideWidth : body.headWidth;
   const torsoH = clamp(body.torsoHeight, 14, 26);
   const legH = Math.max(8, totalHeight - headH - torsoH);
   const shoulderW = side ? clamp(body.sideWidth, 10, 16) : clamp(body.frontShoulderWidth, 22, 28);
   const chestW = side ? body.chestDepth : body.chestWidth;
   const waistW = side ? body.waistDepth : body.waistWidth;
   const hipW = side ? body.hipDepth : body.hipWidth;
-  const armW = clamp(side ? body.forearmWidth : body.upperArmWidth, 2, 8);
+  const armW = clamp(side ? body.upperArmSideWidth : body.upperArmWidth, 2, 8);
+  const forearmW = clamp(side ? body.forearmSideWidth : body.forearmWidth, 2, 8);
   const armH = clamp(body.upperArmLength + body.forearmLength, 11, 24);
-  const legW = clamp(side ? body.calfWidth : body.thighWidth, 2, 9);
+  const legW = clamp(side ? body.thighSideWidth : body.thighWidth, 2, 9);
+  const calfW = clamp(side ? body.calfSideWidth : body.calfWidth, 2, 8);
 
   fillOutlineRect(matrix, centerX - Math.floor(headW / 2), top, headW, headH);
   const torsoTop = top + headH;
-  fillOutlineRect(matrix, centerX - Math.floor(shoulderW / 2), torsoTop, shoulderW, Math.max(2, Math.round(torsoH * 0.2)));
-  fillOutlineRect(matrix, centerX - Math.floor(chestW / 2), torsoTop + Math.round(torsoH * 0.2), chestW, Math.max(3, Math.round(torsoH * 0.35)));
-  fillOutlineRect(matrix, centerX - Math.floor(waistW / 2), torsoTop + Math.round(torsoH * 0.55), waistW, Math.max(2, Math.round(torsoH * 0.2)));
-  fillOutlineRect(matrix, centerX - Math.floor(hipW / 2), torsoTop + Math.round(torsoH * 0.75), hipW, Math.max(3, Math.round(torsoH * 0.25)));
+  const torsoX = (width: number, section: "chest" | "waist" | "hip" | "shoulder") => {
+    if (!side) return centerX - Math.floor(width / 2);
+    if (state.appearanceFacing === "left") {
+      return section === "hip" ? centerX - width + Math.floor(shoulderW / 2) : centerX - Math.floor(shoulderW / 2);
+    }
+    return section === "hip" ? centerX - Math.floor(shoulderW / 2) : centerX + Math.floor(shoulderW / 2) - width;
+  };
+  fillOutlineRect(matrix, torsoX(shoulderW, "shoulder"), torsoTop, shoulderW, Math.max(2, Math.round(torsoH * 0.2)));
+  fillOutlineRect(matrix, torsoX(chestW, "chest"), torsoTop + Math.round(torsoH * 0.2), chestW, Math.max(3, Math.round(torsoH * 0.35)));
+  fillOutlineRect(matrix, torsoX(waistW, "waist"), torsoTop + Math.round(torsoH * 0.55), waistW, Math.max(2, Math.round(torsoH * 0.2)));
+  fillOutlineRect(matrix, torsoX(hipW, "hip"), torsoTop + Math.round(torsoH * 0.75), hipW, Math.max(3, Math.round(torsoH * 0.25)));
 
   const limbTop = torsoTop + 3;
   if (side) {
-    fillOutlineRect(matrix, centerX + Math.floor(chestW / 2), limbTop, armW, armH);
-    fillOutlineRect(matrix, centerX - Math.floor(legW / 2), torsoTop + torsoH, legW, legH);
+    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop, armW, body.upperArmLength);
+    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop + body.upperArmLength, forearmW, body.forearmLength);
+    fillOutlineRect(matrix, centerX - Math.floor(legW / 2), torsoTop + torsoH, legW, body.thighLength);
+    fillOutlineRect(matrix, centerX - Math.floor(calfW / 2), torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
   } else {
-    fillOutlineRect(matrix, centerX - Math.floor(shoulderW / 2) - armW, limbTop, armW, armH);
-    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop, armW, armH);
-    fillOutlineRect(matrix, centerX - legW - 1, torsoTop + torsoH, legW, legH);
-    fillOutlineRect(matrix, centerX + 1, torsoTop + torsoH, legW, legH);
+    fillOutlineRect(matrix, centerX - Math.floor(shoulderW / 2) - armW, limbTop, armW, body.upperArmLength);
+    fillOutlineRect(matrix, centerX - Math.floor(shoulderW / 2) - forearmW, limbTop + body.upperArmLength, forearmW, body.forearmLength);
+    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop, armW, body.upperArmLength);
+    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop + body.upperArmLength, forearmW, body.forearmLength);
+    fillOutlineRect(matrix, centerX - legW - 1, torsoTop + torsoH, legW, body.thighLength);
+    fillOutlineRect(matrix, centerX - calfW - 1, torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
+    fillOutlineRect(matrix, centerX + 1, torsoTop + torsoH, legW, body.thighLength);
+    fillOutlineRect(matrix, centerX + 1, torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
   }
   return matrix;
 }
@@ -1022,6 +1102,66 @@ function fillOutlineRect(matrix: boolean[][], x: number, y: number, width: numbe
       }
     }
   }
+}
+
+async function importAppearanceFile(file: File): Promise<void> {
+  if (!state.appearanceDraft) return;
+  try {
+    if (file.type.includes("json") || file.name.toLowerCase().endsWith(".json")) {
+      const raw = await file.text();
+      state.appearanceDraft = normalizeAppearance(JSON.parse(raw) as Partial<CharacterAppearance>);
+      renderAppearanceEditor({
+        ...currentAppearanceCharacter(),
+        appearance: state.appearanceDraft,
+      });
+      return;
+    }
+
+    const bitmap = await createImageBitmap(file);
+    const source = document.createElement("canvas");
+    source.width = AVATAR_EDITOR_WIDTH;
+    source.height = AVATAR_EDITOR_HEIGHT;
+    const sourceCtx = source.getContext("2d", { willReadFrequently: true })!;
+    sourceCtx.imageSmoothingEnabled = false;
+    sourceCtx.clearRect(0, 0, source.width, source.height);
+    sourceCtx.drawImage(bitmap, 0, 0, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
+    const pixels = sourceCtx.getImageData(0, 0, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT).data;
+    const rows = Array.from({ length: AVATAR_EDITOR_HEIGHT }, (_, y) => {
+      let row = "";
+      for (let x = 0; x < AVATAR_EDITOR_WIDTH; x += 1) {
+        const offset = (y * AVATAR_EDITOR_WIDTH + x) * 4;
+        const alpha = pixels[offset + 3];
+        const bright = pixels[offset] + pixels[offset + 1] + pixels[offset + 2];
+        row += alpha > 32 && bright > 48 ? "1" : "0";
+      }
+      return row.replace(/0+$/g, "");
+    }).filter((row) => row.length > 0);
+    setActiveLayerRows(rows);
+    renderPixelEditorGrid(getActiveLayerRows());
+  } catch (error) {
+    loginError.textContent = errorToString(error);
+  }
+}
+
+function exportActiveLayerPng(): void {
+  const matrix = rowsToMatrix(getActiveLayerRows(), AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
+  const output = document.createElement("canvas");
+  output.width = AVATAR_EDITOR_WIDTH;
+  output.height = AVATAR_EDITOR_HEIGHT;
+  const outputCtx = output.getContext("2d")!;
+  outputCtx.clearRect(0, 0, output.width, output.height);
+  outputCtx.fillStyle = state.showHairLayer
+    ? (state.appearanceDraft?.palette.hairPrimary ?? state.paintColor)
+    : (state.appearanceDraft?.palette.clothPrimary ?? state.paintColor);
+  matrix.forEach((row, y) => {
+    row.forEach((filled, x) => {
+      if (filled) outputCtx.fillRect(x, y, 1, 1);
+    });
+  });
+  const link = document.createElement("a");
+  link.download = `${state.appearanceFacing}-${state.showHairLayer ? "hair" : "body"}.png`;
+  link.href = output.toDataURL("image/png");
+  link.click();
 }
 
 async function copyTextToClipboard(text: string): Promise<void> {
@@ -1069,6 +1209,8 @@ async function saveSelectedCharacterAppearance(): Promise<void> {
 function defaultAppearanceBody(): CharacterBodyAppearance {
   return {
     height: 50,
+    headWidth: 13,
+    headSideWidth: 10,
     frontShoulderWidth: 24,
     sideWidth: 12,
     chestWidth: 20,
@@ -1076,12 +1218,16 @@ function defaultAppearanceBody(): CharacterBodyAppearance {
     hipWidth: 20,
     torsoHeight: 20,
     upperArmWidth: 4,
+    upperArmSideWidth: 4,
     upperArmLength: 11,
     forearmWidth: 4,
+    forearmSideWidth: 4,
     forearmLength: 10,
     thighWidth: 5,
+    thighSideWidth: 4,
     thighLength: 12,
     calfWidth: 4,
+    calfSideWidth: 3,
     calfLength: 11,
     chestDepth: 10,
     waistDepth: 9,
@@ -1128,6 +1274,12 @@ function defaultAppearance(): CharacterAppearance {
 function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppearance): CharacterAppearance {
   const fallback = defaultAppearance();
   const body = { ...fallback.body, ...(input.body ?? {}) };
+  body.headWidth ||= fallback.body.headWidth;
+  body.headSideWidth ||= fallback.body.headSideWidth;
+  body.upperArmSideWidth ||= body.upperArmWidth || fallback.body.upperArmSideWidth;
+  body.forearmSideWidth ||= body.forearmWidth || fallback.body.forearmSideWidth;
+  body.thighSideWidth ||= body.thighWidth || fallback.body.thighSideWidth;
+  body.calfSideWidth ||= body.calfWidth || fallback.body.calfSideWidth;
   const palette = { ...fallback.palette, ...(input.palette ?? {}) };
   const hair = { ...fallback.hair, ...(input.hair ?? {}) };
   const skeleton = { ...fallback.skeleton, ...(input.skeleton ?? {}) };
@@ -1136,6 +1288,8 @@ function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppe
   return {
     body: {
       height: clamp(Math.round(body.height), 42, 58),
+      headWidth: clamp(Math.round(body.headWidth), 8, 18),
+      headSideWidth: clamp(Math.round(body.headSideWidth), 7, 14),
       frontShoulderWidth: clamp(Math.round(body.frontShoulderWidth), 22, 28),
       sideWidth: clamp(Math.round(body.sideWidth), 10, 16),
       chestWidth: clamp(Math.round(body.chestWidth), 14, 28),
@@ -1143,12 +1297,16 @@ function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppe
       hipWidth: clamp(Math.round(body.hipWidth), 12, 27),
       torsoHeight: clamp(Math.round(body.torsoHeight), 14, 26),
       upperArmWidth: clamp(Math.round(body.upperArmWidth), 2, 8),
+      upperArmSideWidth: clamp(Math.round(body.upperArmSideWidth), 2, 8),
       upperArmLength: clamp(Math.round(body.upperArmLength), 6, 18),
       forearmWidth: clamp(Math.round(body.forearmWidth), 2, 7),
+      forearmSideWidth: clamp(Math.round(body.forearmSideWidth), 2, 7),
       forearmLength: clamp(Math.round(body.forearmLength), 5, 17),
       thighWidth: clamp(Math.round(body.thighWidth), 3, 9),
+      thighSideWidth: clamp(Math.round(body.thighSideWidth), 3, 9),
       thighLength: clamp(Math.round(body.thighLength), 7, 20),
       calfWidth: clamp(Math.round(body.calfWidth), 2, 8),
+      calfSideWidth: clamp(Math.round(body.calfSideWidth), 2, 8),
       calfLength: clamp(Math.round(body.calfLength), 6, 19),
       chestDepth: clamp(Math.round(body.chestDepth), 7, 16),
       waistDepth: clamp(Math.round(body.waistDepth), 6, 15),

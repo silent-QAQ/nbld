@@ -1782,7 +1782,7 @@ func protocolEquipmentToDomain(equipment protocol.CharacterEquipment) CharacterE
 }
 
 func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) CharacterAppearance {
-	return CharacterAppearance{
+	out := CharacterAppearance{
 		Body: CharacterBodyAppearance{
 			Height:             appearance.Body.Height,
 			HeadWidth:          appearance.Body.HeadWidth,
@@ -1839,5 +1839,30 @@ func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) Charact
 			MetalPrimary: appearance.Palette.MetalPrimary,
 			MetalShadow:  appearance.Palette.MetalShadow,
 		},
+	}
+	normalizeDomainAppearanceDefaults(&out)
+	return out
+}
+
+func normalizeDomainAppearanceDefaults(appearance *CharacterAppearance) {
+	defaults := defaultCharacterAppearance().Body
+	body := &appearance.Body
+	if body.HeadWidth == 0 {
+		body.HeadWidth = defaults.HeadWidth
+	}
+	if body.HeadSideWidth == 0 {
+		body.HeadSideWidth = defaults.HeadSideWidth
+	}
+	if body.UpperArmSideWidth == 0 {
+		body.UpperArmSideWidth = body.UpperArmWidth
+	}
+	if body.ForearmSideWidth == 0 {
+		body.ForearmSideWidth = body.ForearmWidth
+	}
+	if body.ThighSideWidth == 0 {
+		body.ThighSideWidth = body.ThighWidth
+	}
+	if body.CalfSideWidth == 0 {
+		body.CalfSideWidth = body.CalfWidth
 	}
 }
