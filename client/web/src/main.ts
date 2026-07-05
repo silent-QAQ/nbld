@@ -29,6 +29,8 @@ const RENDER_TILE_WINDOW_Y = 120;
 const CHUNK_PREFETCH_MARGIN_TILES = 20;
 const AVATAR_EDITOR_WIDTH = 30;
 const AVATAR_EDITOR_HEIGHT = 60;
+const AVATAR_EDITOR_MAX_CELL_SIZE = 10;
+const AVATAR_EDITOR_MIN_CELL_SIZE = 5;
 const PLAYER_COLLISION_SIZE_TILES = 1;
 const COLLISION_EPSILON = 0.0001;
 
@@ -340,6 +342,11 @@ baseUrlInput.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("resize", resizeCanvas);
+window.addEventListener("resize", () => {
+  if (!appearanceModal.classList.contains("hidden") && state.appearanceDraft) {
+    renderPixelEditorGrid(getActiveLayerRows());
+  }
+});
 window.addEventListener("keydown", (event) => {
   if (isTypingTarget(event.target)) return;
   if (event.code === "KeyH") {
@@ -649,9 +656,11 @@ function syncSelectedLayersToFacing(): void {
 function getActiveLayerRows(): string[] {
   if (!state.appearanceDraft) return [];
   syncSelectedLayersToFacing();
-  return isEditingHairLayer()
-    ? state.appearanceDraft.hair[state.selectedHairLayer] ?? []
-    : state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? [];
+  if (isEditingHairLayer()) return state.appearanceDraft.hair[state.selectedHairLayer] ?? [];
+
+  const masked = maskBodyRows(state.appearanceDraft.skeleton[state.selectedSkeletonLayer] ?? []);
+  state.appearanceDraft.skeleton[state.selectedSkeletonLayer] = masked;
+  return masked;
 }
 
 function setActiveLayerRows(rows: string[]): void {
@@ -692,10 +701,25 @@ function bodyPaintMask(): boolean[][] {
 }
 
 function maskBodyRows(rows: string[]): string[] {
-  const mask = bodyPaintMask();
+  return maskRowsWithMatrix(rows, bodyPaintMask());
+}
+
+function maskRowsWithMatrix(rows: string[], mask: boolean[][]): string[] {
   return rowsToMatrix(rows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT)
     .map((row, y) => row.map((cell, x) => (cell && mask[y][x] ? "1" : "0")).join("").replace(/0+$/g, ""))
     .filter((row) => row.length > 0);
+}
+
+function sanitizeAppearanceBodyLayers(appearance: CharacterAppearance): CharacterAppearance {
+  return {
+    ...appearance,
+    skeleton: {
+      frontTorso: maskRowsWithMatrix(appearance.skeleton.frontTorso ?? [], buildAvatarOutlineMatrix(appearance.body, "front")),
+      backTorso: maskRowsWithMatrix(appearance.skeleton.backTorso ?? [], buildAvatarOutlineMatrix(appearance.body, "back")),
+      leftTorso: maskRowsWithMatrix(appearance.skeleton.leftTorso ?? [], buildAvatarOutlineMatrix(appearance.body, "left")),
+      rightTorso: maskRowsWithMatrix(appearance.skeleton.rightTorso ?? [], buildAvatarOutlineMatrix(appearance.body, "right")),
+    },
+  };
 }
 
 function renderAppearanceControls(body: CharacterBodyAppearance): void {
@@ -888,6 +912,20 @@ function normalizeHairRows(rows: string[]): string[] {
     .map((row) => row.slice(0, AVATAR_EDITOR_WIDTH));
 }
 
+function getAvatarEditorCellSize(): number {
+  const modalBounds = appearanceModal.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+  const maxCanvasHeight = Math.max(
+    AVATAR_EDITOR_HEIGHT * AVATAR_EDITOR_MIN_CELL_SIZE,
+    Math.min(viewportHeight - 180, modalBounds.height - 72, AVATAR_EDITOR_HEIGHT * AVATAR_EDITOR_MAX_CELL_SIZE),
+  );
+  return clamp(
+    Math.floor(maxCanvasHeight / AVATAR_EDITOR_HEIGHT),
+    AVATAR_EDITOR_MIN_CELL_SIZE,
+    AVATAR_EDITOR_MAX_CELL_SIZE,
+  );
+}
+
 function renderPixelEditorGrid(rows: string[]): void {
   const width = AVATAR_EDITOR_WIDTH;
   const height = AVATAR_EDITOR_HEIGHT;
@@ -896,7 +934,7 @@ function renderPixelEditorGrid(rows: string[]): void {
     const row = normalized[y] ?? "";
     return Array.from({ length: width }, (_, x) => row[x] === "1");
   });
-  const cellSize = 10;
+  const cellSize = getAvatarEditorCellSize();
   const gridCtx = hairGrid.getContext("2d", { alpha: true })!;
   hairGrid.width = width * cellSize;
   hairGrid.height = height * cellSize;
@@ -904,6 +942,7 @@ function renderPixelEditorGrid(rows: string[]): void {
   hairGrid.style.height = `${height * cellSize}px`;
   hairGrid.style.touchAction = "none";
   gridCtx.imageSmoothingEnabled = false;
+  let activePointerId: number | null = null;
 
   const paintAt = (x: number, y: number) => {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
@@ -920,15 +959,18 @@ function renderPixelEditorGrid(rows: string[]): void {
 
   const pointerToCell = (event: PointerEvent): { x: number; y: number } => {
     const rect = hairGrid.getBoundingClientRect();
+    const pixelX = clamp(event.clientX - rect.left, 0, Math.max(0, rect.width - 0.001));
+    const pixelY = clamp(event.clientY - rect.top, 0, Math.max(0, rect.height - 0.001));
     return {
-      x: Math.floor(((event.clientX - rect.left) / rect.width) * width),
-      y: Math.floor(((event.clientY - rect.top) / rect.height) * height),
+      x: clamp(Math.floor(pixelX / cellSize), 0, width - 1),
+      y: clamp(Math.floor(pixelY / cellSize), 0, height - 1),
     };
   };
 
   hairGrid.onpointerdown = (event) => {
     event.preventDefault();
     hairGrid.setPointerCapture(event.pointerId);
+    activePointerId = event.pointerId;
     dragging = true;
     const cell = pointerToCell(event);
     paintAt(cell.x, cell.y);
@@ -940,10 +982,18 @@ function renderPixelEditorGrid(rows: string[]): void {
   };
   hairGrid.onpointerup = (event) => {
     dragging = false;
+    activePointerId = null;
+    if (hairGrid.hasPointerCapture(event.pointerId)) hairGrid.releasePointerCapture(event.pointerId);
+  };
+  hairGrid.onpointercancel = (event) => {
+    dragging = false;
+    activePointerId = null;
     if (hairGrid.hasPointerCapture(event.pointerId)) hairGrid.releasePointerCapture(event.pointerId);
   };
   hairGrid.onpointerleave = () => {
-    dragging = false;
+    if (activePointerId === null || !hairGrid.hasPointerCapture(activePointerId)) {
+      dragging = false;
+    }
   };
 
   let dragging = false;
@@ -1016,7 +1066,8 @@ function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, cellSize: 
   drawMatrix(target, outline, cellSize, "rgba(255,255,255,0.85)");
 
   if (state.appearanceDraft) {
-    const bodyRows = state.appearanceDraft.skeleton[activeBodyLayerKey()] ?? [];
+    const bodyRows = maskBodyRows(state.appearanceDraft.skeleton[activeBodyLayerKey()] ?? []);
+    state.appearanceDraft.skeleton[activeBodyLayerKey()] = bodyRows;
     const bodyMatrix = rowsToMatrix(bodyRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
     drawMatrix(target, bodyMatrix, cellSize, state.appearanceDraft.palette.clothPrimary);
 
@@ -1076,7 +1127,7 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
   const torsoTop = top + headH;
   const torsoX = (width: number, section: "chest" | "waist" | "hip" | "shoulder") => {
     if (!side) return centerX - Math.floor(width / 2);
-    const frontSign = state.appearanceFacing === "left" ? 1 : -1;
+    const frontSign = facing === "left" ? 1 : -1;
     const anchor = centerX - Math.floor(shoulderW / 2);
     if (section === "shoulder") return anchor;
     if (section === "hip") {
@@ -1091,7 +1142,7 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
 
   const limbTop = torsoTop + 3;
   if (side) {
-    const frontSign = state.appearanceFacing === "left" ? 1 : -1;
+    const frontSign = facing === "left" ? 1 : -1;
     const armGap = 3;
     const armX = frontSign > 0
       ? centerX + Math.floor(shoulderW / 2) + armGap
@@ -1307,7 +1358,7 @@ function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppe
   const skeleton = { ...fallback.skeleton, ...(input.skeleton ?? {}) };
   const style = { ...fallback.style, ...(input.style ?? {}) };
 
-  return {
+  const normalized: CharacterAppearance = {
     body: {
       height: clamp(Math.round(body.height), 42, 58),
       headWidth: clamp(Math.round(body.headWidth), 8, 18),
@@ -1365,6 +1416,8 @@ function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppe
       metalShadow: normalizeHexColor(palette.metalShadow, fallback.palette.metalShadow),
     },
   };
+
+  return sanitizeAppearanceBodyLayers(normalized);
 }
 
 function normalizeHexColor(value: string | undefined, fallback: string): string {
