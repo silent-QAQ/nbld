@@ -97,6 +97,7 @@ type AppState = {
   tileScale: number;
   chunks: Map<string, ChunkRender>;
   pendingChunkRenders: Array<{ key: string; snapshot: ChunkSnapshot }>;
+  deferredChunkRenders: Array<{ key: string; snapshot: ChunkSnapshot }>;
   players: Map<string, WorldPlayer>;
   remoteVisuals: Map<string, Position>;
   remoteFacing: Map<string, Facing>;
@@ -271,6 +272,7 @@ const state: AppState = {
   tileScale: 1,
   chunks: new Map(),
   pendingChunkRenders: [],
+  deferredChunkRenders: [],
   players: new Map(),
   remoteVisuals: new Map(),
   remoteFacing: new Map(),
@@ -1564,6 +1566,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.players.clear();
     state.chunks.clear();
     state.pendingChunkRenders = [];
+    state.deferredChunkRenders = [];
     state.currentTile = undefined;
     state.lastChunkKey = "";
     state.lastChunkWindowKey = "";
@@ -1658,6 +1661,7 @@ function logoutToLogin(): void {
   state.players.clear();
   state.chunks.clear();
   state.pendingChunkRenders = [];
+  state.deferredChunkRenders = [];
   state.availableCharacters = [];
   state.selectedCharacterId = "";
   state.status = "未连接";
@@ -1758,6 +1762,7 @@ function handleServerMessage(message: WSServerMessage): void {
     state.camera = { ...message.position };
     state.chunks.clear();
     state.pendingChunkRenders = [];
+    state.deferredChunkRenders = [];
     state.lastChunkKey = "";
     void refreshChunks(true);
     return;
@@ -1806,6 +1811,13 @@ function processPendingChunkRenders(limit: number): void {
     if (!next) break;
     state.chunks.set(next.key, renderChunk(next.snapshot));
     processed += 1;
+  }
+  if (processed < limit && state.lastFrameMs < 14) {
+    const nextDeferred = state.deferredChunkRenders.shift();
+    if (nextDeferred) {
+      state.chunks.set(nextDeferred.key, renderChunk(nextDeferred.snapshot));
+      processed += 1;
+    }
   }
   state.lastChunkRenderCount = processed;
   state.lastChunkRenderMs = processed > 0 ? performance.now() - startedAt : 0;
@@ -1927,15 +1939,22 @@ function applyChunkWindow(windowData: ChunkWindowResponse): void {
       previous.snapshot = chunk;
       continue;
     }
-    const pendingIndex = state.pendingChunkRenders.findIndex((item) => item.key === key);
+    const targetQueue = isChunkInVisibleWindow(chunk.coord) ? state.pendingChunkRenders : state.deferredChunkRenders;
+    const otherQueue = targetQueue === state.pendingChunkRenders ? state.deferredChunkRenders : state.pendingChunkRenders;
+    const otherIndex = otherQueue.findIndex((item) => item.key === key);
+    if (otherIndex >= 0) otherQueue.splice(otherIndex, 1);
+    const pendingIndex = targetQueue.findIndex((item) => item.key === key);
     if (pendingIndex >= 0) {
-      state.pendingChunkRenders[pendingIndex] = { key, snapshot: chunk };
+      targetQueue[pendingIndex] = { key, snapshot: chunk };
     } else {
-      state.pendingChunkRenders.push({ key, snapshot: chunk });
+      targetQueue.push({ key, snapshot: chunk });
     }
   }
   if (state.pendingChunkRenders.length > 48) {
     state.pendingChunkRenders = state.pendingChunkRenders.slice(-48);
+  }
+  if (state.deferredChunkRenders.length > 96) {
+    state.deferredChunkRenders = state.deferredChunkRenders.slice(-96);
   }
   state.currentTile = findTileAt(state.player.x, state.player.y);
 }
@@ -1969,6 +1988,19 @@ function hasMissingChunksInRenderWindow(): boolean {
     }
   }
   return false;
+}
+
+function isChunkInVisibleWindow(coord: ChunkCoord): boolean {
+  if (coord.mapId !== state.mapId) return false;
+  const minX = state.camera.x - TARGET_VISIBLE_TILES_X / 2;
+  const maxX = state.camera.x + TARGET_VISIBLE_TILES_X / 2;
+  const minY = state.camera.y - TARGET_VISIBLE_TILES_Y / 2;
+  const maxY = state.camera.y + TARGET_VISIBLE_TILES_Y / 2;
+  const chunkMinX = coord.chunkX * CHUNK_SIZE;
+  const chunkMaxX = chunkMinX + CHUNK_SIZE;
+  const chunkMinY = coord.chunkY * CHUNK_SIZE;
+  const chunkMaxY = chunkMinY + CHUNK_SIZE;
+  return chunkMaxX >= minX && chunkMinX <= maxX && chunkMaxY >= minY && chunkMinY <= maxY;
 }
 
 function canReuseRenderedChunk(snapshot: ChunkSnapshot): boolean {
@@ -2301,7 +2333,7 @@ function updateHud(): void {
   debugPanel.innerHTML = `
     <div><b>已加载区块</b> ${state.chunks.size}　<b>缩放</b> ${state.tileScale.toFixed(1)}px/格</div>
     <div><b>实际渲染</b> ${RENDER_TILE_WINDOW_X} x ${RENDER_TILE_WINDOW_Y} 格　<b>当前可见</b> ${visibleTilesX} x ${visibleTilesY} 格</div>
-    <div><b>帧时间</b> ${state.lastFrameMs.toFixed(2)} ms　<b>待渲染区块</b> ${state.pendingChunkRenders.length}</div>
+    <div><b>帧时间</b> ${state.lastFrameMs.toFixed(2)} ms　<b>近处待渲染</b> ${state.pendingChunkRenders.length}　<b>远处静默队列</b> ${state.deferredChunkRenders.length}</div>
     <div><b>最近区块刷新</b> ${state.lastChunkRefreshMs.toFixed(2)} ms / ${state.lastChunkRefreshCount} 块</div>
     <div><b>最近区块渲染</b> ${state.lastChunkRenderMs.toFixed(2)} ms / ${state.lastChunkRenderCount} 块</div>
     <div><b>主要地形</b> ${escapeHtml(dominant || "-")}</div>
