@@ -2096,17 +2096,8 @@ function renderInventoryModal(): void {
           </div>
         </section>
         <section class="inventory-stats-panel">
-          <h3>属性</h3>
-          <div class="inventory-stat-list">
-            ${renderInventoryStat("等级", `${character?.stats.level ?? 1}`)}
-            ${renderInventoryStat("战力", formatInteger(combat.powerScore))}
-            ${renderInventoryStat("生命", `${formatInteger(combat.resources.healthCurrent)} / ${formatInteger(combat.resources.healthMax)}`)}
-            ${renderInventoryStat("法力", `${formatInteger(combat.resources.manaCurrent)} / ${formatInteger(combat.resources.manaMax)}`)}
-            ${renderInventoryStat("物攻", formatInteger(combat.physicalAttack))}
-            ${renderInventoryStat("法攻", formatInteger(combat.magicAttack))}
-            ${renderInventoryStat("物防", formatInteger(combat.physicalDefense))}
-            ${renderInventoryStat("法防", formatInteger(combat.magicDefense))}
-          </div>
+          <h3>全部属性</h3>
+          ${renderFullInventoryStats(character, combat)}
         </section>
       </div>
       <div class="inventory-bottom">
@@ -2144,8 +2135,8 @@ function renderInventoryAvatar(character: CharacterSummary | undefined): void {
   target.imageSmoothingEnabled = false;
   target.clearRect(0, 0, canvas.width, canvas.height);
   target.save();
-  target.translate(canvas.width / 2, canvas.height - 38);
-  target.scale(3.2, 3.2);
+  target.translate(canvas.width / 2, canvas.height - 78);
+  target.scale(1.08, 1.08);
   const previousScale = state.tileScale;
   state.tileScale = 18;
   renderAvatarSkeleton(target, { x: 0, y: 0 }, character, state.inventoryFacing, true, IDLE_LIMB_STATE);
@@ -3212,9 +3203,17 @@ function renderEquipmentSlots(character: CharacterSummary | undefined): string {
   const slots: Array<[string, string | undefined]> = [
     ["头盔", equipment?.helmet],
     ["胸甲", equipment?.chest],
-    ["护腿", equipment?.pants],
+    ["裤子", equipment?.pants],
     ["鞋子", equipment?.shoes],
     ["肩甲", equipment?.shoulders],
+    ["披风", equipment?.cloak],
+    ["左护臂", equipment?.leftBracer],
+    ["右护臂", equipment?.rightBracer],
+    ["戒指 1", undefined],
+    ["戒指 2", undefined],
+    ["戒指 3", undefined],
+    ["吊坠 1", undefined],
+    ["吊坠 2", undefined],
   ];
   return `
     <div class="equipment-slots">
@@ -3224,6 +3223,60 @@ function renderEquipmentSlots(character: CharacterSummary | undefined): string {
           <strong>${itemId ? escapeHtml(itemId) : "空"}</strong>
         </div>
       `).join("")}
+    </div>
+  `;
+}
+
+function renderFullInventoryStats(character: CharacterSummary | undefined, combat: CharacterCombatStats): string {
+  void character;
+  const groups: Array<{ title: string; stats: Array<[string, string]> }> = [
+    {
+      title: "基础类",
+      stats: [
+        ["生命", `${formatInteger(combat.resources.healthCurrent)}/${formatInteger(combat.resources.healthMax)}`],
+        ["耐力值", `${formatInteger(combat.resources.staminaCurrent)}/${formatInteger(combat.resources.staminaMax)}`],
+        ["法力值", `${formatInteger(combat.resources.manaCurrent)}/${formatInteger(combat.resources.manaMax)}`],
+        ["移速", formatFlat(combat.moveSpeed)],
+      ],
+    },
+    {
+      title: "攻击类",
+      stats: [
+        ["法术攻击", formatInteger(combat.magicAttack)],
+        ["物理攻击", formatInteger(combat.physicalAttack)],
+        ["法术暴击", formatRatio(combat.magicCrit)],
+        ["物理暴击", formatRatio(combat.physicalCrit)],
+        ["伤害加成", formatRatio(combat.damageBonus)],
+        ["爆伤加成", formatRatio(combat.critDamageBonus)],
+        ["追加伤害", formatRatio(combat.extraDamage)],
+      ],
+    },
+    {
+      title: "防御类",
+      stats: [
+        ["法术防御", formatInteger(combat.magicDefense)],
+        ["物理防御", formatInteger(combat.physicalDefense)],
+        ["暴击抵抗", formatRatio(combat.critResist)],
+        ["伤害免疫", formatRatio(combat.damageImmunity)],
+        ["追加免疫", formatRatio(combat.extraImmunity)],
+      ],
+    },
+  ];
+  return `
+    <div class="inventory-stat-pages">
+      ${groups.map((group) => `
+        <div class="inventory-stat-group">
+          <h4>${group.title}</h4>
+          <div class="inventory-stat-grid">
+            ${group.stats.map(([label, value]) => renderInventoryStat(label, value)).join("")}
+          </div>
+        </div>
+      `).join("")}
+      <div class="inventory-stat-pager">
+        <button type="button" disabled>上一页</button>
+        <span>1 / 1</span>
+        <button type="button" disabled>下一页</button>
+      </div>
     </div>
   `;
 }
