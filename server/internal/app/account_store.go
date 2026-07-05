@@ -161,9 +161,14 @@ type CharacterPaletteAppearance struct {
 }
 
 type CharacterStats struct {
-	Base    BaseStats    `json:"base"`
-	Attack  AttackStats  `json:"attack"`
-	Defense DefenseStats `json:"defense"`
+	Base     BaseStats             `json:"base"`
+	Attack   AttackStats           `json:"attack"`
+	Defense  DefenseStats          `json:"defense"`
+	Level    int                   `json:"level"`
+	Sources  CharacterStatSources  `json:"sources"`
+	Derived  CharacterDerivedStats `json:"derived"`
+	Combat   CharacterCombatStats  `json:"combat"`
+	Metadata CharacterStatsMeta    `json:"metadata"`
 }
 
 type BaseStats struct {
@@ -189,6 +194,62 @@ type DefenseStats struct {
 	CritResistance  int `json:"critResistance"`
 	DamageMitigate  int `json:"damageMitigation"`
 	BonusMitigate   int `json:"bonusMitigation"`
+}
+
+type AttributeValues map[string]float64
+
+type CharacterStatSources struct {
+	Base          AttributeValues `json:"base"`
+	LevelGrowth   AttributeValues `json:"levelGrowth"`
+	Talent        AttributeValues `json:"talent"`
+	Equipment     AttributeValues `json:"equipment"`
+	PassiveGem    AttributeValues `json:"passiveGem"`
+	Buff          AttributeValues `json:"buff"`
+	System        AttributeValues `json:"system"`
+	Manual        AttributeValues `json:"manual,omitempty"`
+	EquipmentNote string          `json:"equipmentNote,omitempty"`
+}
+
+type CharacterDerivedStats struct {
+	BaseStats    AttributeValues `json:"baseStats"`
+	DerivedStats AttributeValues `json:"derivedStats"`
+	CombatStats  AttributeValues `json:"combatStats"`
+}
+
+type CharacterResourceStats struct {
+	HealthMax     int `json:"healthMax"`
+	HealthCurrent int `json:"healthCurrent"`
+	ManaMax       int `json:"manaMax"`
+	ManaCurrent   int `json:"manaCurrent"`
+	StaminaMax    int `json:"staminaMax"`
+	StaminaCurrent int `json:"staminaCurrent"`
+}
+
+type CharacterCombatStats struct {
+	Resources       CharacterResourceStats `json:"resources"`
+	PhysicalAttack  int                    `json:"physicalAttack"`
+	MagicAttack     int                    `json:"magicAttack"`
+	PhysicalDefense int                    `json:"physicalDefense"`
+	MagicDefense    int                    `json:"magicDefense"`
+	MoveSpeed       float64                `json:"moveSpeed"`
+	PhysicalCrit    float64                `json:"physicalCrit"`
+	MagicCrit       float64                `json:"magicCrit"`
+	CritDamageBonus float64                `json:"critDamageBonus"`
+	DamageBonus     float64                `json:"damageBonus"`
+	ExtraDamage     float64                `json:"extraDamage"`
+	CritResist      float64                `json:"critResist"`
+	DamageImmunity  float64                `json:"damageImmunity"`
+	ExtraImmunity   float64                `json:"extraImmunity"`
+	HealPower       float64                `json:"healPower"`
+	HealTakenBonus  float64                `json:"healTakenBonus"`
+	PowerScore      int                    `json:"powerScore"`
+}
+
+type CharacterStatsMeta struct {
+	SchemaVersion int                    `json:"schemaVersion"`
+	ProfileID     string                 `json:"profileId"`
+	AttributeDefs []AttributeDefinition  `json:"attributeDefs,omitempty"`
+	Warnings      []string               `json:"warnings,omitempty"`
 }
 
 type ItemContainer struct {
@@ -278,7 +339,7 @@ func validateCharacterName(name string) error {
 }
 
 func defaultCharacterStats() CharacterStats {
-	return CharacterStats{
+	stats := CharacterStats{
 		Base: BaseStats{
 			Health:  100,
 			Stamina: 100,
@@ -302,6 +363,7 @@ func defaultCharacterStats() CharacterStats {
 			BonusMitigate:   0,
 		},
 	}
+	return NormalizeCharacterStats(stats)
 }
 
 func defaultCharacterPosition() CharacterPosition {
