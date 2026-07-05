@@ -965,6 +965,8 @@ function renderPixelEditorGrid(rows: string[]): void {
   hairGrid.style.setProperty("--grid-height", String(AVATAR_EDITOR_HEIGHT));
 
   let dragging = false;
+  let activePointerId: number | null = null;
+  let lastPaintedKey = "";
 
   const repaintGrid = () => {
     const nextDisplay = buildEditorDisplayMatrix();
@@ -990,6 +992,30 @@ function renderPixelEditorGrid(rows: string[]): void {
     repaintGrid();
   };
 
+  const readCellCoords = (cell: HTMLElement | null): { x: number; y: number } | null => {
+    if (!cell || !hairGrid.contains(cell)) return null;
+    const x = Number(cell.dataset.x);
+    const y = Number(cell.dataset.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  };
+
+  const findCellFromPoint = (clientX: number, clientY: number): HTMLElement | null => {
+    const hit = document.elementFromPoint(clientX, clientY);
+    if (!(hit instanceof HTMLElement)) return null;
+    const cell = hit.closest<HTMLElement>(".pixel-cell");
+    return cell && hairGrid.contains(cell) ? cell : null;
+  };
+
+  const paintEventCell = (cell: HTMLElement | null) => {
+    const coords = readCellCoords(cell);
+    if (!coords) return;
+    const key = `${coords.x}:${coords.y}`;
+    if (state.paintMode !== "bucket" && lastPaintedKey === key) return;
+    lastPaintedKey = key;
+    paintAt(coords.x, coords.y);
+  };
+
   const fragment = document.createDocumentFragment();
   for (let y = 0; y < AVATAR_EDITOR_HEIGHT; y += 1) {
     for (let x = 0; x < AVATAR_EDITOR_WIDTH; x += 1) {
@@ -998,31 +1024,54 @@ function renderPixelEditorGrid(rows: string[]): void {
       cell.dataset.x = String(x);
       cell.dataset.y = String(y);
       cell.setAttribute("draggable", "false");
-
-      cell.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        dragging = true;
-        paintAt(x, y);
-      });
-      cell.addEventListener("pointerenter", () => {
-        if (!dragging || state.paintMode === "bucket") return;
-        paintAt(x, y);
-      });
-
       fragment.appendChild(cell);
     }
   }
   hairGrid.appendChild(fragment);
 
-  hairGrid.onpointerup = () => {
+  hairGrid.onpointerdown = (event) => {
+    const cell = findCellFromPoint(event.clientX, event.clientY);
+    if (!cell) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragging = true;
+    activePointerId = event.pointerId;
+    lastPaintedKey = "";
+    hairGrid.setPointerCapture(event.pointerId);
+    paintEventCell(cell);
+  };
+  hairGrid.onpointermove = (event) => {
+    if (!dragging) return;
+    const cell = findCellFromPoint(event.clientX, event.clientY);
+    if (!cell) return;
+    paintEventCell(cell);
+  };
+  hairGrid.onpointerup = (event) => {
     dragging = false;
+    lastPaintedKey = "";
+    if (activePointerId === event.pointerId && hairGrid.hasPointerCapture(event.pointerId)) {
+      hairGrid.releasePointerCapture(event.pointerId);
+    }
+    activePointerId = null;
   };
   hairGrid.onpointerleave = () => {
-    dragging = false;
+    if (activePointerId === null) {
+      dragging = false;
+      lastPaintedKey = "";
+    }
   };
-  hairGrid.onpointercancel = () => {
+  hairGrid.onpointercancel = (event) => {
     dragging = false;
+    lastPaintedKey = "";
+    if (activePointerId === event.pointerId && hairGrid.hasPointerCapture(event.pointerId)) {
+      hairGrid.releasePointerCapture(event.pointerId);
+    }
+    activePointerId = null;
+  };
+  hairGrid.onlostpointercapture = () => {
+    dragging = false;
+    lastPaintedKey = "";
+    activePointerId = null;
   };
 
   repaintGrid();
