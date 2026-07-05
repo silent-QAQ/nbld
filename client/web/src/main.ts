@@ -66,6 +66,7 @@ type ChunkRender = {
 type Facing = "front" | "back" | "left" | "right";
 type LayerEditorMode = "hair" | "skeleton";
 type PaintMode = "fill" | "erase" | "bucket";
+type BodyControlPage = "overall" | "body" | "arms" | "legs";
 type GameViewport = { x: number; y: number; width: number; height: number };
 
 type AppState = {
@@ -107,6 +108,7 @@ type AppState = {
   paintMode: PaintMode;
   paintColor: string;
   recentPaintColors: string[];
+  bodyControlPage: BodyControlPage;
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -263,6 +265,7 @@ const state: AppState = {
   appearanceDraft: null,
   paintMode: "fill",
   paintColor: "#ff4040",
+  bodyControlPage: "overall",
   recentPaintColors: [
     "#ff4040", "#b42222", "#f2c199", "#d89b72", "#2d1a13",
     "#140b08", "#cfd8e3", "#7e8794", "#ffffff", "#000000",

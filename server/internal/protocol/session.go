@@ -303,6 +303,8 @@ type CharacterAppearance struct {
 
 type CharacterBodyAppearance struct {
 	Height             int `json:"height"`
+	HeadWidth          int `json:"headWidth"`
+	HeadSideWidth      int `json:"headSideWidth"`
 	FrontShoulderWidth int `json:"frontShoulderWidth"`
 	SideWidth          int `json:"sideWidth"`
 	ChestWidth         int `json:"chestWidth"`
@@ -310,12 +312,16 @@ type CharacterBodyAppearance struct {
 	HipWidth           int `json:"hipWidth"`
 	TorsoHeight        int `json:"torsoHeight"`
 	UpperArmWidth      int `json:"upperArmWidth"`
+	UpperArmSideWidth  int `json:"upperArmSideWidth"`
 	UpperArmLength     int `json:"upperArmLength"`
 	ForearmWidth       int `json:"forearmWidth"`
+	ForearmSideWidth   int `json:"forearmSideWidth"`
 	ForearmLength      int `json:"forearmLength"`
 	ThighWidth         int `json:"thighWidth"`
+	ThighSideWidth     int `json:"thighSideWidth"`
 	ThighLength        int `json:"thighLength"`
 	CalfWidth          int `json:"calfWidth"`
+	CalfSideWidth      int `json:"calfSideWidth"`
 	CalfLength         int `json:"calfLength"`
 	ChestDepth         int `json:"chestDepth"`
 	WaistDepth         int `json:"waistDepth"`

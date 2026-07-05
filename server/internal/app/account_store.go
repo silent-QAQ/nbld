@@ -100,6 +100,8 @@ type CharacterAppearance struct {
 
 type CharacterBodyAppearance struct {
 	Height             int `json:"height"`
+	HeadWidth          int `json:"headWidth"`
+	HeadSideWidth      int `json:"headSideWidth"`
 	FrontShoulderWidth int `json:"frontShoulderWidth"`
 	SideWidth          int `json:"sideWidth"`
 	ChestWidth         int `json:"chestWidth"`
@@ -107,12 +109,16 @@ type CharacterBodyAppearance struct {
 	HipWidth           int `json:"hipWidth"`
 	TorsoHeight        int `json:"torsoHeight"`
 	UpperArmWidth      int `json:"upperArmWidth"`
+	UpperArmSideWidth  int `json:"upperArmSideWidth"`
 	UpperArmLength     int `json:"upperArmLength"`
 	ForearmWidth       int `json:"forearmWidth"`
+	ForearmSideWidth   int `json:"forearmSideWidth"`
 	ForearmLength      int `json:"forearmLength"`
 	ThighWidth         int `json:"thighWidth"`
+	ThighSideWidth     int `json:"thighSideWidth"`
 	ThighLength        int `json:"thighLength"`
 	CalfWidth          int `json:"calfWidth"`
+	CalfSideWidth      int `json:"calfSideWidth"`
 	CalfLength         int `json:"calfLength"`
 	ChestDepth         int `json:"chestDepth"`
 	WaistDepth         int `json:"waistDepth"`
@@ -316,6 +322,8 @@ func defaultCharacterAppearance() CharacterAppearance {
 	return CharacterAppearance{
 		Body: CharacterBodyAppearance{
 			Height:             50,
+			HeadWidth:          13,
+			HeadSideWidth:      10,
 			FrontShoulderWidth: 24,
 			SideWidth:          12,
 			ChestWidth:         20,
@@ -323,12 +331,16 @@ func defaultCharacterAppearance() CharacterAppearance {
 			HipWidth:           20,
 			TorsoHeight:        20,
 			UpperArmWidth:      4,
+			UpperArmSideWidth:  4,
 			UpperArmLength:     11,
 			ForearmWidth:       4,
+			ForearmSideWidth:   4,
 			ForearmLength:      10,
 			ThighWidth:         5,
+			ThighSideWidth:     4,
 			ThighLength:        12,
 			CalfWidth:          4,
+			CalfSideWidth:      3,
 			CalfLength:         11,
 			ChestDepth:         10,
 			WaistDepth:         9,
@@ -404,6 +416,8 @@ func validateCharacterAppearance(appearance CharacterAppearance) error {
 		max   int
 	}{
 		{body.Height, 42, 58},
+		{body.HeadWidth, 8, 18},
+		{body.HeadSideWidth, 7, 14},
 		{body.FrontShoulderWidth, 22, 28},
 		{body.SideWidth, 10, 16},
 		{body.ChestWidth, 14, 28},
@@ -411,12 +425,16 @@ func validateCharacterAppearance(appearance CharacterAppearance) error {
 		{body.HipWidth, 12, 27},
 		{body.TorsoHeight, 14, 26},
 		{body.UpperArmWidth, 2, 8},
+		{body.UpperArmSideWidth, 2, 8},
 		{body.UpperArmLength, 6, 18},
 		{body.ForearmWidth, 2, 7},
+		{body.ForearmSideWidth, 2, 7},
 		{body.ForearmLength, 5, 17},
 		{body.ThighWidth, 3, 9},
+		{body.ThighSideWidth, 3, 9},
 		{body.ThighLength, 7, 20},
 		{body.CalfWidth, 2, 8},
+		{body.CalfSideWidth, 2, 8},
 		{body.CalfLength, 6, 19},
 		{body.ChestDepth, 7, 16},
 		{body.WaistDepth, 6, 15},

@@ -111,6 +111,8 @@ export type CharacterEquipment = {
 
 export type CharacterBodyAppearance = {
   height: number;
+  headWidth: number;
+  headSideWidth: number;
   frontShoulderWidth: number;
   sideWidth: number;
   chestWidth: number;
@@ -118,12 +120,16 @@ export type CharacterBodyAppearance = {
   hipWidth: number;
   torsoHeight: number;
   upperArmWidth: number;
+  upperArmSideWidth: number;
   upperArmLength: number;
   forearmWidth: number;
+  forearmSideWidth: number;
   forearmLength: number;
   thighWidth: number;
+  thighSideWidth: number;
   thighLength: number;
   calfWidth: number;
+  calfSideWidth: number;
   calfLength: number;
   chestDepth: number;
   waistDepth: number;
