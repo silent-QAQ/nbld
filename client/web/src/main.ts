@@ -95,6 +95,7 @@ type AppState = {
   facing: Facing;
   tileScale: number;
   chunks: Map<string, ChunkRender>;
+  pendingChunkRenders: Array<{ key: string; snapshot: ChunkSnapshot }>;
   players: Map<string, WorldPlayer>;
   remoteVisuals: Map<string, Position>;
   remoteFacing: Map<string, Facing>;
@@ -262,6 +263,7 @@ const state: AppState = {
   facing: "front",
   tileScale: 1,
   chunks: new Map(),
+  pendingChunkRenders: [],
   players: new Map(),
   remoteVisuals: new Map(),
   remoteFacing: new Map(),
@@ -1548,6 +1550,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.camera = { ...entered.position };
     state.players.clear();
     state.chunks.clear();
+    state.pendingChunkRenders = [];
     state.currentTile = undefined;
     state.lastChunkKey = "";
     state.lastChunkWindowKey = "";
@@ -1641,6 +1644,7 @@ function logoutToLogin(): void {
   state.mapId = "map_0_0";
   state.players.clear();
   state.chunks.clear();
+  state.pendingChunkRenders = [];
   state.availableCharacters = [];
   state.selectedCharacterId = "";
   state.status = "未连接";
@@ -1740,6 +1744,7 @@ function handleServerMessage(message: WSServerMessage): void {
     state.playerVisual = { ...message.position };
     state.camera = { ...message.position };
     state.chunks.clear();
+    state.pendingChunkRenders = [];
     state.lastChunkKey = "";
     void refreshChunks(true);
     return;
@@ -1751,11 +1756,13 @@ function handleServerMessage(message: WSServerMessage): void {
 }
 
 let lastFrameAt = performance.now();
+const CHUNK_RENDER_BUDGET_PER_FRAME = 2;
 
 function loop(now: number): void {
   const deltaSeconds = Math.min(0.05, (now - lastFrameAt) / 1000);
   lastFrameAt = now;
 
+  processPendingChunkRenders(CHUNK_RENDER_BUDGET_PER_FRAME);
   updatePlayer(deltaSeconds, now);
   updatePlayerVisual(deltaSeconds);
   updateCamera(deltaSeconds);
@@ -1763,6 +1770,14 @@ function loop(now: number): void {
   draw();
 
   requestAnimationFrame(loop);
+}
+
+function processPendingChunkRenders(limit: number): void {
+  for (let index = 0; index < limit && state.pendingChunkRenders.length > 0; index += 1) {
+    const next = state.pendingChunkRenders.shift();
+    if (!next) break;
+    state.chunks.set(next.key, renderChunk(next.snapshot));
+  }
 }
 
 function updatePlayer(deltaSeconds: number, now: number): void {
@@ -1878,7 +1893,12 @@ function applyChunkWindow(windowData: ChunkWindowResponse): void {
       previous.snapshot = chunk;
       continue;
     }
-    state.chunks.set(key, renderChunk(chunk));
+    const pendingIndex = state.pendingChunkRenders.findIndex((item) => item.key === key);
+    if (pendingIndex >= 0) {
+      state.pendingChunkRenders[pendingIndex] = { key, snapshot: chunk };
+    } else {
+      state.pendingChunkRenders.push({ key, snapshot: chunk });
+    }
   }
   state.currentTile = findTileAt(state.player.x, state.player.y);
 }
