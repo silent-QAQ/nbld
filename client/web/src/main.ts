@@ -585,10 +585,9 @@ function renderAppearancePreview(appearance: CharacterAppearance): void {
   appearancePreview.querySelector<HTMLButtonElement>("[data-toggle-hair]")?.addEventListener("click", () => {
     state.showHairLayer = !state.showHairLayer;
     state.selectedLayerMode = state.showHairLayer ? "hair" : "skeleton";
-    renderAppearanceEditor({
-      ...currentAppearanceCharacter(),
-      appearance: state.appearanceDraft ?? defaultAppearance(),
-    });
+    renderAppearancePreview(state.appearanceDraft ?? defaultAppearance());
+    renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
+    renderLayerControls();
   });
 }
 
@@ -900,7 +899,7 @@ function renderPixelEditorGrid(rows: string[]): void {
       matrix[y][x] = state.paintMode === "fill";
     }
     updateDraftHairFromMatrix(matrix);
-    drawAppearanceEditorCanvas(gridCtx, matrix, cellSize);
+    drawAppearanceEditorCanvas(gridCtx, cellSize);
   };
 
   const pointerToCell = (event: PointerEvent): { x: number; y: number } => {
@@ -932,7 +931,7 @@ function renderPixelEditorGrid(rows: string[]): void {
   };
 
   let dragging = false;
-  drawAppearanceEditorCanvas(gridCtx, matrix, cellSize);
+  drawAppearanceEditorCanvas(gridCtx, cellSize);
 }
 
 function updateDraftHairFromMatrix(matrix: boolean[][]): void {
@@ -992,7 +991,7 @@ function floodFillMatrix(matrix: boolean[][], startX: number, startY: number, va
   }
 }
 
-function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, activeMatrix: boolean[][], cellSize: number): void {
+function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, cellSize: number): void {
   target.clearRect(0, 0, hairGrid.width, hairGrid.height);
   target.fillStyle = "#0a0f14";
   target.fillRect(0, 0, hairGrid.width, hairGrid.height);
@@ -1002,16 +1001,12 @@ function drawAppearanceEditorCanvas(target: CanvasRenderingContext2D, activeMatr
 
   if (state.appearanceDraft) {
     const bodyRows = state.appearanceDraft.skeleton[activeBodyLayerKey()] ?? [];
-    const bodyMatrix = !state.showHairLayer
-      ? activeMatrix
-      : rowsToMatrix(bodyRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
+    const bodyMatrix = rowsToMatrix(bodyRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
     drawMatrix(target, bodyMatrix, cellSize, state.appearanceDraft.palette.clothPrimary);
 
     if (state.showHairLayer) {
       const hairRows = state.appearanceDraft.hair[activeHairLayerKey()] ?? [];
-      const hairMatrix = state.showHairLayer
-        ? activeMatrix
-        : rowsToMatrix(hairRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
+      const hairMatrix = rowsToMatrix(hairRows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT);
       drawMatrix(target, hairMatrix, cellSize, state.appearanceDraft.palette.hairPrimary);
     }
   }
@@ -1065,10 +1060,13 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
   const torsoTop = top + headH;
   const torsoX = (width: number, section: "chest" | "waist" | "hip" | "shoulder") => {
     if (!side) return centerX - Math.floor(width / 2);
-    if (state.appearanceFacing === "left") {
-      return section === "hip" ? centerX - width + Math.floor(shoulderW / 2) : centerX - Math.floor(shoulderW / 2);
+    const frontSign = state.appearanceFacing === "left" ? 1 : -1;
+    const anchor = centerX - Math.floor(shoulderW / 2);
+    if (section === "shoulder") return anchor;
+    if (section === "hip") {
+      return frontSign > 0 ? centerX + Math.floor(shoulderW / 2) - width : centerX - Math.floor(shoulderW / 2);
     }
-    return section === "hip" ? centerX - Math.floor(shoulderW / 2) : centerX + Math.floor(shoulderW / 2) - width;
+    return frontSign > 0 ? centerX - Math.floor(shoulderW / 2) : centerX + Math.floor(shoulderW / 2) - width;
   };
   fillOutlineRect(matrix, torsoX(shoulderW, "shoulder"), torsoTop, shoulderW, Math.max(2, Math.round(torsoH * 0.2)));
   fillOutlineRect(matrix, torsoX(chestW, "chest"), torsoTop + Math.round(torsoH * 0.2), chestW, Math.max(3, Math.round(torsoH * 0.35)));
@@ -1077,8 +1075,16 @@ function buildAvatarOutlineMatrix(body: CharacterBodyAppearance, facing: Facing)
 
   const limbTop = torsoTop + 3;
   if (side) {
-    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop, armW, body.upperArmLength);
-    fillOutlineRect(matrix, centerX + Math.floor(shoulderW / 2), limbTop + body.upperArmLength, forearmW, body.forearmLength);
+    const frontSign = state.appearanceFacing === "left" ? 1 : -1;
+    const armGap = 3;
+    const armX = frontSign > 0
+      ? centerX + Math.floor(shoulderW / 2) + armGap
+      : centerX - Math.floor(shoulderW / 2) - armGap - armW;
+    const forearmX = frontSign > 0
+      ? centerX + Math.floor(shoulderW / 2) + armGap
+      : centerX - Math.floor(shoulderW / 2) - armGap - forearmW;
+    fillOutlineRect(matrix, armX, limbTop, armW, body.upperArmLength);
+    fillOutlineRect(matrix, forearmX, limbTop + body.upperArmLength, forearmW, body.forearmLength);
     fillOutlineRect(matrix, centerX - Math.floor(legW / 2), torsoTop + torsoH, legW, body.thighLength);
     fillOutlineRect(matrix, centerX - Math.floor(calfW / 2), torsoTop + torsoH + body.thighLength, calfW, body.calfLength);
   } else {
