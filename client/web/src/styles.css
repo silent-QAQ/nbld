@@ -231,19 +231,20 @@ input {
 
 .appearance-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: 320px 320px 220px;
   gap: 10px;
   align-items: start;
 }
 
 .appearance-left,
+.appearance-center,
 .appearance-right {
   min-width: 0;
 }
 
 .appearance-preview {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
   margin-bottom: 6px;
 }
@@ -272,14 +273,14 @@ input {
 
 .appearance-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 7px;
+  grid-template-columns: 1fr;
+  gap: 4px;
 }
 
 .appearance-palette {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 7px;
+  grid-template-columns: 1fr;
+  gap: 6px;
   margin-top: 6px;
 }
 
@@ -306,7 +307,7 @@ input {
 
 .appearance-field {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 70px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 4px;
   font-size: 10.5px;
@@ -326,6 +327,16 @@ input {
   padding: 1px 6px;
   border-radius: 6px;
   font-size: 11px;
+}
+
+.appearance-editor .appearance-field input[type="range"] {
+  padding: 0;
+}
+
+.appearance-editor .appearance-field output {
+  color: var(--text);
+  font-size: 10px;
+  text-align: right;
 }
 
 .appearance-editor input[type="color"] {
@@ -351,42 +362,37 @@ input {
   line-height: 1.2;
 }
 
-.pixel-editor {
-  display: grid;
-  grid-template-columns: repeat(24, 10px);
-  grid-auto-rows: 10px;
-  align-items: start;
-  justify-content: center;
-  gap: 1px;
-  margin-top: 7px;
-  overflow: auto;
+.pixel-editor-canvas {
+  display: block;
+  width: 300px;
+  height: 600px;
   max-width: 100%;
+  max-height: calc(100dvh - 130px);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  background: #0a0f14;
+  image-rendering: pixelated;
   touch-action: none;
 }
 
 .pixel-tools {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   margin-top: 7px;
 }
 
-.pixel-cell {
-  width: 10px;
-  height: 10px;
-  min-width: 10px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.04);
-  border-radius: 2px;
-  cursor: crosshair;
-  touch-action: none;
+.recent-colors {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
 }
 
-.pixel-cell.filled {
-  background: var(--accent);
-  border-color: rgba(0,0,0,0.22);
+.color-swatch {
+  min-height: 24px;
+  padding: 0;
+  border-radius: 5px;
 }
 
 .character-entry {
