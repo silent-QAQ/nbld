@@ -574,15 +574,15 @@ window.addEventListener("keydown", (event) => {
     debugPanel.classList.toggle("hidden");
     return;
   }
-  if (state.characterId && isMovementKey(event.code)) {
+  if (state.characterId && isGameplayKey(event.code)) {
     event.preventDefault();
     state.pressed.add(event.code);
   }
 });
 window.addEventListener("keyup", (event) => {
+  state.pressed.delete(event.code);
   if (state.menuOpen || state.inventoryOpen) return;
   if (isTypingTarget(event.target)) return;
-  state.pressed.delete(event.code);
 });
 resizeCanvas();
 restoreSessionFromStorage();
@@ -2482,7 +2482,7 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   if (state.pressed.has(state.keyBindings.moveDown) || state.pressed.has("ArrowDown")) dy -= 1;
 
   const moving = dx !== 0 || dy !== 0;
-  const wantsSprint = state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftRight");
+  const wantsSprint = isSprintPressed();
   const canSprint = moving && wantsSprint && state.currentStamina > 0;
   updateStamina(deltaSeconds, now, canSprint, staminaMax);
 
@@ -2503,7 +2503,7 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   const occupied = positionToOccupiedTile(state.player);
   const chunkKey = `${state.mapId}:${worldToChunk(occupied.x)}:${worldToChunk(occupied.y)}`;
   const movedToNewChunk = chunkKey !== state.lastChunkKey;
-  const idleRefreshDue = state.pressed.size === 0 && now - state.lastChunkRefreshAt > IDLE_CHUNK_REFRESH_INTERVAL_MS;
+  const idleRefreshDue = !isMovementPressed() && now - state.lastChunkRefreshAt > IDLE_CHUNK_REFRESH_INTERVAL_MS;
   const nextChunkWindowKey = getPreferredChunkWindowKey(state.player);
   const shouldPrefetchChunkWindow = nextChunkWindowKey !== state.lastChunkWindowKey;
   const renderWindowMissingChunks = hasMissingChunksInRenderWindow();
@@ -3087,7 +3087,7 @@ function applyLimbDisableMode(state: LimbMotionState, mode: LimbDisableMode): Li
 }
 
 function getLimbMotionState(local: boolean): LimbMotionState {
-  const moving = local ? state.characterId !== "" && state.pressed.size > 0 : true;
+  const moving = local ? state.characterId !== "" && isMovementPressed() : true;
   if (!moving) {
     return applyLimbDisableMode(IDLE_LIMB_STATE, "none");
   }
@@ -3791,6 +3791,29 @@ function modFloor(value: number, modulo: number): number {
 
 function isMovementKey(code: string): boolean {
   return code === "KeyW" || code === "KeyA" || code === "KeyS" || code === "KeyD" || code === "ArrowUp" || code === "ArrowLeft" || code === "ArrowDown" || code === "ArrowRight";
+}
+
+function isGameplayKey(code: string): boolean {
+  return isMovementKey(code) || isSprintKey(code);
+}
+
+function isSprintKey(code: string): boolean {
+  return code === state.keyBindings.sprint || code === "ShiftLeft" || code === "ShiftRight";
+}
+
+function isSprintPressed(): boolean {
+  return state.pressed.has(state.keyBindings.sprint) || state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight");
+}
+
+function isMovementPressed(): boolean {
+  return state.pressed.has(state.keyBindings.moveLeft)
+    || state.pressed.has(state.keyBindings.moveRight)
+    || state.pressed.has(state.keyBindings.moveUp)
+    || state.pressed.has(state.keyBindings.moveDown)
+    || state.pressed.has("ArrowLeft")
+    || state.pressed.has("ArrowRight")
+    || state.pressed.has("ArrowUp")
+    || state.pressed.has("ArrowDown");
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
