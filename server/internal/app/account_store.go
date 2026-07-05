@@ -517,6 +517,7 @@ func validateHexColor(value string) bool {
 }
 
 func validateHairLayer(rows []string) bool {
+	const pixelSymbols = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	if len(rows) > 60 {
 		return false
 	}
@@ -525,7 +526,7 @@ func validateHairLayer(rows []string) bool {
 			return false
 		}
 		for _, ch := range row {
-			if ch != '0' && ch != '1' {
+			if !strings.ContainsRune(pixelSymbols, ch) {
 				return false
 			}
 		}

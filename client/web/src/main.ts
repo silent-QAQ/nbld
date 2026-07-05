@@ -31,6 +31,11 @@ const AVATAR_EDITOR_WIDTH = 30;
 const AVATAR_EDITOR_HEIGHT = 60;
 const AVATAR_EDITOR_MAX_CELL_SIZE = 10;
 const AVATAR_EDITOR_MIN_CELL_SIZE = 5;
+const PIXEL_SYMBOLS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const EMPTY_PIXEL_SYMBOL = "0";
+const LEGACY_FILLED_PIXEL_SYMBOL = "1";
+const SWATCH_SYMBOL_OFFSET = 2;
+const MAX_PIXEL_SWATCHES = PIXEL_SYMBOLS.length - SWATCH_SYMBOL_OFFSET;
 const PLAYER_COLLISION_SIZE_TILES = 1;
 const COLLISION_EPSILON = 0.0001;
 
@@ -677,6 +682,10 @@ function setActiveLayerRows(rows: string[]): void {
 function applyPaintColorToPalette(color: string): void {
   if (!state.appearanceDraft) return;
   const normalized = normalizeHexColor(color, state.paintColor);
+  state.appearanceDraft.palette.pixelSwatches = ensurePixelSwatchColor(
+    state.appearanceDraft.palette.pixelSwatches,
+    normalized,
+  );
   if (isEditingHairLayer()) {
     state.appearanceDraft.palette.hairPrimary = normalized;
   } else {
@@ -707,7 +716,7 @@ function maskBodyRows(rows: string[]): string[] {
 function maskRowsWithMatrix(rows: string[], mask: boolean[][]): string[] {
   return trimTrailingEmptyRows(
     rowsToMatrix(rows, AVATAR_EDITOR_WIDTH, AVATAR_EDITOR_HEIGHT)
-      .map((row, y) => row.map((cell, x) => (cell && mask[y][x] ? "1" : "0")).join("").replace(/0+$/g, "")),
+      .map((row, y) => row.map((cell, x) => (cell !== EMPTY_PIXEL_SYMBOL && mask[y][x] ? cell : EMPTY_PIXEL_SYMBOL)).join("").replace(/0+$/g, "")),
   );
 }
 
@@ -715,6 +724,35 @@ function trimTrailingEmptyRows(rows: string[]): string[] {
   let end = rows.length;
   while (end > 0 && rows[end - 1].length === 0) end -= 1;
   return rows.slice(0, end);
+}
+
+function ensurePixelSwatchColor(swatches: string[] | undefined, color: string): string[] {
+  const normalized = normalizeHexColor(color, "#ffffff");
+  const next = [...(swatches ?? [])];
+  const existing = next.findIndex((entry) => entry.toLowerCase() === normalized.toLowerCase());
+  if (existing >= 0) return next;
+  if (next.length < MAX_PIXEL_SWATCHES) {
+    next.push(normalized);
+    return next;
+  }
+  next[next.length - 1] = normalized;
+  return next;
+}
+
+function pixelSymbolToColor(symbol: string, swatches: string[]): string {
+  if (symbol === EMPTY_PIXEL_SYMBOL) return "transparent";
+  if (symbol === LEGACY_FILLED_PIXEL_SYMBOL) return swatches[0] ?? "#ff4040";
+  const index = PIXEL_SYMBOLS.indexOf(symbol) - SWATCH_SYMBOL_OFFSET;
+  if (index < 0) return swatches[0] ?? "#ff4040";
+  return swatches[index] ?? swatches[0] ?? "#ff4040";
+}
+
+function getCurrentPaintSymbol(): string {
+  const appearance = state.appearanceDraft ?? defaultAppearance();
+  appearance.palette.pixelSwatches = ensurePixelSwatchColor(appearance.palette.pixelSwatches, state.paintColor);
+  const index = appearance.palette.pixelSwatches.findIndex((color) => color.toLowerCase() === state.paintColor.toLowerCase());
+  const symbol = PIXEL_SYMBOLS[index + SWATCH_SYMBOL_OFFSET] ?? PIXEL_SYMBOLS[SWATCH_SYMBOL_OFFSET];
+  return symbol;
 }
 
 function sanitizeAppearanceBodyLayers(appearance: CharacterAppearance): CharacterAppearance {
@@ -811,7 +849,7 @@ function bodyControlFields(page: BodyControlPage): Array<[keyof CharacterBodyApp
 }
 
 function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
-  state.paintColor = isEditingHairLayer() ? palette.hairPrimary : palette.clothPrimary;
+  state.paintColor = normalizeHexColor(state.paintColor, palette.pixelSwatches[0] ?? palette.clothPrimary);
   appearancePalette.innerHTML = `
     <label class="appearance-field">
       <span>当前颜料</span>
@@ -824,7 +862,7 @@ function renderPaletteControls(palette: CharacterAppearance["palette"]): void {
     state.paintColor = input.value;
     applyPaintColorToPalette(input.value);
     pushRecentPaintColor(input.value);
-    renderPixelEditorGrid(getActiveLayerRows());
+    renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
     renderPixelTools();
   });
 }
@@ -888,7 +926,7 @@ function renderPixelTools(): void {
       state.paintColor = color;
       applyPaintColorToPalette(color);
       renderPaletteControls((state.appearanceDraft ?? defaultAppearance()).palette);
-      renderPixelEditorGrid(getActiveLayerRows());
+      renderPixelTools();
     });
   }
 }
@@ -913,7 +951,7 @@ function readAppearanceFromEditor(): CharacterAppearance {
 
 function normalizeHairRows(rows: string[]): string[] {
   return rows
-    .map((row) => row.replace(/[^01]/g, ""))
+    .map((row) => row.replace(new RegExp(`[^${PIXEL_SYMBOLS}]`, "g"), ""))
     .slice(0, AVATAR_EDITOR_HEIGHT)
     .map((row) => row.slice(0, AVATAR_EDITOR_WIDTH));
 }
@@ -932,20 +970,20 @@ function getAvatarEditorCellSize(): number {
   );
 }
 
-function paintPixelMatrixCell(matrix: boolean[][], x: number, y: number, mask: boolean[][]): boolean {
+function paintPixelMatrixCell(matrix: string[][], x: number, y: number, mask: boolean[][]): boolean {
   if (x < 0 || x >= AVATAR_EDITOR_WIDTH || y < 0 || y >= AVATAR_EDITOR_HEIGHT) return false;
   if (!isEditingHairLayer() && !mask[y]?.[x]) return false;
   if (state.paintMode === "bucket") {
-    floodFillMatrix(matrix, x, y, !matrix[y][x], isEditingHairLayer() ? undefined : mask);
+    floodFillMatrix(matrix, x, y, getCurrentPaintSymbol(), isEditingHairLayer() ? undefined : mask);
     return true;
   }
-  const nextValue = state.paintMode === "fill";
+  const nextValue = state.paintMode === "erase" ? EMPTY_PIXEL_SYMBOL : getCurrentPaintSymbol();
   if (matrix[y][x] === nextValue) return false;
   matrix[y][x] = nextValue;
   return true;
 }
 
-function buildEditorDisplayMatrix(): { outline: boolean[][]; body: boolean[][]; hair: boolean[][] } {
+function buildEditorDisplayMatrix(): { outline: boolean[][]; body: string[][]; hair: string[][] } {
   const outline = buildAvatarOutlineMatrix((state.appearanceDraft ?? defaultAppearance()).body, state.appearanceFacing);
   const bodyRows = maskBodyRows(state.appearanceDraft?.skeleton[activeBodyLayerKey()] ?? []);
   if (state.appearanceDraft) state.appearanceDraft.skeleton[activeBodyLayerKey()] = bodyRows;
@@ -961,7 +999,7 @@ function renderPixelEditorGrid(rows: string[]): void {
   const normalized = normalizeHairRows(rows);
   const matrix = Array.from({ length: AVATAR_EDITOR_HEIGHT }, (_, y) => {
     const row = normalized[y] ?? "";
-    return Array.from({ length: AVATAR_EDITOR_WIDTH }, (_, x) => row[x] === "1");
+    return Array.from({ length: AVATAR_EDITOR_WIDTH }, (_, x) => row[x] ?? EMPTY_PIXEL_SYMBOL);
   });
   const cellSize = getAvatarEditorCellSize();
   const mask = bodyPaintMask();
@@ -976,14 +1014,16 @@ function renderPixelEditorGrid(rows: string[]): void {
       const x = Number(cell.dataset.x);
       const y = Number(cell.dataset.y);
       const outlineFilled = nextDisplay.outline[y]?.[x] ?? false;
-      const bodyFilled = nextDisplay.body[y]?.[x] ?? false;
-      const hairFilled = nextDisplay.hair[y]?.[x] ?? false;
+      const bodySymbol = nextDisplay.body[y]?.[x] ?? EMPTY_PIXEL_SYMBOL;
+      const hairSymbol = nextDisplay.hair[y]?.[x] ?? EMPTY_PIXEL_SYMBOL;
+      const bodyFilled = bodySymbol !== EMPTY_PIXEL_SYMBOL;
+      const hairFilled = hairSymbol !== EMPTY_PIXEL_SYMBOL;
       cell.classList.toggle("outline", outlineFilled);
       cell.classList.toggle("body-filled", bodyFilled);
       cell.classList.toggle("hair-filled", hairFilled && state.showHairLayer);
       cell.classList.toggle("blocked", !isEditingHairLayer() && !outlineFilled);
-      cell.style.setProperty("--body-color", state.appearanceDraft?.palette.clothPrimary ?? "#ff4040");
-      cell.style.setProperty("--hair-color", state.appearanceDraft?.palette.hairPrimary ?? "#2d1a13");
+      cell.style.setProperty("--body-color", pixelSymbolToColor(bodySymbol, state.appearanceDraft?.palette.pixelSwatches ?? []));
+      cell.style.setProperty("--hair-color", pixelSymbolToColor(hairSymbol, state.appearanceDraft?.palette.pixelSwatches ?? []));
     }
   };
 
@@ -1002,9 +1042,13 @@ function renderPixelEditorGrid(rows: string[]): void {
       cell.dataset.x = String(x);
       cell.dataset.y = String(y);
       cell.setAttribute("draggable", "false");
-      cell.addEventListener("click", (event) => {
+      cell.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         event.stopPropagation();
+        paintAt(x, y);
+      });
+      cell.addEventListener("pointerenter", (event) => {
+        if ((event.buttons & 1) !== 1) return;
         paintAt(x, y);
       });
       fragment.appendChild(cell);
@@ -1015,11 +1059,11 @@ function renderPixelEditorGrid(rows: string[]): void {
   repaintGrid();
 }
 
-function updateDraftHairFromMatrix(matrix: boolean[][]): void {
+function updateDraftHairFromMatrix(matrix: string[][]): void {
   if (!state.appearanceDraft) return;
   const outline = buildAvatarOutlineMatrix(state.appearanceDraft.body, state.appearanceFacing);
   const rows = trimTrailingEmptyRows(
-    matrix.map((row, y) => row.map((cell, x) => (cell && (isEditingHairLayer() || outline[y][x]) ? "1" : "0")).join("").replace(/0+$/g, "")),
+    matrix.map((row, y) => row.map((cell, x) => (cell !== EMPTY_PIXEL_SYMBOL && (isEditingHairLayer() || outline[y][x]) ? cell : EMPTY_PIXEL_SYMBOL)).join("").replace(/0+$/g, "")),
   );
   setActiveLayerRows(rows);
 }
@@ -1030,7 +1074,7 @@ function applyPixelTool(tool: string): void {
 
   switch (tool) {
     case "clear":
-      for (const row of matrix) row.fill(false);
+      for (const row of matrix) row.fill(EMPTY_PIXEL_SYMBOL);
       break;
     case "export-json":
       void copyTextToClipboard(JSON.stringify(normalizeAppearance(state.appearanceDraft), null, 2));
@@ -1050,15 +1094,15 @@ function applyPixelTool(tool: string): void {
   renderPixelEditorGrid(getActiveLayerRows());
 }
 
-function rowsToMatrix(rows: string[], width: number, height: number): boolean[][] {
+function rowsToMatrix(rows: string[], width: number, height: number): string[][] {
   const normalized = normalizeHairRows(rows);
   return Array.from({ length: height }, (_, y) => {
     const row = normalized[y] ?? "";
-    return Array.from({ length: width }, (_, x) => row[x] === "1");
+    return Array.from({ length: width }, (_, x) => row[x] ?? EMPTY_PIXEL_SYMBOL);
   });
 }
 
-function floodFillMatrix(matrix: boolean[][], startX: number, startY: number, value: boolean, mask?: boolean[][]): void {
+function floodFillMatrix(matrix: string[][], startX: number, startY: number, value: string, mask?: boolean[][]): void {
   if (mask && !mask[startY]?.[startX]) return;
   const target = matrix[startY]?.[startX];
   if (target === undefined || target === value) return;
@@ -1174,7 +1218,7 @@ async function importAppearanceFile(file: File): Promise<void> {
         const offset = (y * AVATAR_EDITOR_WIDTH + x) * 4;
         const alpha = pixels[offset + 3];
         const bright = pixels[offset] + pixels[offset + 1] + pixels[offset + 2];
-        row += alpha > 32 && bright > 48 ? "1" : "0";
+        row += alpha > 32 && bright > 48 ? getCurrentPaintSymbol() : EMPTY_PIXEL_SYMBOL;
       }
       return row.replace(/0+$/g, "");
     }));
@@ -1196,8 +1240,10 @@ function exportActiveLayerPng(): void {
     ? (state.appearanceDraft?.palette.hairPrimary ?? state.paintColor)
     : (state.appearanceDraft?.palette.clothPrimary ?? state.paintColor);
   matrix.forEach((row, y) => {
-    row.forEach((filled, x) => {
-      if (filled) outputCtx.fillRect(x, y, 1, 1);
+    row.forEach((symbol, x) => {
+      if (symbol === EMPTY_PIXEL_SYMBOL) return;
+      outputCtx.fillStyle = pixelSymbolToColor(symbol, state.appearanceDraft?.palette.pixelSwatches ?? []);
+      outputCtx.fillRect(x, y, 1, 1);
     });
   });
   const link = document.createElement("a");
@@ -1309,6 +1355,12 @@ function defaultAppearance(): CharacterAppearance {
       clothShadow: "#b42222",
       metalPrimary: "#cfd8e3",
       metalShadow: "#7e8794",
+      pixelSwatches: [
+        "#ff4040", "#b42222", "#f2c199", "#d89b72", "#2d1a13",
+        "#140b08", "#cfd8e3", "#7e8794", "#ffffff", "#000000",
+        "#d9b35f", "#8fb6ff", "#5cc84a", "#2f6e35", "#9b6b3d",
+        "#7a7f6a", "#67d1ff", "#ff77aa", "#8d6bff", "#f5e663",
+      ],
     },
   };
 }
@@ -1383,6 +1435,10 @@ function normalizeAppearance(input: Partial<CharacterAppearance> | CharacterAppe
       clothShadow: normalizeHexColor(palette.clothShadow, fallback.palette.clothShadow),
       metalPrimary: normalizeHexColor(palette.metalPrimary, fallback.palette.metalPrimary),
       metalShadow: normalizeHexColor(palette.metalShadow, fallback.palette.metalShadow),
+      pixelSwatches: (palette.pixelSwatches ?? fallback.palette.pixelSwatches)
+        .filter((color): color is string => typeof color === "string")
+        .map((color) => normalizeHexColor(color, fallback.palette.clothPrimary))
+        .slice(0, 32),
     },
   };
 
@@ -1945,10 +2001,10 @@ function renderAvatarSkeleton(
 
   const skinPixel = state.tileScale / TILE_TEXTURE_SIZE_PX;
   const imageTopY = screen.y - AVATAR_EDITOR_HEIGHT * skinPixel;
-  drawAvatarImageLayer(target, screen.x, imageTopY, backHairLayer, palette.hairPrimary, palette.hairShadow);
+  drawAvatarImageLayer(target, screen.x, imageTopY, backHairLayer, appearance.palette.pixelSwatches, palette.hairPrimary, palette.hairShadow);
 
   if (skinLayer.length > 0) {
-    drawAvatarImageLayer(target, screen.x, imageTopY, skinLayer, palette.clothPrimary, palette.clothShadow);
+    drawAvatarImageLayer(target, screen.x, imageTopY, skinLayer, appearance.palette.pixelSwatches, palette.clothPrimary, palette.clothShadow);
   } else {
     drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
     drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary, [], scale);
@@ -1988,7 +2044,7 @@ function renderAvatarSkeleton(
     drawPixelRect(target, screen.x - legWidth - 1, topY + headHeight + torsoHeight + legHeight - 4, legWidth * 2 + 2, 4, palette.metalShadow, palette.metalPrimary);
   }
 
-  drawAvatarImageLayer(target, screen.x, imageTopY, frontHairLayer, palette.hairPrimary, palette.hairShadow);
+  drawAvatarImageLayer(target, screen.x, imageTopY, frontHairLayer, appearance.palette.pixelSwatches, palette.hairPrimary, palette.hairShadow);
 }
 
 function drawHeadLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, width: number, height: number, fill: string, stroke: string): void {
@@ -2008,15 +2064,15 @@ function drawHairLayer(target: CanvasRenderingContext2D, centerX: number, topY: 
   });
 }
 
-function drawAvatarImageLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, rows: string[] | undefined, fill: string, stroke: string): void {
+function drawAvatarImageLayer(target: CanvasRenderingContext2D, centerX: number, topY: number, rows: string[] | undefined, swatches: string[], fallbackFill: string, stroke: string): void {
   if (!rows || rows.length === 0) return;
   const pixel = state.tileScale / TILE_TEXTURE_SIZE_PX;
   const width = AVATAR_EDITOR_WIDTH * pixel;
   const startX = centerX - width / 2;
   rows.slice(0, AVATAR_EDITOR_HEIGHT).forEach((row, y) => {
     [...row.slice(0, AVATAR_EDITOR_WIDTH)].forEach((ch, x) => {
-      if (ch !== "1") return;
-      drawPixelRect(target, startX + x * pixel, topY + y * pixel, pixel, pixel, fill, stroke);
+      if (ch === EMPTY_PIXEL_SYMBOL) return;
+      drawPixelRect(target, startX + x * pixel, topY + y * pixel, pixel, pixel, pixelSymbolToColor(ch, swatches) || fallbackFill, stroke);
     });
   });
 }

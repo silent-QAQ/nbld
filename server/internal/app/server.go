@@ -1629,6 +1629,7 @@ func toProtocolAppearance(appearance CharacterAppearance) protocol.CharacterAppe
 			ClothShadow:  appearance.Palette.ClothShadow,
 			MetalPrimary: appearance.Palette.MetalPrimary,
 			MetalShadow:  appearance.Palette.MetalShadow,
+			PixelSwatches: appearance.Palette.PixelSwatches,
 		},
 	}
 }
@@ -1838,6 +1839,7 @@ func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) Charact
 			ClothShadow:  appearance.Palette.ClothShadow,
 			MetalPrimary: appearance.Palette.MetalPrimary,
 			MetalShadow:  appearance.Palette.MetalShadow,
+			PixelSwatches: appearance.Palette.PixelSwatches,
 		},
 	}
 	normalizeDomainAppearanceDefaults(&out)
@@ -1846,6 +1848,7 @@ func protocolAppearanceToDomain(appearance protocol.CharacterAppearance) Charact
 
 func normalizeDomainAppearanceDefaults(appearance *CharacterAppearance) {
 	defaults := defaultCharacterAppearance().Body
+	paletteDefaults := defaultCharacterAppearance().Palette
 	body := &appearance.Body
 	if body.HeadWidth == 0 {
 		body.HeadWidth = defaults.HeadWidth
@@ -1864,5 +1867,8 @@ func normalizeDomainAppearanceDefaults(appearance *CharacterAppearance) {
 	}
 	if body.CalfSideWidth == 0 {
 		body.CalfSideWidth = body.CalfWidth
+	}
+	if len(appearance.Palette.PixelSwatches) == 0 {
+		appearance.Palette.PixelSwatches = paletteDefaults.PixelSwatches
 	}
 }
