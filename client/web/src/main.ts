@@ -22,6 +22,7 @@ const PLAYER_WALK_SPEED_TILES_PER_SECOND = 4;
 const PLAYER_SPRINT_SPEED_TILES_PER_SECOND = 6;
 const IDLE_CHUNK_REFRESH_INTERVAL_MS = 5000;
 const MOVE_SEND_INTERVAL_MS = 90;
+const HUD_REFRESH_INTERVAL_MS = 120;
 const TARGET_VISIBLE_TILES_X = 40;
 const TARGET_VISIBLE_TILES_Y = 22.5;
 const RENDER_TILE_WINDOW_X = 120;
@@ -108,6 +109,12 @@ type AppState = {
   lastChunkWindowKey: string;
   lastChunkRefreshAt: number;
   lastMoveSendAt: number;
+  lastHudUpdateAt: number;
+  lastFrameMs: number;
+  lastChunkRefreshMs: number;
+  lastChunkRefreshCount: number;
+  lastChunkRenderMs: number;
+  lastChunkRenderCount: number;
   chunkRefreshInFlight: boolean;
   currentTile?: ChunkTile;
   availableCharacters: CharacterSummary[];
@@ -275,6 +282,12 @@ const state: AppState = {
   lastChunkWindowKey: "",
   lastChunkRefreshAt: 0,
   lastMoveSendAt: 0,
+  lastHudUpdateAt: 0,
+  lastFrameMs: 0,
+  lastChunkRefreshMs: 0,
+  lastChunkRefreshCount: 0,
+  lastChunkRenderMs: 0,
+  lastChunkRenderCount: 0,
   chunkRefreshInFlight: false,
   availableCharacters: [],
   selectedCharacterId: "",
@@ -1756,28 +1769,46 @@ function handleServerMessage(message: WSServerMessage): void {
 }
 
 let lastFrameAt = performance.now();
-const CHUNK_RENDER_BUDGET_PER_FRAME = 2;
+const CHUNK_RENDER_BUDGET_PER_FRAME = 1;
 
 function loop(now: number): void {
   const deltaSeconds = Math.min(0.05, (now - lastFrameAt) / 1000);
+  state.lastFrameMs = now - lastFrameAt;
   lastFrameAt = now;
 
   processPendingChunkRenders(CHUNK_RENDER_BUDGET_PER_FRAME);
   updatePlayer(deltaSeconds, now);
   updatePlayerVisual(deltaSeconds);
   updateCamera(deltaSeconds);
-  updateHud();
+  if (now - state.lastHudUpdateAt >= HUD_REFRESH_INTERVAL_MS) {
+    updateHud();
+    state.lastHudUpdateAt = now;
+  }
   draw();
 
   requestAnimationFrame(loop);
 }
 
 function processPendingChunkRenders(limit: number): void {
+  const startedAt = performance.now();
+  let processed = 0;
   for (let index = 0; index < limit && state.pendingChunkRenders.length > 0; index += 1) {
+    state.pendingChunkRenders.sort((left, right) => {
+      const leftCenterX = left.snapshot.coord.chunkX * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const leftCenterY = left.snapshot.coord.chunkY * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const rightCenterX = right.snapshot.coord.chunkX * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const rightCenterY = right.snapshot.coord.chunkY * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const leftDistance = Math.hypot(leftCenterX - state.player.x, leftCenterY - state.player.y);
+      const rightDistance = Math.hypot(rightCenterX - state.player.x, rightCenterY - state.player.y);
+      return leftDistance - rightDistance;
+    });
     const next = state.pendingChunkRenders.shift();
     if (!next) break;
     state.chunks.set(next.key, renderChunk(next.snapshot));
+    processed += 1;
   }
+  state.lastChunkRenderCount = processed;
+  state.lastChunkRenderMs = processed > 0 ? performance.now() - startedAt : 0;
 }
 
 function updatePlayer(deltaSeconds: number, now: number): void {
@@ -1868,9 +1899,12 @@ async function refreshChunks(force: boolean): Promise<void> {
   const previousStatus = state.status;
   state.chunkRefreshInFlight = true;
   state.status = "加载区块中";
+  const startedAt = performance.now();
   try {
     const windowData = await state.api.chunks(state.token, state.player);
     applyChunkWindow(windowData);
+    state.lastChunkRefreshCount = windowData.chunks.length;
+    state.lastChunkRefreshMs = performance.now() - startedAt;
     state.status = "已连接";
   } catch (error) {
     state.status = previousStatus;
@@ -1899,6 +1933,9 @@ function applyChunkWindow(windowData: ChunkWindowResponse): void {
     } else {
       state.pendingChunkRenders.push({ key, snapshot: chunk });
     }
+  }
+  if (state.pendingChunkRenders.length > 48) {
+    state.pendingChunkRenders = state.pendingChunkRenders.slice(-48);
   }
   state.currentTile = findTileAt(state.player.x, state.player.y);
 }
@@ -2264,6 +2301,9 @@ function updateHud(): void {
   debugPanel.innerHTML = `
     <div><b>已加载区块</b> ${state.chunks.size}　<b>缩放</b> ${state.tileScale.toFixed(1)}px/格</div>
     <div><b>实际渲染</b> ${RENDER_TILE_WINDOW_X} x ${RENDER_TILE_WINDOW_Y} 格　<b>当前可见</b> ${visibleTilesX} x ${visibleTilesY} 格</div>
+    <div><b>帧时间</b> ${state.lastFrameMs.toFixed(2)} ms　<b>待渲染区块</b> ${state.pendingChunkRenders.length}</div>
+    <div><b>最近区块刷新</b> ${state.lastChunkRefreshMs.toFixed(2)} ms / ${state.lastChunkRefreshCount} 块</div>
+    <div><b>最近区块渲染</b> ${state.lastChunkRenderMs.toFixed(2)} ms / ${state.lastChunkRenderCount} 块</div>
     <div><b>主要地形</b> ${escapeHtml(dominant || "-")}</div>
     <div><b>最后错误</b> ${escapeHtml(state.lastError || "无")}</div>
   `;
