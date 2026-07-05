@@ -95,6 +95,8 @@ type AppState = {
   tileScale: number;
   chunks: Map<string, ChunkRender>;
   players: Map<string, WorldPlayer>;
+  remoteVisuals: Map<string, Position>;
+  remoteFacing: Map<string, Facing>;
   pressed: Set<string>;
   assets?: AssetMaps;
   status: string;
@@ -259,6 +261,8 @@ const state: AppState = {
   tileScale: 1,
   chunks: new Map(),
   players: new Map(),
+  remoteVisuals: new Map(),
+  remoteFacing: new Map(),
   pressed: new Set(),
   status: "未连接",
   socketStatus: "未连接",
@@ -1509,6 +1513,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     state.worldId = entered.worldId;
     state.mapId = entered.mapId || "map_0_0";
     state.player = { ...entered.position };
+    state.playerVisual = { ...entered.position };
     state.camera = { ...entered.position };
     state.players.clear();
     state.chunks.clear();
@@ -1665,13 +1670,23 @@ function handleServerMessage(message: WSServerMessage): void {
     state.socketStatus = "认证完成";
     if (message.players) {
       state.players.clear();
+      state.remoteVisuals.clear();
+      state.remoteFacing.clear();
       for (const player of message.players) state.players.set(player.playerId, player);
     }
     return;
   }
 
   if (message.type === "player_moved" && message.playerId && message.position) {
+    const previous = state.players.get(message.playerId);
+    if (previous) {
+      state.remoteFacing.set(
+        message.playerId,
+        facingFromVector(message.position.x - previous.position.x, message.position.y - previous.position.y, state.remoteFacing.get(message.playerId) ?? "front"),
+      );
+    }
     const player: WorldPlayer = {
+      ...(previous ?? {}),
       playerId: message.playerId,
       characterId: message.characterId,
       characterName: message.characterName,
@@ -1679,9 +1694,11 @@ function handleServerMessage(message: WSServerMessage): void {
       position: message.position,
     };
     state.players.set(player.playerId, player);
+    if (!state.remoteVisuals.has(player.playerId)) {
+      state.remoteVisuals.set(player.playerId, { ...message.position });
+    }
     if (message.playerId === state.playerId) {
       state.mapId = message.mapId || state.mapId;
-      state.player = { ...message.position };
     }
     return;
   }
@@ -1689,6 +1706,7 @@ function handleServerMessage(message: WSServerMessage): void {
   if (message.type === "map_transition" && message.playerId === state.playerId && message.position) {
     state.mapId = message.mapId || state.mapId;
     state.player = { ...message.position };
+    state.playerVisual = { ...message.position };
     state.camera = { ...message.position };
     state.chunks.clear();
     state.lastChunkKey = "";
@@ -1708,6 +1726,7 @@ function loop(now: number): void {
   lastFrameAt = now;
 
   updatePlayer(deltaSeconds, now);
+  updatePlayerVisual(deltaSeconds);
   updateCamera(deltaSeconds);
   updateHud();
   draw();
@@ -1730,6 +1749,7 @@ function updatePlayer(deltaSeconds: number, now: number): void {
     const speed = state.pressed.has("ShiftLeft") || state.pressed.has("ShiftRight")
       ? PLAYER_SPRINT_SPEED_TILES_PER_SECOND
       : PLAYER_WALK_SPEED_TILES_PER_SECOND;
+    state.facing = facingFromVector(dx / length, dy / length, state.facing);
     const deltaX = (dx / length) * speed * deltaSeconds;
     const deltaY = (dy / length) * speed * deltaSeconds;
     state.player = movePlayerWithCollision(state.player, deltaX, deltaY);
@@ -1755,6 +1775,30 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   }
 
   state.currentTile = findTileAt(state.player.x, state.player.y);
+}
+
+function updatePlayerVisual(deltaSeconds: number): void {
+  const stiffness = 1 - Math.pow(0.0001, deltaSeconds);
+  state.playerVisual.x += (state.player.x - state.playerVisual.x) * stiffness;
+  state.playerVisual.y += (state.player.y - state.playerVisual.y) * stiffness;
+
+  for (const [playerId, player] of state.players) {
+    if (playerId === state.playerId || player.mapId !== state.mapId) continue;
+    const visual = state.remoteVisuals.get(playerId) ?? { ...player.position };
+    visual.x += (player.position.x - visual.x) * stiffness;
+    visual.y += (player.position.y - visual.y) * stiffness;
+    state.remoteVisuals.set(playerId, visual);
+  }
+}
+
+function facingFromVector(dx: number, dy: number, fallback: Facing): Facing {
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? "right" : "left";
+  }
+  if (Math.abs(dy) > 0) {
+    return dy > 0 ? "back" : "front";
+  }
+  return fallback;
 }
 
 function sendMove(): void {
@@ -1893,8 +1937,8 @@ function renderChunk(snapshot: ChunkSnapshot): ChunkRender {
 
 function updateCamera(deltaSeconds: number): void {
   const stiffness = 1 - Math.pow(0.001, deltaSeconds);
-  state.camera.x += (state.player.x - state.camera.x) * stiffness;
-  state.camera.y += (state.player.y - state.camera.y) * stiffness;
+  state.camera.x += (state.playerVisual.x - state.camera.x) * stiffness;
+  state.camera.y += (state.playerVisual.y - state.camera.y) * stiffness;
 }
 
 function draw(): void {
@@ -1937,13 +1981,14 @@ function drawChunkGrid(x: number, y: number, size: number): void {
 }
 
 function drawLocalPlayer(): void {
-  const screen = worldToScreen(state.player.x, state.player.y);
+  const screen = worldToScreen(state.playerVisual.x, state.playerVisual.y);
   const character = state.availableCharacters.find((item) => item.id === state.characterId);
-  renderAvatarSkeleton(ctx, screen, character, "front", true, getLimbMotionState(true));
+  renderAvatarSkeleton(ctx, screen, character, state.facing, true, getLimbMotionState(true));
 }
 
 function drawRemotePlayer(player: WorldPlayer): void {
-  const screen = worldToScreen(player.position.x, player.position.y);
+  const visual = state.remoteVisuals.get(player.playerId) ?? player.position;
+  const screen = worldToScreen(visual.x, visual.y);
   const character = state.availableCharacters.find((item) => item.id === player.characterId)
     ?? (player.characterId
       ? {
@@ -1960,7 +2005,8 @@ function drawRemotePlayer(player: WorldPlayer): void {
           updatedAt: "",
         }
       : undefined);
-  renderAvatarSkeleton(ctx, screen, character, "front", false, getLimbMotionState(false));
+  const facing = state.remoteFacing.get(player.playerId) ?? "front";
+  renderAvatarSkeleton(ctx, screen, character, facing, false, getLimbMotionState(false));
   ctx.fillStyle = "#ffffff";
   ctx.font = "12px Microsoft YaHei, sans-serif";
   ctx.fillText(player.characterName || player.playerId, screen.x + 18, screen.y - 42);
@@ -2080,15 +2126,10 @@ function drawAvatarImageLayer(target: CanvasRenderingContext2D, centerX: number,
   const pixel = state.tileScale / TILE_TEXTURE_SIZE_PX;
   const width = AVATAR_EDITOR_WIDTH * pixel;
   const startX = centerX - width / 2;
-  const drawStroke = pixel >= 3;
   rows.slice(0, AVATAR_EDITOR_HEIGHT).forEach((row, y) => {
     [...row.slice(0, AVATAR_EDITOR_WIDTH)].forEach((ch, x) => {
       if (ch === EMPTY_PIXEL_SYMBOL) return;
       const fill = pixelSymbolToColor(ch, swatches) || fallbackFill;
-      if (drawStroke) {
-        drawPixelRect(target, startX + x * pixel, topY + y * pixel, pixel, pixel, fill, stroke);
-        return;
-      }
       target.fillStyle = fill;
       target.fillRect(startX + x * pixel, topY + y * pixel, pixel, pixel);
     });
