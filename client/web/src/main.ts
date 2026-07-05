@@ -85,6 +85,8 @@ type AvatarLayerRect = { x: number; y: number; width: number; height: number };
 type AvatarLimbPart = { source: AvatarLayerRect; target: AvatarLayerRect };
 type AvatarLimbSegment = {
   poseKey: keyof LimbMotionState;
+  depth: "behind" | "front";
+  alpha: number;
   anchor: { x: number; y: number };
   parts: AvatarLimbPart[];
 };
@@ -1326,14 +1328,12 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
   const headH = clamp(Math.round(9 * body.headScale / 100), 7, 13);
   const headW = side ? body.headSideWidth : body.headWidth;
   const torsoH = clamp(body.torsoHeight, 14, 26);
-  const legH = Math.max(8, totalHeight - headH - torsoH);
   const shoulderW = side ? clamp(body.sideWidth, 10, 16) : clamp(body.frontShoulderWidth, 22, 28);
   const chestW = side ? body.chestDepth : body.chestWidth;
   const waistW = side ? body.waistDepth : body.waistWidth;
   const hipW = side ? body.hipDepth : body.hipWidth;
   const armW = clamp(side ? body.upperArmSideWidth : body.upperArmWidth, 2, 8);
   const forearmW = clamp(side ? body.forearmSideWidth : body.forearmWidth, 2, 8);
-  const armH = clamp(body.upperArmLength + body.forearmLength, 11, 24);
   const legW = clamp(side ? body.thighSideWidth : body.thighWidth, 2, 9);
   const calfW = clamp(side ? body.calfSideWidth : body.calfWidth, 2, 8);
   const thighH = clamp(body.thighLength, 7, 20);
@@ -1361,6 +1361,13 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
     { x: torsoX(waistW, "waist"), y: torsoTop + Math.round(torsoH * 0.55), width: waistW, height: Math.max(2, Math.round(torsoH * 0.2)) },
     { x: torsoX(hipW, "hip"), y: torsoTop + Math.round(torsoH * 0.75), width: hipW, height: Math.max(3, Math.round(torsoH * 0.25)) },
   );
+  const makeLimb = (
+    poseKey: keyof LimbMotionState,
+    anchor: { x: number; y: number },
+    parts: AvatarLimbPart[],
+    depth: AvatarLimbSegment["depth"] = "front",
+    alpha = 1,
+  ): AvatarLimbSegment => ({ poseKey, anchor, parts, depth, alpha });
 
   const limbTop = torsoTop + 3;
   if (side) {
@@ -1380,44 +1387,49 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
       : centerX - Math.floor(shoulderW * 0.18) - forearmW;
     const armX = mode === "edit" ? editArmX : renderArmX;
     const forearmX = mode === "edit" ? editForearmX : renderForearmX;
-    limbs.push({
-      poseKey: "rightArm",
-      anchor: { x: armX + armW / 2, y: limbTop },
-      parts: [
-        {
-          source: { x: editArmX, y: limbTop, width: armW, height: upperArmH },
-          target: { x: armX, y: limbTop, width: armW, height: upperArmH },
-        },
-        {
-          source: { x: editForearmX, y: limbTop + upperArmH, width: forearmW, height: forearmH },
-          target: { x: forearmX, y: limbTop + upperArmH, width: forearmW, height: forearmH },
-        },
-      ],
-    });
-    limbs.push({
-      poseKey: "rightLeg",
-      anchor: { x: centerX, y: torsoTop + torsoH },
-      parts: [
-        {
-          source: { x: centerX - Math.floor(legW / 2), y: torsoTop + torsoH, width: legW, height: thighH },
-          target: { x: centerX - Math.floor(legW / 2), y: torsoTop + torsoH, width: legW, height: thighH },
-        },
-        {
-          source: { x: centerX - Math.floor(calfW / 2), y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
-          target: { x: centerX - Math.floor(calfW / 2), y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
-        },
-      ],
-    });
+    const sideArmParts = (targetOffsetX: number): AvatarLimbPart[] => [
+      {
+        source: { x: editArmX, y: limbTop, width: armW, height: upperArmH },
+        target: { x: armX + targetOffsetX, y: limbTop, width: armW, height: upperArmH },
+      },
+      {
+        source: { x: editForearmX, y: limbTop + upperArmH, width: forearmW, height: forearmH },
+        target: { x: forearmX + targetOffsetX, y: limbTop + upperArmH, width: forearmW, height: forearmH },
+      },
+    ];
+    const sideLegParts = (targetOffsetX: number): AvatarLimbPart[] => [
+      {
+        source: { x: centerX - Math.floor(legW / 2), y: torsoTop + torsoH, width: legW, height: thighH },
+        target: { x: centerX - Math.floor(legW / 2) + targetOffsetX, y: torsoTop + torsoH, width: legW, height: thighH },
+      },
+      {
+        source: { x: centerX - Math.floor(calfW / 2), y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
+        target: { x: centerX - Math.floor(calfW / 2) + targetOffsetX, y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
+      },
+    ];
+    if (mode === "edit") {
+      limbs.push(
+        makeLimb("rightArm", { x: armX + armW / 2, y: limbTop }, sideArmParts(0)),
+        makeLimb("rightLeg", { x: centerX, y: torsoTop + torsoH }, sideLegParts(0)),
+      );
+    } else {
+      const farOffset = facing === "left" ? -1 : 1;
+      const nearOffset = facing === "left" ? 1 : -1;
+      limbs.push(
+        makeLimb("leftArm", { x: armX + farOffset + armW / 2, y: limbTop }, sideArmParts(farOffset), "behind", 0.72),
+        makeLimb("leftLeg", { x: centerX + farOffset, y: torsoTop + torsoH }, sideLegParts(farOffset), "behind", 0.72),
+        makeLimb("rightLeg", { x: centerX + nearOffset, y: torsoTop + torsoH }, sideLegParts(nearOffset), "front", 1),
+        makeLimb("rightArm", { x: armX + nearOffset + armW / 2, y: limbTop }, sideArmParts(nearOffset), "front", 1),
+      );
+    }
   } else {
-    const leftArmX = centerX - Math.floor(shoulderW / 2) - Math.max(armW, forearmW);
     const rightArmX = centerX + Math.floor(shoulderW / 2);
-    const leftLegX = centerX - Math.max(legW, calfW) - 1;
     const rightLegX = centerX + 1;
     limbs.push(
-      {
-        poseKey: "leftArm",
-        anchor: { x: centerX - Math.floor(shoulderW / 2) - armW / 2, y: limbTop },
-        parts: [
+      makeLimb(
+        "leftArm",
+        { x: centerX - Math.floor(shoulderW / 2) - armW / 2, y: limbTop },
+        [
           {
             source: { x: centerX - Math.floor(shoulderW / 2) - armW, y: limbTop, width: armW, height: upperArmH },
             target: { x: centerX - Math.floor(shoulderW / 2) - armW, y: limbTop, width: armW, height: upperArmH },
@@ -1427,11 +1439,11 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
             target: { x: centerX - Math.floor(shoulderW / 2) - forearmW, y: limbTop + upperArmH, width: forearmW, height: forearmH },
           },
         ],
-      },
-      {
-        poseKey: "rightArm",
-        anchor: { x: rightArmX + armW / 2, y: limbTop },
-        parts: [
+      ),
+      makeLimb(
+        "rightArm",
+        { x: rightArmX + armW / 2, y: limbTop },
+        [
           {
             source: { x: centerX + Math.floor(shoulderW / 2), y: limbTop, width: armW, height: upperArmH },
             target: { x: centerX + Math.floor(shoulderW / 2), y: limbTop, width: armW, height: upperArmH },
@@ -1441,11 +1453,11 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
             target: { x: centerX + Math.floor(shoulderW / 2), y: limbTop + upperArmH, width: forearmW, height: forearmH },
           },
         ],
-      },
-      {
-        poseKey: "leftLeg",
-        anchor: { x: centerX - legW / 2 - 1, y: torsoTop + torsoH },
-        parts: [
+      ),
+      makeLimb(
+        "leftLeg",
+        { x: centerX - legW / 2 - 1, y: torsoTop + torsoH },
+        [
           {
             source: { x: centerX - legW - 1, y: torsoTop + torsoH, width: legW, height: thighH },
             target: { x: centerX - legW - 1, y: torsoTop + torsoH, width: legW, height: thighH },
@@ -1455,11 +1467,11 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
             target: { x: centerX - calfW - 1, y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
           },
         ],
-      },
-      {
-        poseKey: "rightLeg",
-        anchor: { x: rightLegX + legW / 2, y: torsoTop + torsoH },
-        parts: [
+      ),
+      makeLimb(
+        "rightLeg",
+        { x: rightLegX + legW / 2, y: torsoTop + torsoH },
+        [
           {
             source: { x: centerX + 1, y: torsoTop + torsoH, width: legW, height: thighH },
             target: { x: centerX + 1, y: torsoTop + torsoH, width: legW, height: thighH },
@@ -1469,7 +1481,7 @@ function getAvatarPartRects(body: CharacterBodyAppearance, facing: Facing, mode:
             target: { x: centerX + 1, y: torsoTop + torsoH + thighH, width: calfW, height: calfH },
           },
         ],
-      },
+      ),
     );
   }
   return { static: staticParts, limbs };
@@ -2573,28 +2585,28 @@ function renderAvatarSkeleton(
     moveState,
     appearance.palette.pixelSwatches,
   );
-  if (!renderedCustomSkin) {
-    drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
-    drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary, [], scale);
-  }
 
   const armWidth = Math.max(3, body.upperArmWidth * 0.18 * scale);
   const armLength = Math.max(10, (body.upperArmLength + body.forearmLength) * 0.12 * scale);
-  if (!renderedCustomSkin) {
-    if (side) {
-      const sideArmX = screen.x + (facing === "left" ? shoulder * 0.18 : -shoulder * 0.18);
-      drawLimb(target, sideArmX, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
-    } else {
-      drawLimb(target, screen.x - shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skinPrimary, palette.skinShadow);
-      drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
-    }
-  }
-
   const legWidth = Math.max(4, body.thighWidth * 0.18 * scale);
   if (!renderedCustomSkin) {
     if (side) {
-      drawLimb(target, screen.x, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothShadow, palette.metalShadow);
+      const farArmOffset = facing === "left" ? -armWidth * 0.45 : armWidth * 0.45;
+      const nearArmOffset = facing === "left" ? armWidth * 0.45 : -armWidth * 0.45;
+      const farLegOffset = facing === "left" ? -legWidth * 0.45 : legWidth * 0.45;
+      const nearLegOffset = facing === "left" ? legWidth * 0.45 : -legWidth * 0.45;
+      const sideArmX = screen.x + (facing === "left" ? shoulder * 0.18 : -shoulder * 0.18);
+      drawLimb(target, sideArmX + farArmOffset, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skinShadow, palette.skinShadow, 0.72);
+      drawLimb(target, screen.x + farLegOffset, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.leftLeg, palette.metalShadow, palette.metalShadow, 0.72);
+      drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
+      drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary, [], scale);
+      drawLimb(target, screen.x + nearLegOffset, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothShadow, palette.metalShadow);
+      drawLimb(target, sideArmX + nearArmOffset, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
     } else {
+      drawHeadLayer(target, screen.x, topY, headWidth, headHeight, palette.skinPrimary, palette.skinShadow);
+      drawTorsoLayer(target, screen.x, topY + headHeight, shoulder, chest, waist, hip, torsoHeight, palette.clothPrimary, palette.clothShadow, palette.metalPrimary, [], scale);
+      drawLimb(target, screen.x - shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.leftArm, palette.skinPrimary, palette.skinShadow);
+      drawLimb(target, screen.x + shoulder / 2, topY + headHeight + 4, armLength, armWidth, moveState.rightArm, palette.skinPrimary, palette.skinShadow);
       drawLimb(target, screen.x - legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.leftLeg, palette.clothShadow, palette.metalShadow);
       drawLimb(target, screen.x + legWidth, topY + headHeight + torsoHeight, legHeight, legWidth, moveState.rightLeg, palette.clothShadow, palette.metalShadow);
     }
@@ -2666,9 +2678,11 @@ function drawAnimatedAvatarImageLayer(
   }
 
   target.imageSmoothingEnabled = false;
+  for (const limb of parts.limbs.filter((item) => item.depth === "behind")) {
+    drawAvatarLimbPixels(target, rows, limb, startX, topY, pixel, moveState[limb.poseKey], swatches);
+  }
   drawAvatarMatrixPixels(target, matrix, startX, topY, pixel, swatches);
-
-  for (const limb of parts.limbs) {
+  for (const limb of parts.limbs.filter((item) => item.depth === "front")) {
     drawAvatarLimbPixels(target, rows, limb, startX, topY, pixel, moveState[limb.poseKey], swatches);
   }
 
@@ -2711,6 +2725,7 @@ function drawAvatarLimbPixels(
   const anchorX = startX + limb.anchor.x * pixel;
   const anchorY = topY + limb.anchor.y * pixel;
   target.save();
+  target.globalAlpha *= limb.alpha;
   target.translate(anchorX, anchorY);
   target.rotate((angleDegrees * Math.PI) / 180);
 
@@ -2763,9 +2778,10 @@ function drawPixelRect(target: CanvasRenderingContext2D, x: number, y: number, w
   target.strokeRect(x, y, width, height);
 }
 
-function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: number, length: number, width: number, pose: LimbPose, fill: string, stroke: string): void {
+function drawLimb(target: CanvasRenderingContext2D, anchorX: number, anchorY: number, length: number, width: number, pose: LimbPose, fill: string, stroke: string, alpha = 1): void {
   const angleDegrees = pose === "disabled" ? 0 : normalizeLimbAngle(pose);
   target.save();
+  target.globalAlpha *= alpha;
   target.translate(anchorX, anchorY);
   target.rotate((angleDegrees * Math.PI) / 180);
   drawPixelRect(target, -width / 2, 0, width, length, fill, stroke);
