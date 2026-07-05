@@ -330,6 +330,7 @@ app.innerHTML = `
     </section>
     <div class="error toast-error" id="loginError"></div>
     <section class="hud hidden"></section>
+    <section class="stamina-hud hidden"></section>
     <section class="debug-panel hidden"></section>
     <section class="help-panel hidden">WASD / 方向键移动，Shift 疾跑，B 背包，Esc 菜单，鼠标滚轮缩放，H 隐藏/显示调试信息</section>
     <section class="orientation-overlay hidden" id="orientationOverlay">
@@ -380,6 +381,7 @@ const closeAppearanceButton = app.querySelector<HTMLButtonElement>("#closeAppear
 const accountSummary = app.querySelector<HTMLElement>("#accountSummary")!;
 const logoutButton = app.querySelector<HTMLButtonElement>("#logoutButton")!;
 const hud = app.querySelector<HTMLElement>(".hud")!;
+const staminaHud = app.querySelector<HTMLElement>(".stamina-hud")!;
 const debugPanel = app.querySelector<HTMLElement>(".debug-panel")!;
 const helpPanel = app.querySelector<HTMLElement>(".help-panel")!;
 const orientationOverlay = app.querySelector<HTMLElement>("#orientationOverlay")!;
@@ -1949,6 +1951,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
     appearanceModal.classList.add("hidden");
     toggleInventory(false);
     hud.classList.remove("hidden");
+    staminaHud.classList.remove("hidden");
     debugPanel.classList.remove("hidden");
     helpPanel.classList.remove("hidden");
     resizeCanvas();
@@ -2054,6 +2057,7 @@ function logoutToLogin(): void {
   characterModal.classList.add("hidden");
   appearanceModal.classList.add("hidden");
   hud.classList.add("hidden");
+  staminaHud.classList.add("hidden");
   debugPanel.classList.add("hidden");
   helpPanel.classList.add("hidden");
   orientationOverlay.classList.add("hidden");
@@ -3112,6 +3116,7 @@ function updateHud(): void {
   const visibleTilesY = TARGET_VISIBLE_TILES_Y;
   const speed = getCurrentMoveSpeed(combat, state.sprinting);
   hud.innerHTML = renderGameHud(character, combat);
+  staminaHud.innerHTML = renderStaminaHud(combat);
 
   const dominant = dominantTerrain();
   debugPanel.innerHTML = `
@@ -3148,6 +3153,40 @@ function renderGameHud(character: CharacterSummary | undefined, combat: Characte
       <div class="hud-hint">B 背包 · Esc 菜单 · ${escapeHtml(state.socketStatus)}</div>
     </div>
   `;
+}
+
+function renderStaminaHud(combat: CharacterCombatStats): string {
+  const current = combat.resources.staminaCurrent;
+  const max = combat.resources.staminaMax;
+  const percent = resourcePercent(current, max);
+  const status = staminaStatusLabel(current, max);
+  return `
+    <div class="stamina-widget ${state.sprinting ? "running" : ""}">
+      <div class="stamina-widget-header">
+        <span>耐力</span>
+        <strong>${formatInteger(current)} / ${formatInteger(max)}</strong>
+      </div>
+      <div class="stamina-widget-track" aria-label="耐力 ${formatInteger(current)} / ${formatInteger(max)}">
+        <i style="width:${percent}%"></i>
+      </div>
+      <div class="stamina-widget-footer">
+        <span>${status}</span>
+        <span>Shift 疾跑 x${SPRINT_SPEED_MULTIPLIER.toFixed(1)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function staminaStatusLabel(current: number, max: number): string {
+  if (state.sprinting) {
+    return `消耗 ${formatInteger(SPRINT_STAMINA_COST_PER_SECOND)}/秒 · 恢复 ${formatInteger(STAMINA_REGEN_WHILE_RUNNING)}/秒`;
+  }
+  if (current >= max - 0.01) return "已满";
+  const secondsSinceSprint = (performance.now() - state.lastSprintEndedAt) / 1000;
+  const regen = secondsSinceSprint <= STAMINA_RECENT_STOP_SECONDS
+    ? STAMINA_REGEN_RECENTLY_STOPPED
+    : STAMINA_REGEN_RESTED;
+  return `恢复 ${formatInteger(regen)}/秒`;
 }
 
 function dominantTerrain(): string {

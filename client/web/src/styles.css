@@ -77,6 +77,7 @@ input {
 
 .login-panel,
 .hud,
+.stamina-hud,
 .debug-panel,
 .help-panel {
   position: absolute;
@@ -865,6 +866,80 @@ input {
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
 }
 
+.stamina-hud {
+  left: 14px;
+  bottom: 14px;
+  z-index: 10;
+  width: min(260px, calc(100vw - 28px));
+  padding: 10px 12px;
+  border-color: rgba(217, 179, 95, 0.28);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(245, 211, 93, 0.18), transparent 46%),
+    linear-gradient(180deg, rgba(16, 21, 24, 0.9), rgba(7, 10, 13, 0.82));
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+}
+
+.stamina-widget {
+  display: grid;
+  gap: 6px;
+}
+
+.stamina-widget-header,
+.stamina-widget-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.stamina-widget-header {
+  color: #f8dda0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.stamina-widget-header strong {
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.stamina-widget-track {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(217, 179, 95, 0.34);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 48%),
+    rgba(0, 0, 0, 0.48);
+}
+
+.stamina-widget-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8f6b16, #f5d35d 58%, #fff0a2);
+  box-shadow: 0 0 18px rgba(245, 211, 93, 0.34);
+  transition: width 120ms linear, background 160ms ease;
+}
+
+.stamina-widget.running .stamina-widget-track {
+  border-color: rgba(255, 141, 61, 0.52);
+}
+
+.stamina-widget.running .stamina-widget-track i {
+  background: linear-gradient(90deg, #c85422, #ff9c45 62%, #ffd56f);
+  box-shadow: 0 0 20px rgba(255, 141, 61, 0.48);
+}
+
+.stamina-widget-footer {
+  color: rgba(237, 242, 231, 0.62);
+  font-size: 11px;
+}
+
 .resource-bars {
   display: flex;
   flex-direction: column;
@@ -940,7 +1015,7 @@ input {
 
 .help-panel {
   left: 14px;
-  bottom: 14px;
+  bottom: 92px;
   padding: 10px 12px;
   color: var(--muted);
   font-size: 13px;
@@ -1418,6 +1493,16 @@ input {
   color: var(--muted);
 }
 
+@media (max-width: 1220px) {
+  .stamina-hud {
+    bottom: 128px;
+  }
+
+  .help-panel {
+    bottom: 206px;
+  }
+}
+
 @media (max-width: 720px) {
   .pause-menu {
     width: calc(100vw - 20px);
@@ -1455,6 +1540,26 @@ input {
   .hud {
     bottom: 10px;
     width: calc(100vw - 14px);
+  }
+
+  .stamina-hud {
+    left: 10px;
+    bottom: 112px;
+    width: min(220px, calc(100vw - 20px));
+    padding: 8px 10px;
+  }
+
+  .stamina-widget-header {
+    font-size: 12px;
+  }
+
+  .stamina-widget-header strong,
+  .stamina-widget-footer {
+    font-size: 10px;
+  }
+
+  .help-panel {
+    display: none;
   }
 
   .hud-bars-row {
