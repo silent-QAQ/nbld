@@ -89,7 +89,9 @@ type AppState = {
   worldId: string;
   mapId: string;
   player: Position;
+  playerVisual: Position;
   camera: Position;
+  facing: Facing;
   tileScale: number;
   chunks: Map<string, ChunkRender>;
   players: Map<string, WorldPlayer>;
@@ -251,7 +253,9 @@ const state: AppState = {
   worldId: "",
   mapId: "map_0_0",
   player: { x: 0, y: 0 },
+  playerVisual: { x: 0, y: 0 },
   camera: { x: 0, y: 0 },
+  facing: "front",
   tileScale: 1,
   chunks: new Map(),
   players: new Map(),
@@ -2076,10 +2080,17 @@ function drawAvatarImageLayer(target: CanvasRenderingContext2D, centerX: number,
   const pixel = state.tileScale / TILE_TEXTURE_SIZE_PX;
   const width = AVATAR_EDITOR_WIDTH * pixel;
   const startX = centerX - width / 2;
+  const drawStroke = pixel >= 3;
   rows.slice(0, AVATAR_EDITOR_HEIGHT).forEach((row, y) => {
     [...row.slice(0, AVATAR_EDITOR_WIDTH)].forEach((ch, x) => {
       if (ch === EMPTY_PIXEL_SYMBOL) return;
-      drawPixelRect(target, startX + x * pixel, topY + y * pixel, pixel, pixel, pixelSymbolToColor(ch, swatches) || fallbackFill, stroke);
+      const fill = pixelSymbolToColor(ch, swatches) || fallbackFill;
+      if (drawStroke) {
+        drawPixelRect(target, startX + x * pixel, topY + y * pixel, pixel, pixel, fill, stroke);
+        return;
+      }
+      target.fillStyle = fill;
+      target.fillRect(startX + x * pixel, topY + y * pixel, pixel, pixel);
     });
   });
 }
