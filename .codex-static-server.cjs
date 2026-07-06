@@ -4,6 +4,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "client", "web", "dist");
 const port = Number(process.env.NBLD_WEB_PORT || 27777);
+const host = process.env.NBLD_WEB_HOST || "127.0.0.1";
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -47,6 +48,6 @@ http
       res.end(data);
     });
   })
-  .listen(port, "0.0.0.0", () => {
-    console.log(`web listening on ${port}`);
+  .listen(port, host, () => {
+    console.log(`web listening on ${host}:${port}`);
   });
