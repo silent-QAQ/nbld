@@ -41,6 +41,14 @@ func runtimeResourcesFromCombat(combat CharacterCombatStats) runtimeResources {
 	}
 }
 
+// roundedStamina returns the wire-facing integer stamina, rounded the same way
+// toProtocol rounds it. The 10Hz world_snapshot self-state and every REST/
+// toProtocol path must agree on this conversion, otherwise the same underlying
+// float yields values differing by 1 and the client bar visibly bounces.
+func (r runtimeResources) roundedStamina() int {
+	return int(math.Round(clampRuntimeFloat(r.StaminaCurrent, 0, float64(maxRuntimeInt(1, r.StaminaMax)))))
+}
+
 func (r runtimeResources) toProtocol() protocol.RuntimeResources {
 	return protocol.RuntimeResources{
 		HealthMax:      r.HealthMax,
@@ -48,7 +56,7 @@ func (r runtimeResources) toProtocol() protocol.RuntimeResources {
 		ManaMax:        r.ManaMax,
 		ManaCurrent:    clampRuntimeInt(r.ManaCurrent, 0, maxRuntimeInt(1, r.ManaMax)),
 		StaminaMax:     r.StaminaMax,
-		StaminaCurrent: int(math.Round(clampRuntimeFloat(r.StaminaCurrent, 0, float64(maxRuntimeInt(1, r.StaminaMax))))),
+		StaminaCurrent: r.roundedStamina(),
 	}
 }
 

@@ -25,6 +25,8 @@ type sessionState struct {
 	ResourceAt        time.Time
 	SprintEndedAt     time.Time
 	SprintIntentUntil time.Time
+	// LastHarvestAt 服务端节流：上次采集完成时间，防止无视挖掘时长刷请求。
+	LastHarvestAt time.Time
 }
 
 type stateStore struct {
@@ -56,8 +58,28 @@ func (s *stateStore) getSession(token string) (sessionState, bool) {
 	return session, ok
 }
 
-func (s *stateStore) deleteSession(token string) (sessionState, bool) {
+// syncCharacterLoadout 在装备/属性变更后刷新在线会话：
+// 更新装备外观与资源上限，当前值按新上限截断（比例保留已在角色数据层完成）。
+func (s *stateStore) syncCharacterLoadout(token string, equipment CharacterEquipment, combat CharacterCombatStats) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[token]
+	if !ok {
+		return
+	}
+	now := time.Now().UTC()
+	session.advanceRuntimeResources(now, session.Sprinting)
+	session.Equipment = equipment
+	session.Resources.HealthMax = maxRuntimeInt(1, combat.Resources.HealthMax)
+	session.Resources.ManaMax = maxRuntimeInt(1, combat.Resources.ManaMax)
+	session.Resources.StaminaMax = maxRuntimeInt(1, combat.Resources.StaminaMax)
+	session.Resources.HealthCurrent = clampRuntimeInt(combat.Resources.HealthCurrent, 0, session.Resources.HealthMax)
+	session.Resources.ManaCurrent = clampRuntimeInt(combat.Resources.ManaCurrent, 0, session.Resources.ManaMax)
+	session.Resources.StaminaCurrent = clampRuntimeFloat(session.Resources.StaminaCurrent, 0, float64(session.Resources.StaminaMax))
+	s.sessions[token] = session
+}
+
+func (s *stateStore) deleteSession(token string) (sessionState, bool) {	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	session, ok := s.sessions[token]
@@ -67,6 +89,24 @@ func (s *stateStore) deleteSession(token string) (sessionState, bool) {
 
 	delete(s.sessions, token)
 	return session, true
+}
+
+// markHarvest 尝试记录一次采集：若距上次采集不足 minInterval 则拒绝（防刷）。
+func (s *stateStore) markHarvest(token string, minInterval time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[token]
+	if !ok {
+		return false
+	}
+	now := time.Now().UTC()
+	if !session.LastHarvestAt.IsZero() && now.Sub(session.LastHarvestAt) < minInterval {
+		return false
+	}
+	session.LastHarvestAt = now
+	s.sessions[token] = session
+	return true
 }
 
 func (s *stateStore) updateMovement(token string, position protocol.Position, sprinting bool, facing string) (sessionState, bool) {
@@ -171,7 +211,7 @@ func (s *stateStore) snapshotWorld() map[string][]worldPlayerSnapshot {
 		if session.WorldID == "" || session.PlayerID == "" {
 			continue
 		}
-		stamina := int(session.Resources.StaminaCurrent)
+		stamina := session.Resources.roundedStamina()
 		full := protocol.WorldPlayer{
 			PlayerID:      session.PlayerID,
 			CharacterID:   session.CharacterID,

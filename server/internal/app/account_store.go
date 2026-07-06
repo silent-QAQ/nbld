@@ -259,6 +259,9 @@ type ItemContainer struct {
 type ItemStack struct {
 	ItemID   string `json:"itemId"`
 	Quantity int    `json:"quantity"`
+	// Durability 是工具剩余耐久；nil 表示满耐久（非工具物品恒为 nil）。
+	// 工具 StackLimit=1，不参与堆叠合并，所以耐久跟随槽位整体移动即可。
+	Durability *int `json:"durability,omitempty"`
 }
 
 type CharacterPosition struct {
@@ -466,7 +469,7 @@ func newCharacter(name string) Character {
 		Name:       strings.TrimSpace(name),
 		Version:    1,
 		Stats:      defaultCharacterStats(),
-		Inventory:  ItemContainer{Items: []ItemStack{}},
+		Inventory:  starterInventory(),
 		Warehouse:  ItemContainer{Items: []ItemStack{}},
 		Position:   defaultCharacterPosition(),
 		Equipment:  equipment,
@@ -986,8 +989,18 @@ func mapStoreError(err error) (int, string) {
 		errors.Is(err, ErrUsernameTooShort),
 		errors.Is(err, ErrUsernameTooLong),
 		errors.Is(err, ErrInvalidEmailFormat),
-		errors.Is(err, ErrCharacterSelectionEmpty):
+		errors.Is(err, ErrCharacterSelectionEmpty),
+		errors.Is(err, ErrInvalidInventorySlot),
+		errors.Is(err, ErrUnknownItem),
+		errors.Is(err, ErrInvalidQuantity),
+		errors.Is(err, ErrItemNotEquippable),
+		errors.Is(err, ErrInvalidEquipSlot),
+		errors.Is(err, ErrRecipeNotMatched):
 		return 400, err.Error()
+	case errors.Is(err, ErrInventoryFull),
+		errors.Is(err, ErrItemNotFound),
+		errors.Is(err, ErrEquipSlotEmpty):
+		return 409, err.Error()
 	default:
 		return 500, "internal server error"
 	}

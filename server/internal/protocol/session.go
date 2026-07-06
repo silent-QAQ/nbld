@@ -254,6 +254,9 @@ type WSServerMessage struct {
 	Entered []WorldPlayer     `json:"entered,omitempty"`
 	Moved   []SlimPlayerState `json:"moved,omitempty"`
 	Left    []string          `json:"left,omitempty"`
+
+	// tile_update fields (type == "tile_update"): one decoration-layer change.
+	Tile *TileUpdate `json:"tile,omitempty"`
 }
 
 type RuntimeResources struct {
@@ -372,6 +375,8 @@ type CharacterStatsMetadata struct {
 type ItemStack struct {
 	ItemID   string `json:"itemId"`
 	Quantity int    `json:"quantity"`
+	// Durability 是工具剩余耐久；nil/缺省表示满耐久。
+	Durability *int `json:"durability,omitempty"`
 }
 
 type ItemContainer struct {
@@ -542,6 +547,141 @@ type DeleteCharacterRequest struct {
 
 type CharacterMutationResponse struct {
 	Character CharacterSummary `json:"character"`
+}
+
+// 物品/装备/合成系统
+
+type ItemDefinition struct {
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Type        string             `json:"type"`
+	Rarity      string             `json:"rarity"`
+	StackLimit  int                `json:"stackLimit"`
+	Weight      float64            `json:"weight"`
+	EquipSlot   string             `json:"equipSlot,omitempty"`
+	Stats       map[string]float64 `json:"stats,omitempty"`
+	Description string             `json:"description,omitempty"`
+
+	// 工具字段
+	ToolType      string `json:"toolType,omitempty"`
+	ToolTier      int    `json:"toolTier,omitempty"`
+	MaxDurability int    `json:"maxDurability,omitempty"`
+
+	// 建造字段
+	PlacesDecoration string `json:"placesDecoration,omitempty"`
+}
+
+type ItemRegistryResponse struct {
+	Items []ItemDefinition `json:"items"`
+}
+
+type Recipe struct {
+	ID      string         `json:"id"`
+	Shaped  bool           `json:"shaped"`
+	Pattern []string       `json:"pattern,omitempty"`
+	Inputs  map[string]int `json:"inputs,omitempty"`
+	Output  ItemStack      `json:"output"`
+}
+
+type RecipeRegistryResponse struct {
+	Recipes []Recipe `json:"recipes"`
+}
+
+type MoveInventoryItemRequest struct {
+	Token       string `json:"token"`
+	CharacterID string `json:"characterId"`
+	From        int    `json:"from"`
+	To          int    `json:"to"`
+}
+
+type EquipItemRequest struct {
+	Token         string `json:"token"`
+	CharacterID   string `json:"characterId"`
+	InventorySlot int    `json:"inventorySlot"`
+}
+
+type UnequipItemRequest struct {
+	Token       string `json:"token"`
+	CharacterID string `json:"characterId"`
+	EquipSlot   string `json:"equipSlot"`
+}
+
+type CraftRequest struct {
+	Token       string    `json:"token"`
+	CharacterID string    `json:"characterId"`
+	Grid        [9]string `json:"grid"`
+}
+
+type CraftResponse struct {
+	Character CharacterSummary `json:"character"`
+	Output    ItemStack        `json:"output"`
+}
+
+type GiveItemRequest struct {
+	Token       string `json:"token"`
+	CharacterID string `json:"characterId"`
+	ItemID      string `json:"itemId"`
+	Quantity    int    `json:"quantity"`
+}
+
+// ---- 装饰采集与建造放置 ----
+
+type DecorationDrop struct {
+	ItemID string `json:"itemId"`
+	Min    int    `json:"min"`
+	Max    int    `json:"max"`
+}
+
+type DecorationDefinition struct {
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	Kind          string           `json:"kind"`
+	Hardness      float64          `json:"hardness"`
+	RequiredTool  string           `json:"requiredTool,omitempty"`
+	MinTier       int              `json:"minTier,omitempty"`
+	Blocking      bool             `json:"blocking"`
+	PreferredTool string           `json:"preferredTool,omitempty"`
+	Drops         []DecorationDrop `json:"drops"`
+}
+
+type DecorationRegistryResponse struct {
+	Decorations []DecorationDefinition `json:"decorations"`
+}
+
+// TileUpdate 是一格装饰层变更的广播/响应载荷。
+// Decoration 为空串表示装饰已被移除，因此不可 omitempty。
+type TileUpdate struct {
+	MapID      string `json:"mapId"`
+	X          int    `json:"x"` // 地图本地瓦片坐标
+	Y          int    `json:"y"`
+	Decoration string `json:"decoration"`
+}
+
+type HarvestRequest struct {
+	Token       string `json:"token"`
+	CharacterID string `json:"characterId"`
+	X           int    `json:"x"` // 目标瓦片坐标（floor 后）
+	Y           int    `json:"y"`
+	Slot        int    `json:"slot"` // 快捷栏槽位（0-8），手持工具在此
+}
+
+type HarvestResponse struct {
+	Character CharacterSummary `json:"character"`
+	Drops     []ItemStack      `json:"drops"`
+	Tile      TileUpdate       `json:"tile"`
+}
+
+type PlaceBlockRequest struct {
+	Token       string `json:"token"`
+	CharacterID string `json:"characterId"`
+	X           int    `json:"x"`
+	Y           int    `json:"y"`
+	Slot        int    `json:"slot"` // 快捷栏槽位，手持建造方块在此
+}
+
+type PlaceBlockResponse struct {
+	Character CharacterSummary `json:"character"`
+	Tile      TileUpdate       `json:"tile"`
 }
 
 type DeleteCharacterResponse struct {

@@ -3,10 +3,16 @@ import type {
   CharacterListResponse,
   CharacterMutationResponse,
   ChunkWindowResponse,
+  CraftResponse,
+  DecorationRegistryResponse,
   EnterWorldResponse,
   GuestLoginResponse,
+  HarvestResponse,
+  ItemRegistryResponse,
   LoginResponse,
   MoveResponse,
+  PlaceBlockResponse,
+  RecipeRegistryResponse,
   RegisterResponse,
   WorldStateResponse,
 } from "./protocol";
@@ -40,6 +46,42 @@ export class ApiClient {
 
   async updateCharacterAppearance(token: string, characterId: string, appearance: CharacterAppearance): Promise<CharacterMutationResponse> {
     return this.post("/api/v1/characters/appearance", { token, characterId, appearance });
+  }
+
+  async items(): Promise<ItemRegistryResponse> {
+    return this.get("/api/v1/items");
+  }
+
+  async recipes(): Promise<RecipeRegistryResponse> {
+    return this.get("/api/v1/recipes");
+  }
+
+  async decorations(): Promise<DecorationRegistryResponse> {
+    return this.get("/api/v1/decorations");
+  }
+
+  async moveItem(token: string, characterId: string, from: number, to: number): Promise<CharacterMutationResponse> {
+    return this.post("/api/v1/inventory/move", { token, characterId, from, to });
+  }
+
+  async equipItem(token: string, characterId: string, inventorySlot: number): Promise<CharacterMutationResponse> {
+    return this.post("/api/v1/equipment/equip", { token, characterId, inventorySlot });
+  }
+
+  async unequipItem(token: string, characterId: string, equipSlot: string): Promise<CharacterMutationResponse> {
+    return this.post("/api/v1/equipment/unequip", { token, characterId, equipSlot });
+  }
+
+  async craft(token: string, characterId: string, grid: string[]): Promise<CraftResponse> {
+    return this.post("/api/v1/craft", { token, characterId, grid });
+  }
+
+  async harvest(token: string, characterId: string, x: number, y: number, slot: number): Promise<HarvestResponse> {
+    return this.post("/api/v1/world/harvest", { token, characterId, x, y, slot });
+  }
+
+  async place(token: string, characterId: string, x: number, y: number, slot: number): Promise<PlaceBlockResponse> {
+    return this.post("/api/v1/world/place", { token, characterId, x, y, slot });
   }
 
   async enterWorld(token: string, characterId: string): Promise<EnterWorldResponse> {

@@ -366,6 +366,98 @@ func (m *worldChunkManager) unloadChunk(coord protocol.ChunkCoord) error {
 	return nil
 }
 
+// setTileDecoration 修改一格装饰层并立即持久化（地形层字段保持不变）。
+// tileX/tileY 为地图本地瓦片坐标（floor 后的整数）。返回更新后的瓦片。
+func (m *worldChunkManager) setTileDecoration(mapID string, tileX, tileY int, decoration string) (protocol.ChunkTile, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	chunkX := floorDivInt(tileX, chunkTileSize)
+	chunkY := floorDivInt(tileY, chunkTileSize)
+	coord := protocol.ChunkCoord{MapID: mapID, ChunkX: chunkX, ChunkY: chunkY}
+
+	chunk, err := m.ensureChunkLoaded(coord)
+	if err != nil {
+		return protocol.ChunkTile{}, err
+	}
+
+	localX := tileX - chunkX*chunkTileSize
+	localY := tileY - chunkY*chunkTileSize
+	index := localY*chunkTileSize + localX
+	if index < 0 || index >= len(chunk.snapshot.Tiles) {
+		return protocol.ChunkTile{}, fmt.Errorf("tile out of range: %d,%d", tileX, tileY)
+	}
+
+	tile := chunk.snapshot.Tiles[index]
+	if tile.X != localX || tile.Y != localY {
+		// 瓦片数组应为行优先布局；不符则回退线性查找。
+		found := false
+		for i, candidate := range chunk.snapshot.Tiles {
+			if candidate.X == localX && candidate.Y == localY {
+				index, tile, found = i, candidate, true
+				break
+			}
+		}
+		if !found {
+			return protocol.ChunkTile{}, fmt.Errorf("tile not found: %d,%d", tileX, tileY)
+		}
+	}
+
+	tile.Decoration = decoration
+	chunk.snapshot.Tiles[index] = tile
+	chunk.snapshot.Dirty = true
+
+	// DeltaTiles 记录整格快照：同格重复修改只保留最新一条。
+	replaced := false
+	for i, delta := range chunk.snapshot.DeltaTiles {
+		if delta.X == tile.X && delta.Y == tile.Y {
+			chunk.snapshot.DeltaTiles[i] = tile
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		chunk.snapshot.DeltaTiles = append(chunk.snapshot.DeltaTiles, tile)
+	}
+
+	// 立即持久化，防止进程崩溃丢失玩家建筑。
+	if err := m.persistence.save(chunk.snapshot); err != nil {
+		return protocol.ChunkTile{}, err
+	}
+	return tile, nil
+}
+
+// tileAt 只读获取一格瓦片（地图本地瓦片坐标）。
+func (m *worldChunkManager) tileAt(mapID string, tileX, tileY int) (protocol.ChunkTile, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	chunkX := floorDivInt(tileX, chunkTileSize)
+	chunkY := floorDivInt(tileY, chunkTileSize)
+	coord := protocol.ChunkCoord{MapID: mapID, ChunkX: chunkX, ChunkY: chunkY}
+
+	chunk, err := m.ensureChunkLoaded(coord)
+	if err != nil {
+		return protocol.ChunkTile{}, err
+	}
+
+	localX := tileX - chunkX*chunkTileSize
+	localY := tileY - chunkY*chunkTileSize
+	index := localY*chunkTileSize + localX
+	if index >= 0 && index < len(chunk.snapshot.Tiles) {
+		tile := chunk.snapshot.Tiles[index]
+		if tile.X == localX && tile.Y == localY {
+			return tile, nil
+		}
+	}
+	for _, tile := range chunk.snapshot.Tiles {
+		if tile.X == localX && tile.Y == localY {
+			return tile, nil
+		}
+	}
+	return protocol.ChunkTile{}, fmt.Errorf("tile not found: %d,%d", tileX, tileY)
+}
+
 func pickBiome(x, y float64, seed int64) string {
 	seedShiftA := float64(seed%104729) - 52364.0
 	seedShiftB := float64(seed%130363) - 65181.0

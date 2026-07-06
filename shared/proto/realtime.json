@@ -1,0 +1,91 @@
+{
+  "module": "realtime",
+  "version": 1,
+  "description": "WebSocket 实时世界同步协议。此文件为客户端与服务端实时层的单一真源，请勿手工修改生成产物。运行 `node tools/gen_realtime_proto.mjs` 重新生成 server/internal/protocol/realtime_gen.go 与 client/web/src/protocol.gen.ts。",
+  "transport": {
+    "path": "/ws/world",
+    "notes": "浏览器 WebSocket 无法自定义握手头，鉴权走连接后的第一条 auth 消息。"
+  },
+  "clientMessages": {
+    "auth": {
+      "description": "连接后的第一条消息，携带会话 token。",
+      "fields": {
+        "token": "string"
+      }
+    },
+    "move": {
+      "description": "上报玩家最新预测位置（世界瓦片坐标）。",
+      "fields": {
+        "position": "Position"
+      }
+    },
+    "ping": {
+      "description": "应用层心跳，服务端回 pong。",
+      "fields": {}
+    }
+  },
+  "serverMessages": {
+    "auth_ok": {
+      "description": "鉴权成功后的世界快照：自身信息 + 当前地图内可见玩家列表。地图切换后会再次下发以刷新可见玩家。",
+      "fields": {
+        "playerId": "string",
+        "characterId": "string",
+        "characterName": "string",
+        "worldId": "string",
+        "mapId": "string",
+        "position": "Position",
+        "players": "WorldPlayer[]"
+      }
+    },
+    "player_joined": {
+      "description": "同地图内有新玩家进入可见范围，携带完整外观与装备。",
+      "fields": {
+        "playerId": "string",
+        "characterId": "string",
+        "characterName": "string",
+        "mapId": "string",
+        "position": "Position",
+        "appearance": "CharacterAppearance",
+        "equipment": "CharacterEquipment"
+      }
+    },
+    "player_moved": {
+      "description": "其他玩家的轻量位置更新，不含外观（外观在 player_joined/auth_ok 已下发）。不回发给移动者本人。",
+      "fields": {
+        "playerId": "string",
+        "mapId": "string",
+        "position": "Position"
+      }
+    },
+    "player_left": {
+      "description": "同地图内某玩家离开可见范围或断开连接。",
+      "fields": {
+        "playerId": "string"
+      }
+    },
+    "move_ack": {
+      "description": "仅回发给移动者本人的权威位置确认。transitioned 为 true 时表示发生了跨图，客户端应重载区块。normal 移动时客户端保持本地预测，不硬跳。",
+      "fields": {
+        "mapId": "string",
+        "position": "Position",
+        "transitioned": "bool"
+      }
+    },
+    "pong": {
+      "description": "心跳应答。",
+      "fields": {}
+    },
+    "tile_update": {
+      "description": "同地图附近一格装饰层变更（采集移除 / 建造放置）。decoration 为空串表示装饰被移除。客户端应更新本地区块并重渲染。",
+      "fields": {
+        "tile": "TileUpdate"
+      }
+    },
+    "error": {
+      "description": "错误信息。",
+      "fields": {
+        "error": "string"
+      }
+    }
+  }
+}

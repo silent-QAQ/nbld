@@ -65,6 +65,13 @@ export type WorldStateResponse = {
   players: WorldPlayer[];
 };
 
+export type TileUpdate = {
+  mapId: string;
+  x: number;
+  y: number;
+  decoration: string;
+};
+
 export type CharacterBaseStats = {
   health: number;
   stamina: number;
@@ -172,6 +179,7 @@ export type CharacterStats = {
 export type ItemStack = {
   itemId: string;
   quantity: number;
+  durability?: number;
 };
 
 export type ItemContainer = {
@@ -304,6 +312,78 @@ export type CharacterMutationResponse = {
   character: CharacterSummary;
 };
 
+// 物品/装备/合成系统
+
+export type ItemDefinition = {
+  id: string;
+  name: string;
+  type: "material" | "consumable" | "equipment" | "tool" | "block";
+  rarity: "common" | "uncommon" | "rare";
+  stackLimit: number;
+  weight: number;
+  equipSlot?: string;
+  stats?: Record<string, number>;
+  description?: string;
+  toolType?: string;
+  toolTier?: number;
+  maxDurability?: number;
+  placesDecoration?: string;
+};
+
+export type ItemRegistryResponse = {
+  items: ItemDefinition[];
+};
+
+export type Recipe = {
+  id: string;
+  shaped: boolean;
+  pattern?: string[];
+  inputs?: Record<string, number>;
+  output: ItemStack;
+};
+
+export type RecipeRegistryResponse = {
+  recipes: Recipe[];
+};
+
+export type CraftResponse = {
+  character: CharacterSummary;
+  output: ItemStack;
+};
+
+export type DecorationDrop = {
+  itemId: string;
+  min: number;
+  max: number;
+};
+
+export type DecorationDefinition = {
+  id: string;
+  name: string;
+  kind: string;
+  hardness: number;
+  requiredTool?: string;
+  minTier?: number;
+  blocking: boolean;
+  preferredTool?: string;
+  drops: DecorationDrop[];
+};
+
+export type DecorationRegistryResponse = {
+  decorations: DecorationDefinition[];
+};
+
+export type HarvestResponse = {
+  character: CharacterSummary;
+  drops: ItemStack[];
+  tile: TileUpdate;
+};
+
+export type PlaceBlockResponse = {
+  character: CharacterSummary;
+  tile: TileUpdate;
+};
+
 export type WorldPlayer = {
   playerId: string;
   characterId?: string;
@@ -358,6 +438,7 @@ export type WSServerMessage = {
   entered?: WorldPlayer[];
   moved?: SlimPlayerState[];
   left?: string[];
+  tile?: TileUpdate;
 };
 
 export type ChunkCoord = {

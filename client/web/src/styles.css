@@ -842,6 +842,109 @@ input {
   text-shadow: 0 1px 2px #000;
 }
 
+/* 物品品质与交互（物品/合成系统） */
+.item-slot.filled {
+  border-color: var(--rarity-color, rgba(255, 255, 255, 0.16));
+  cursor: pointer;
+}
+
+.item-slot.filled .slot-icon {
+  color: var(--rarity-color, #9aa4b2);
+}
+
+.item-slot[data-inv-slot] {
+  cursor: pointer;
+}
+
+.item-slot[data-inv-slot]:hover {
+  border-color: #ffe08a;
+}
+
+.item-slot.held-source {
+  opacity: 0.35;
+}
+
+.inventory-craft-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.craft-area {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.craft-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  gap: 2px;
+}
+
+.craft-slot {
+  border-radius: 6px;
+}
+
+.craft-slot.filled {
+  cursor: pointer;
+}
+
+.craft-arrow {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 26px;
+}
+
+.craft-output {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  cursor: pointer;
+  border-color: var(--rarity-color, rgba(255, 255, 255, 0.3));
+  box-shadow: 0 0 14px rgba(217, 179, 95, 0.18);
+}
+
+.craft-output.empty {
+  cursor: default;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.craft-hint-panel {
+  flex: 1;
+  padding-top: 26px;
+}
+
+.craft-hint {
+  margin: 0 0 6px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}
+
+.equipment-slot.filled {
+  cursor: pointer;
+  border-color: var(--rarity-color, rgba(255, 255, 255, 0.2));
+}
+
+.equipment-slot.filled:hover {
+  border-color: #ffe08a;
+}
+
+.held-item-indicator {
+  position: fixed;
+  right: 26px;
+  bottom: 22px;
+  z-index: 40;
+  padding: 8px 14px;
+  border: 1px solid var(--rarity-color, #9aa4b2);
+  border-radius: 8px;
+  background: rgba(10, 13, 17, 0.92);
+  color: #e8dcc5;
+  font-size: 13px;
+  pointer-events: none;
+}
+
 .experience-track {
   width: min(610px, calc(100% - 28px));
   height: 8px;

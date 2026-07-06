@@ -13,8 +13,11 @@ import type {
   ChunkSnapshot,
   ChunkTile,
   ChunkWindowResponse,
+  ItemDefinition,
+  ItemStack,
   LoginResponse,
   Position,
+  Recipe,
   RegisterResponse,
   RuntimeResources,
   SlimPlayerState,
@@ -208,6 +211,11 @@ type AppState = {
   lastHudUpdateAt: number;
   lastResourceSyncAt: number;
   resourceSyncInFlight: boolean;
+  // Highest server tick whose self-state we've applied. Self resource frames
+  // (world_snapshot.self) carry the server's monotonic 100ms game tick; we
+  // reject any frame with tick <= lastSelfTick so stale/reordered frames can't
+  // stomp fresher stamina. Reset to 0 on (re)connect.
+  lastSelfTick: number;
   lastFrameMs: number;
   lastChunkRefreshMs: number;
   lastChunkRefreshCount: number;
@@ -231,6 +239,16 @@ type AppState = {
   inventoryOpen: boolean;
   inventoryFacing: Facing;
   selectedHotbarIndex: number;
+  // 物品/合成系统
+  itemDefs: Map<string, ItemDefinition>;
+  recipes: Recipe[];
+  // 光标持物：从背包某槽拾起的整堆物品（Minecraft 式点击交互）。
+  // 纯本地状态 —— 服务器背包不变，放回/移动时才调 API。
+  heldItem: { stack: ItemStack; fromSlot: number } | null;
+  // 3x3 合成格：每格一个 itemId（"" 为空）。物品从光标持物"放入"，
+  // 纯本地预留；craft 时服务器校验背包真实持有并扣除。
+  craftGrid: string[];
+  craftBusy: boolean;
   settingsPage: "audio" | "video" | "keys";
   audioSettings: {
     masterVolume: number;
@@ -432,6 +450,7 @@ const state: AppState = {
   lastHudUpdateAt: 0,
   lastResourceSyncAt: 0,
   resourceSyncInFlight: false,
+  lastSelfTick: 0,
   lastFrameMs: 0,
   lastChunkRefreshMs: 0,
   lastChunkRefreshCount: 0,
@@ -453,6 +472,11 @@ const state: AppState = {
   inventoryOpen: false,
   inventoryFacing: "front",
   selectedHotbarIndex: 4,
+  itemDefs: new Map(),
+  recipes: [],
+  heldItem: null,
+  craftGrid: Array.from({ length: 9 }, () => ""),
+  craftBusy: false,
   settingsPage: "audio",
   audioSettings: {
     masterVolume: 100,
@@ -582,6 +606,15 @@ window.addEventListener("keydown", (event) => {
     debugPanel.classList.toggle("hidden");
     return;
   }
+  // 数字键 1~9 快捷切换物品栏（用 code 而非 key，兼容中文输入法布局）
+  if (state.characterId && event.code.startsWith("Digit")) {
+    const digit = Number(event.code.slice(5));
+    if (digit >= 1 && digit <= 9) {
+      event.preventDefault();
+      selectHotbarSlot(digit - 1);
+      return;
+    }
+  }
   if (state.characterId && isGameplayKey(event.code)) {
     event.preventDefault();
     state.pressed.add(event.code);
@@ -596,6 +629,16 @@ window.addEventListener("keyup", (event) => {
   if (isTypingTarget(event.target)) return;
 });
 window.addEventListener("blur", releaseGameplayInput);
+// 鼠标滚轮切换物品栏：向下滚 → 下一格，向上滚 → 上一格（循环）。
+// passive:false 以便 preventDefault 阻止页面滚动；仅在游戏中且无弹层时生效。
+window.addEventListener("wheel", (event) => {
+  if (!state.characterId || state.menuOpen || state.inventoryOpen) return;
+  if (isTypingTarget(event.target)) return;
+  if (event.deltaY === 0) return;
+  event.preventDefault();
+  const direction = event.deltaY > 0 ? 1 : -1;
+  selectHotbarSlot((state.selectedHotbarIndex + direction + 9) % 9);
+}, { passive: false });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     releaseGameplayInput();
@@ -1963,6 +2006,7 @@ async function enterWorldWithCharacter(character: CharacterSummary): Promise<voi
 
     await refreshChunks(true);
     connectWebSocket(state.api);
+    void loadItemRegistries();
 
     loginModal.classList.add("hidden");
     registerModal.classList.add("hidden");
@@ -2104,7 +2148,10 @@ function togglePauseMenu(): void {
 function toggleInventory(open = !state.inventoryOpen): void {
   state.inventoryOpen = open;
   inventoryModal.classList.toggle("hidden", !open);
-  if (!open) return;
+  if (!open) {
+    resetInventoryInteraction();
+    return;
+  }
   state.menuOpen = false;
   pauseMenu.classList.add("hidden");
   renderInventoryModal();
@@ -2143,6 +2190,25 @@ function renderInventoryModal(): void {
         </section>
       </div>
       <div class="inventory-bottom">
+        <div class="inventory-craft-row">
+          <section class="craft-panel">
+            <div class="inventory-section-header">
+              <h3>合成</h3>
+              <span>3 x 3 工作台</span>
+            </div>
+            <div class="craft-area">
+              <div class="craft-grid">
+                ${state.craftGrid.map((itemId, cell) => renderCraftSlot(itemId, cell)).join("")}
+              </div>
+              <div class="craft-arrow">→</div>
+              ${renderCraftOutput()}
+            </div>
+          </section>
+          <section class="craft-hint-panel">
+            <p class="craft-hint">点击背包物品拾起 · 点击合成格放入一件 · 点击产物合成</p>
+            <p class="craft-hint">双击背包中的装备可快速穿戴 · 点击穿戴槽卸下</p>
+          </section>
+        </div>
         <div class="inventory-section-header">
           <h3>背包储物区</h3>
           <span>54 格 · 3 行 x 18 列</span>
@@ -2157,6 +2223,7 @@ function renderInventoryModal(): void {
         ${renderHotbar(character, true)}
       </div>
     </div>
+    ${renderHeldItemCursor()}
   `;
 
   inventoryModal.querySelector<HTMLButtonElement>("[data-inventory-close]")?.addEventListener("click", () => toggleInventory(false));
@@ -2166,7 +2233,62 @@ function renderInventoryModal(): void {
       renderInventoryModal();
     });
   }
+  bindInventoryInteractions();
   renderInventoryAvatar(character);
+}
+
+// 给背包/合成/装备槽绑定点击事件（innerHTML 重建后每次都要重绑）。
+function bindInventoryInteractions(): void {
+  for (const slot of inventoryModal.querySelectorAll<HTMLElement>("[data-inv-slot]")) {
+    const index = Number(slot.dataset.invSlot);
+    slot.addEventListener("click", () => void onInventorySlotClick(index));
+    slot.addEventListener("dblclick", () => void onInventorySlotDoubleClick(index));
+  }
+  for (const slot of inventoryModal.querySelectorAll<HTMLElement>("[data-craft-slot]")) {
+    slot.addEventListener("click", () => onCraftSlotClick(Number(slot.dataset.craftSlot)));
+  }
+  inventoryModal.querySelector<HTMLElement>("[data-craft-output]")?.addEventListener("click", () => void onCraftOutputClick());
+  for (const slot of inventoryModal.querySelectorAll<HTMLElement>("[data-equip-slot]")) {
+    slot.addEventListener("click", () => void onEquipmentSlotClick(slot.dataset.equipSlot || ""));
+  }
+}
+
+function renderCraftSlot(itemId: string, cell: number): string {
+  const filled = itemId !== "";
+  return `
+    <div class="item-slot craft-slot ${filled ? "filled" : ""}" data-craft-slot="${cell}"
+      ${filled ? `style="--rarity-color:${itemRarityColor(itemId)}" title="${escapeHtml(itemName(itemId))}"` : ""}>
+      <span class="slot-icon">${filled ? "●" : ""}</span>
+      <strong>${filled ? escapeHtml(itemName(itemId)) : ""}</strong>
+    </div>
+  `;
+}
+
+function renderCraftOutput(): string {
+  const recipe = matchRecipeLocal(state.craftGrid);
+  if (!recipe) {
+    return `<div class="item-slot craft-output empty"><strong>?</strong></div>`;
+  }
+  const { itemId, quantity } = recipe.output;
+  return `
+    <div class="item-slot craft-output" data-craft-output
+      style="--rarity-color:${itemRarityColor(itemId)}" title="${escapeHtml(itemName(itemId))}">
+      <span class="slot-icon">●</span>
+      <strong>${escapeHtml(itemName(itemId))}</strong>
+      <em>${quantity > 1 ? quantity : ""}</em>
+    </div>
+  `;
+}
+
+// 光标持物指示（简化实现：固定在界面角落显示当前持有物）。
+function renderHeldItemCursor(): string {
+  if (!state.heldItem) return "";
+  const { stack } = state.heldItem;
+  return `
+    <div class="held-item-indicator" style="--rarity-color:${itemRarityColor(stack.itemId)}">
+      手持: ${escapeHtml(itemName(stack.itemId))} x${stack.quantity}
+    </div>
+  `;
 }
 
 function renderInventoryAvatar(character: CharacterSummary | undefined): void {
@@ -2365,6 +2487,9 @@ function connectWebSocket(api: ApiClient): void {
   const ws = new WebSocket(api.wsUrl());
   state.ws = ws;
   state.socketStatus = "连接中";
+  // New connection: the server's tick sequence restarts from our perspective,
+  // so drop the stale gate to accept the first frame.
+  state.lastSelfTick = 0;
 
   ws.addEventListener("open", () => {
     state.socketStatus = "已连接";
@@ -2465,17 +2590,25 @@ function handleWorldSnapshot(message: WSServerMessage): void {
   // resource sync is skipped during sustained movement). Position is advisory
   // — the client keeps predicting its own, matching prior behavior.
   if (message.self) {
-    state.mapId = message.self.mapId || state.mapId;
-    const combat = getCombatStats(currentPlayerCharacter()?.stats);
-    const staminaMax = state.runtimeResources.staminaMax ?? combat.resources.staminaMax;
-    const staminaCurrent = typeof message.self.staminaCurrent === "number"
-      ? message.self.staminaCurrent
-      : state.currentStamina;
-    applyRuntimeResources(
-      { ...state.runtimeResources, staminaMax, staminaCurrent },
-      combat,
-      message.self.sprinting,
-    );
+    // Tick-gate: the 100ms world_snapshot is the single authority for our own
+    // stamina/sprint. Reject frames at or below the last applied tick so a
+    // delayed or duplicated frame can never stomp a fresher value. A missing
+    // tick (0) always applies — older servers omit it.
+    const tick = typeof message.tick === "number" ? message.tick : 0;
+    if (tick === 0 || tick > state.lastSelfTick) {
+      state.lastSelfTick = tick;
+      state.mapId = message.self.mapId || state.mapId;
+      const combat = getCombatStats(currentPlayerCharacter()?.stats);
+      const staminaMax = state.runtimeResources.staminaMax ?? combat.resources.staminaMax;
+      const staminaCurrent = typeof message.self.staminaCurrent === "number"
+        ? message.self.staminaCurrent
+        : state.currentStamina;
+      applyRuntimeResources(
+        { ...state.runtimeResources, staminaMax, staminaCurrent },
+        combat,
+        message.self.sprinting,
+      );
+    }
   }
 
   if (message.entered) {
@@ -2510,7 +2643,11 @@ function loop(now: number): void {
 
   processPendingChunkRenders(state.videoSettings.chunkRenderBudget);
   updatePlayer(deltaSeconds, now);
-  if (!isMovementPressed() && now - state.lastResourceSyncAt >= RESOURCE_SYNC_INTERVAL_MS) {
+  // Resource sync is a fallback only. When the WS is open, the 100ms
+  // world_snapshot.self is the single authority for stamina (see
+  // handleWorldSnapshot) — polling here would race it with a ~1 RTT stale
+  // value and make the bar flip-flop. Only poll when the socket is down.
+  if (!isWebSocketConnected() && now - state.lastResourceSyncAt >= RESOURCE_SYNC_INTERVAL_MS) {
     void syncRuntimeResources();
     state.lastResourceSyncAt = now;
   }
@@ -2632,6 +2769,10 @@ function facingFromVector(dx: number, dy: number, fallback: Facing): Facing {
   return fallback;
 }
 
+function isWebSocketConnected(): boolean {
+  return !!state.ws && state.ws.readyState === WebSocket.OPEN;
+}
+
 function sendMove(): void {
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify({ type: "move", position: state.player, sprinting: state.wantsSprint, facing: state.facing }));
@@ -2672,7 +2813,19 @@ async function syncRuntimeResources(force = false): Promise<void> {
     if (world.position) {
       state.player = { ...world.position };
     }
-    applyRuntimeResources(world.resources, getCombatStats(currentPlayerCharacter()?.stats), world.sprinting);
+    // When the WS is open it is the authority for stamina/sprint (the 100ms
+    // self-snapshot). This REST value was sampled ~1 RTT ago, so applying its
+    // stamina/sprint would stomp fresher WS state and make the bar flip-flop.
+    // Keep local stamina/sprint; still let the poll refresh health/mana.
+    if (isWebSocketConnected()) {
+      applyRuntimeResources(
+        { ...world.resources, staminaCurrent: state.currentStamina, staminaMax: state.runtimeResources.staminaMax },
+        getCombatStats(currentPlayerCharacter()?.stats),
+        state.sprinting,
+      );
+    } else {
+      applyRuntimeResources(world.resources, getCombatStats(currentPlayerCharacter()?.stats), world.sprinting);
+    }
     if (world.players) {
       state.players.clear();
       for (const player of world.players) state.players.set(player.playerId, player);
@@ -3313,6 +3466,236 @@ function currentPlayerCharacter(): CharacterSummary | undefined {
     ?? state.availableCharacters.find((item) => item.id === state.selectedCharacterId);
 }
 
+// ---------------------------------------------------------------------------
+// 物品/背包/装备/合成 交互
+// ---------------------------------------------------------------------------
+
+async function loadItemRegistries(): Promise<void> {
+  if (!state.api) return;
+  try {
+    const [itemsResponse, recipesResponse] = await Promise.all([state.api.items(), state.api.recipes()]);
+    state.itemDefs = new Map(itemsResponse.items.map((item) => [item.id, item]));
+    state.recipes = recipesResponse.recipes;
+  } catch (error) {
+    state.lastError = errorToString(error);
+  }
+}
+
+function itemName(itemId: string): string {
+  return state.itemDefs.get(itemId)?.name ?? compactItemName(itemId);
+}
+
+const RARITY_COLORS: Record<string, string> = {
+  common: "#9aa4b2",
+  uncommon: "#4caf50",
+  rare: "#5b8def",
+};
+
+function itemRarityColor(itemId: string): string {
+  const def = state.itemDefs.get(itemId);
+  return RARITY_COLORS[def?.rarity ?? "common"] ?? RARITY_COLORS.common;
+}
+
+// 更新角色数据（服务器返回的最新快照）并重绘背包界面。
+function applyCharacterMutation(character: CharacterSummary): void {
+  const index = state.availableCharacters.findIndex((item) => item.id === character.id);
+  if (index >= 0) {
+    state.availableCharacters[index] = character;
+  }
+  if (state.inventoryOpen) renderInventoryModal();
+  updateHud();
+}
+
+// 背包槽点击：Minecraft 式光标持物。
+// 空手点有物槽 → 拾起整堆；持物点槽 → 放下/交换/合并（调 move API）。
+async function onInventorySlotClick(slot: number): Promise<void> {
+  if (!state.api || !state.token || !state.characterId) return;
+  const character = currentPlayerCharacter();
+  if (!character) return;
+  const items = character.inventory?.items ?? [];
+  const stack = items[slot];
+
+  if (!state.heldItem) {
+    if (!stack || !stack.itemId) return;
+    state.heldItem = { stack: { ...stack }, fromSlot: slot };
+    renderInventoryModal();
+    return;
+  }
+
+  const from = state.heldItem.fromSlot;
+  state.heldItem = null;
+  if (from === slot) {
+    renderInventoryModal();
+    return;
+  }
+  try {
+    const response = await state.api.moveItem(state.token, state.characterId, from, slot);
+    applyCharacterMutation(response.character);
+  } catch (error) {
+    state.lastError = errorToString(error);
+    renderInventoryModal();
+  }
+}
+
+// 双击背包槽：装备类物品快捷穿戴。
+async function onInventorySlotDoubleClick(slot: number): Promise<void> {
+  if (!state.api || !state.token || !state.characterId) return;
+  const character = currentPlayerCharacter();
+  const stack = character?.inventory?.items?.[slot];
+  if (!stack?.itemId) return;
+  const def = state.itemDefs.get(stack.itemId);
+  if (def?.type !== "equipment") return;
+  state.heldItem = null;
+  try {
+    const response = await state.api.equipItem(state.token, state.characterId, slot);
+    applyCharacterMutation(response.character);
+  } catch (error) {
+    state.lastError = errorToString(error);
+    renderInventoryModal();
+  }
+}
+
+// 装备槽点击：空手 → 卸下到背包。
+async function onEquipmentSlotClick(equipSlot: string): Promise<void> {
+  if (!state.api || !state.token || !state.characterId) return;
+  if (state.heldItem) return; // 持物时不响应，避免误操作
+  const character = currentPlayerCharacter();
+  const equipped = character?.equipment?.[equipSlot as keyof typeof character.equipment];
+  if (!equipped || typeof equipped !== "string") return;
+  try {
+    const response = await state.api.unequipItem(state.token, state.characterId, equipSlot);
+    applyCharacterMutation(response.character);
+  } catch (error) {
+    state.lastError = errorToString(error);
+  }
+}
+
+// 合成格点击：持物 → 放入一件；有物且空手 → 取回光标。
+function onCraftSlotClick(cell: number): void {
+  if (state.craftBusy) return;
+  const current = state.craftGrid[cell];
+  if (state.heldItem) {
+    if (current) return; // 已占用
+    const held = state.heldItem;
+    state.craftGrid[cell] = held.stack.itemId;
+    held.stack.quantity -= 1;
+    if (held.stack.quantity <= 0) state.heldItem = null;
+    renderInventoryModal();
+    return;
+  }
+  if (current) {
+    state.craftGrid[cell] = "";
+    renderInventoryModal();
+  }
+}
+
+// 本地配方匹配（预览用；服务器 craft 时重新校验）。
+// 与服务端 matchShaped/matchShapeless 逻辑一致：紧凑化平移匹配。
+function matchRecipeLocal(grid: string[]): Recipe | undefined {
+  const trim = (g: string[]): { rows: number[]; cols: number[] } => {
+    const rows: number[] = [];
+    const cols: number[] = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (g[r * 3 + c]) {
+          if (!rows.includes(r)) rows.push(r);
+          if (!cols.includes(c)) cols.push(c);
+        }
+      }
+    }
+    return { rows, cols };
+  };
+  const counts = (g: string[]): Map<string, number> => {
+    const out = new Map<string, number>();
+    for (const id of g) {
+      if (id) out.set(id, (out.get(id) ?? 0) + 1);
+    }
+    return out;
+  };
+
+  for (const recipe of state.recipes) {
+    if (recipe.shaped && recipe.pattern?.length === 9) {
+      const p = trim(recipe.pattern);
+      const g = trim(state.craftGrid);
+      if (p.rows.length !== g.rows.length || p.cols.length !== g.cols.length) continue;
+      let matched = true;
+      for (let ri = 0; ri < p.rows.length && matched; ri++) {
+        for (let ci = 0; ci < p.cols.length && matched; ci++) {
+          if (recipe.pattern[p.rows[ri] * 3 + p.cols[ci]] !== grid[g.rows[ri] * 3 + g.cols[ci]]) {
+            matched = false;
+          }
+        }
+      }
+      if (matched) return recipe;
+    } else if (!recipe.shaped && recipe.inputs) {
+      const gridCounts = counts(grid);
+      const inputEntries = Object.entries(recipe.inputs);
+      if (gridCounts.size !== inputEntries.length) continue;
+      if (inputEntries.every(([id, need]) => gridCounts.get(id) === need)) return recipe;
+    }
+  }
+  return undefined;
+}
+
+// 点击产物格：发送 craft 请求，服务器扣料发货。
+async function onCraftOutputClick(): Promise<void> {
+  if (!state.api || !state.token || !state.characterId || state.craftBusy) return;
+  const recipe = matchRecipeLocal(state.craftGrid);
+  if (!recipe) return;
+  state.craftBusy = true;
+  try {
+    const response = await state.api.craft(state.token, state.characterId, [...state.craftGrid]);
+    state.craftGrid = Array.from({ length: 9 }, () => "");
+    applyCharacterMutation(response.character);
+  } catch (error) {
+    state.lastError = errorToString(error);
+    renderInventoryModal();
+  } finally {
+    state.craftBusy = false;
+  }
+}
+
+// 关闭背包时清空本地临时状态（合成格/光标物品都只是"预留"，直接丢弃即可）。
+function resetInventoryInteraction(): void {
+  state.heldItem = null;
+  state.craftGrid = Array.from({ length: 9 }, () => "");
+  state.craftBusy = false;
+}
+
+function renderItemTooltip(itemId: string): string {
+  const def = state.itemDefs.get(itemId);
+  if (!def) return itemId;
+  const lines: string[] = [def.name];
+  if (def.equipSlot) lines.push(`部位: ${equipSlotLabel(def.equipSlot)}`);
+  if (def.stats) {
+    const attrDefs = new Map((currentPlayerCharacter()?.stats?.metadata?.attributeDefs ?? []).map((d) => [d.code, d]));
+    for (const [code, value] of Object.entries(def.stats)) {
+      const label = attrDefs.get(code)?.displayName ?? code;
+      const display = Math.abs(value) < 1 ? `${(value * 100).toFixed(0)}%` : String(value);
+      lines.push(`+${display} ${label}`);
+    }
+  }
+  if (def.description) lines.push(def.description);
+  return lines.join("\n");
+}
+
+const EQUIP_SLOT_LABELS: Record<string, string> = {
+  mainHand: "主手",
+  offHand: "副手",
+  helmet: "头盔",
+  chest: "胸甲",
+  pants: "裤子",
+  shoes: "鞋子",
+  shoulders: "肩甲",
+  cloak: "披风",
+  leftBracer: "左护臂",
+  rightBracer: "右护臂",
+};
+
+function equipSlotLabel(slot: string): string {
+  return EQUIP_SLOT_LABELS[slot] ?? slot;
+}
+
 function getCombatStats(stats: CharacterStats | undefined): CharacterCombatStats {
   if (stats?.combat) return stats.combat;
   const health = stats?.base.health ?? 100;
@@ -3409,43 +3792,48 @@ function renderMiniResourceBars(combat: CharacterCombatStats): string {
   `;
 }
 
+// 切换快捷栏选中格并立即刷新 HUD（不等 120ms 节流）。
+function selectHotbarSlot(index: number): void {
+  if (index < 0 || index > 8 || index === state.selectedHotbarIndex) return;
+  state.selectedHotbarIndex = index;
+  updateHud();
+}
+
 function renderHotbar(character: CharacterSummary | undefined, inventoryMode: boolean): string {
   const items = character?.inventory?.items ?? [];
   return `
     <div class="hotbar ${inventoryMode ? "inventory-hotbar" : ""}">
-      ${Array.from({ length: 9 }, (_, index) => renderItemSlot(items[index], index, index === state.selectedHotbarIndex, "hotbar")).join("")}
+      ${Array.from({ length: 9 }, (_, index) => renderItemSlot(items[index], index, index === state.selectedHotbarIndex, "hotbar", inventoryMode ? index : undefined)).join("")}
     </div>
   `;
 }
 
 function renderBagSlots(character: CharacterSummary | undefined): string {
   const items = character?.inventory?.items ?? [];
-  return Array.from({ length: 54 }, (_, index) => renderItemSlot(items[index + 9], index, false, "bag")).join("");
+  return Array.from({ length: 54 }, (_, index) => renderItemSlot(items[index + 9], index, false, "bag", index + 9)).join("");
 }
 
 function renderEquipmentSlots(character: CharacterSummary | undefined): string {
   const equipment = character?.equipment;
-  const slots: Array<[string, string | undefined]> = [
-    ["头盔", equipment?.helmet],
-    ["胸甲", equipment?.chest],
-    ["裤子", equipment?.pants],
-    ["鞋子", equipment?.shoes],
-    ["肩甲", equipment?.shoulders],
-    ["披风", equipment?.cloak],
-    ["左护臂", equipment?.leftBracer],
-    ["右护臂", equipment?.rightBracer],
-    ["戒指 1", undefined],
-    ["戒指 2", undefined],
-    ["戒指 3", undefined],
-    ["吊坠 1", undefined],
-    ["吊坠 2", undefined],
+  const slots: Array<[string, string, string | undefined]> = [
+    ["mainHand", "主手", equipment?.mainHand],
+    ["offHand", "副手", equipment?.offHand],
+    ["helmet", "头盔", equipment?.helmet],
+    ["chest", "胸甲", equipment?.chest],
+    ["pants", "裤子", equipment?.pants],
+    ["shoes", "鞋子", equipment?.shoes],
+    ["shoulders", "肩甲", equipment?.shoulders],
+    ["cloak", "披风", equipment?.cloak],
+    ["leftBracer", "左护臂", equipment?.leftBracer],
+    ["rightBracer", "右护臂", equipment?.rightBracer],
   ];
   return `
     <div class="equipment-slots">
-      ${slots.map(([label, itemId]) => `
-        <div class="equipment-slot">
+      ${slots.map(([code, label, itemId]) => `
+        <div class="equipment-slot ${itemId ? "filled" : ""}" data-equip-slot="${code}"
+          ${itemId ? `style="--rarity-color:${itemRarityColor(itemId)}" title="点击卸下&#10;${escapeHtml(renderItemTooltip(itemId))}"` : ""}>
           <span>${label}</span>
-          <strong>${itemId ? escapeHtml(itemId) : "空"}</strong>
+          <strong>${itemId ? escapeHtml(itemName(itemId)) : "空"}</strong>
         </div>
       `).join("")}
     </div>
@@ -3506,13 +3894,18 @@ function renderFullInventoryStats(character: CharacterSummary | undefined, comba
   `;
 }
 
-function renderItemSlot(item: { itemId: string; quantity: number } | undefined, index: number, selected: boolean, kind: "hotbar" | "bag"): string {
-  const label = item ? compactItemName(item.itemId) : "";
-  const quantity = item && item.quantity > 1 ? item.quantity : "";
+function renderItemSlot(item: { itemId: string; quantity: number } | undefined, index: number, selected: boolean, kind: "hotbar" | "bag", slotIndex?: number): string {
+  const filled = !!item && !!item.itemId;
+  const label = filled ? itemName(item.itemId) : "";
+  const quantity = filled && item.quantity > 1 ? item.quantity : "";
+  const held = state.heldItem && slotIndex !== undefined && state.heldItem.fromSlot === slotIndex;
+  const interactive = slotIndex !== undefined ? `data-inv-slot="${slotIndex}"` : "";
+  const rarity = filled ? `style="--rarity-color:${itemRarityColor(item.itemId)}"` : "";
+  const tooltip = filled ? `title="${escapeHtml(renderItemTooltip(item.itemId))}"` : "";
   return `
-    <div class="item-slot ${kind}-slot ${selected ? "selected" : ""}">
+    <div class="item-slot ${kind}-slot ${selected ? "selected" : ""} ${filled ? "filled" : ""} ${held ? "held-source" : ""}" ${interactive} ${rarity} ${tooltip}>
       <span class="slot-index">${kind === "hotbar" ? index + 1 : ""}</span>
-      <span class="slot-icon">${item ? "●" : "□"}</span>
+      <span class="slot-icon">${filled ? "●" : "□"}</span>
       <strong>${escapeHtml(label)}</strong>
       <em>${quantity}</em>
     </div>

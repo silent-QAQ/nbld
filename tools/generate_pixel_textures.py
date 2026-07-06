@@ -5,8 +5,16 @@ import struct
 import zlib
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-TILE_DIR = os.path.join(ROOT, "client", "unity", "Assets", "Art", "Tiles")
-DECOR_DIR = os.path.join(ROOT, "client", "unity", "Assets", "Art", "Decorations")
+OUTPUT_DIRS = [
+    (
+        os.path.join(ROOT, "client", "unity", "Assets", "Art", "Tiles"),
+        os.path.join(ROOT, "client", "unity", "Assets", "Art", "Decorations"),
+    ),
+    (
+        os.path.join(ROOT, "client", "web", "public", "art", "tiles"),
+        os.path.join(ROOT, "client", "web", "public", "art", "decorations"),
+    ),
+]
 
 
 def rgba(hex_color, alpha=255):
@@ -108,6 +116,13 @@ DECORATIONS = {
     "desert_rock": (40, 36, "#8a6c42", "#ba945a"),
     "weathered_stone": (44, 36, "#7e735b", "#aa9c7d"),
     "pebble_cluster": (32, 32, "#66665f", "#a1a092"),
+    "deco_wood_fence": (48, 40, "#7a4e2b", "#b8844a"),
+    "deco_stone_fence": (48, 40, "#656761", "#a1a39a"),
+    "deco_wood_wall": (48, 48, "#6b4526", "#a8753d"),
+    "deco_stone_wall": (48, 48, "#5e625e", "#92958e"),
+    "deco_wood_floor": (40, 32, "#7a4e2b", "#bc8650"),
+    "deco_stone_floor": (40, 32, "#646762", "#a3a69f"),
+    "deco_torch": (32, 48, "#6b4526", "#f2b84b"),
 }
 
 
@@ -212,7 +227,45 @@ def decoration(name, spec):
     bark = rgba("#6b4526")
     pixels = transparent(width, height)
 
-    if "stone" in name or "rock" in name or "boulder" in name or "pebble" in name:
+    if name == "deco_wood_fence":
+        rect(pixels, width, height, 7, 12, 12, height - 4, dark)
+        rect(pixels, width, height, width - 12, 12, width - 7, height - 4, dark)
+        rect(pixels, width, height, 4, 17, width - 4, 23, main)
+        rect(pixels, width, height, 4, 28, width - 4, 34, main)
+        rect(pixels, width, height, 4, 17, width - 4, 19, light)
+    elif name == "deco_stone_fence":
+        for x in range(5, width - 8, 10):
+            rect(pixels, width, height, x, 12, x + 7, height - 5, main)
+            rect(pixels, width, height, x + 1, 13, x + 5, 16, light)
+        rect(pixels, width, height, 3, 21, width - 3, 29, main)
+        rect(pixels, width, height, 3, 21, width - 3, 23, light)
+    elif name == "deco_wood_wall":
+        for y in range(12, height - 4, 8):
+            rect(pixels, width, height, 4, y, width - 4, y + 7, main if (y // 8) % 2 == 0 else dark)
+            line(pixels, width, height, 5, y + 1, width - 5, y + 1, light)
+        for x in [14, 29]:
+            rect(pixels, width, height, x, 12, x + 2, height - 4, dark)
+    elif name == "deco_stone_wall":
+        for y in range(11, height - 4, 9):
+            offset = 0 if (y // 9) % 2 == 0 else 8
+            for x in range(4 - offset, width - 4, 16):
+                rect(pixels, width, height, max(4, x), y, min(width - 4, x + 15), y + 8, main)
+                line(pixels, width, height, max(4, x), y, min(width - 5, x + 14), y, light)
+    elif name == "deco_wood_floor":
+        for x in range(4, width - 4, 8):
+            rect(pixels, width, height, x, 12, x + 7, height - 5, main if (x // 8) % 2 == 0 else dark)
+            line(pixels, width, height, x + 1, 13, x + 1, height - 6, light)
+    elif name == "deco_stone_floor":
+        for y in range(10, height - 5, 8):
+            for x in range(4, width - 4, 10):
+                rect(pixels, width, height, x, y, x + 9, y + 7, main)
+                line(pixels, width, height, x, y, x + 8, y, light)
+    elif name == "deco_torch":
+        rect(pixels, width, height, 14, 18, 18, height - 5, bark)
+        disk(pixels, width, height, 16, 15, 6, 7, rgba("#d84b2a"))
+        disk(pixels, width, height, 16, 13, 3, 5, light)
+        set_px(pixels, width, height, 16, 10, rgba("#fff0a3"))
+    elif "stone" in name or "rock" in name or "boulder" in name or "pebble" in name:
         rng = random.Random(name)
         blobs = 1 if width <= 40 else 2
         for i in range(blobs):
@@ -291,15 +344,16 @@ def decoration(name, spec):
 
 
 def main():
-    os.makedirs(TILE_DIR, exist_ok=True)
-    os.makedirs(DECOR_DIR, exist_ok=True)
-    for name, colors in BASE_TILES.items():
-        write_png(os.path.join(TILE_DIR, f"{name}.png"), 32, 32, noise_tile(name, colors))
-    for name, spec in DECORATIONS.items():
-        width, height = spec[0], spec[1]
-        write_png(os.path.join(DECOR_DIR, f"{name}.png"), width, height, decoration(name, spec))
-    print(f"tiles={len(BASE_TILES)} dir={TILE_DIR}")
-    print(f"decorations={len(DECORATIONS)} dir={DECOR_DIR}")
+    for tile_dir, decor_dir in OUTPUT_DIRS:
+        os.makedirs(tile_dir, exist_ok=True)
+        os.makedirs(decor_dir, exist_ok=True)
+        for name, colors in BASE_TILES.items():
+            write_png(os.path.join(tile_dir, f"{name}.png"), 32, 32, noise_tile(name, colors))
+        for name, spec in DECORATIONS.items():
+            width, height = spec[0], spec[1]
+            write_png(os.path.join(decor_dir, f"{name}.png"), width, height, decoration(name, spec))
+        print(f"tiles={len(BASE_TILES)} dir={tile_dir}")
+        print(f"decorations={len(DECORATIONS)} dir={decor_dir}")
 
 
 if __name__ == "__main__":

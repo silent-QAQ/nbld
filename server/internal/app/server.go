@@ -133,12 +133,22 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("/api/v1/characters/warehouse", s.handleUpdateCharacterWarehouse)
 	mux.HandleFunc("/api/v1/characters/equipment", s.handleUpdateCharacterEquipment)
 	mux.HandleFunc("/api/v1/characters/appearance", s.handleUpdateCharacterAppearance)
+	mux.HandleFunc("/api/v1/items", s.handleItemRegistry)
+	mux.HandleFunc("/api/v1/recipes", s.handleRecipeRegistry)
+	mux.HandleFunc("/api/v1/decorations", s.handleDecorationRegistry)
+	mux.HandleFunc("/api/v1/inventory/move", s.handleMoveInventoryItem)
+	mux.HandleFunc("/api/v1/equipment/equip", s.handleEquipItem)
+	mux.HandleFunc("/api/v1/equipment/unequip", s.handleUnequipItem)
+	mux.HandleFunc("/api/v1/craft", s.handleCraft)
+	mux.HandleFunc("/api/v1/debug/give", s.handleGiveItem)
 	mux.HandleFunc("/api/v1/world/enter", s.handleEnterWorld)
 	mux.HandleFunc("/api/v1/world/leave", s.handleLeaveWorld)
 	mux.HandleFunc("/api/v1/world/state", s.handleWorldState)
 	mux.HandleFunc("/api/v1/world/chunks", s.handleWorldChunks)
 	mux.HandleFunc("/api/v1/world/seed/random", s.handleRandomSeed)
 	mux.HandleFunc("/api/v1/world/move", s.handleMove)
+	mux.HandleFunc("/api/v1/world/harvest", s.handleHarvest)
+	mux.HandleFunc("/api/v1/world/place", s.handlePlaceBlock)
 	mux.HandleFunc("/api/v1/world/events", s.handleWorldEvents)
 	mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
 	mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccountCharacters)
@@ -1720,8 +1730,9 @@ func toProtocolItems(items []ItemStack) []protocol.ItemStack {
 	out := make([]protocol.ItemStack, 0, len(items))
 	for _, item := range items {
 		out = append(out, protocol.ItemStack{
-			ItemID:   item.ItemID,
-			Quantity: item.Quantity,
+			ItemID:     item.ItemID,
+			Quantity:   item.Quantity,
+			Durability: item.Durability,
 		})
 	}
 	return out
@@ -1939,8 +1950,9 @@ func protocolItemContainerToDomain(container protocol.ItemContainer) ItemContain
 	items := make([]ItemStack, 0, len(container.Items))
 	for _, item := range container.Items {
 		items = append(items, ItemStack{
-			ItemID:   item.ItemID,
-			Quantity: item.Quantity,
+			ItemID:     item.ItemID,
+			Quantity:   item.Quantity,
+			Durability: item.Durability,
 		})
 	}
 	return ItemContainer{Items: items}
