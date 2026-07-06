@@ -4344,7 +4344,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function defaultApiBaseUrl(): string {
   const url = new URL(window.location.href);
   if (url.port === "27777") {
-    url.port = "16363";
+    url.port = "6363";
   }
   url.pathname = "";
   url.search = "";
@@ -4357,8 +4357,8 @@ function normalizeBaseUrl(value: string): string {
   if (!trimmed) return defaultApiBaseUrl();
   const normalized = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`;
   const url = new URL(normalized);
-  if (url.port === "27777" || url.port === "6363") {
-    url.port = "16363";
+  if (url.port === "27777" || url.port === "16363") {
+    url.port = "6363";
   }
   url.pathname = "";
   url.search = "";
