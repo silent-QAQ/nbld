@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -720,6 +721,25 @@ func TestSnapshotSelfCarriesStamina(t *testing.T) {
 	}
 	if msg.Self.StaminaCurrent <= 0 {
 		t.Fatalf("expected positive self stamina, got %d", msg.Self.StaminaCurrent)
+	}
+}
+
+func TestSnapshotSelfSerializesZeroStamina(t *testing.T) {
+	message := protocol.WSServerMessage{
+		Type: "world_snapshot",
+		Self: &protocol.SnapshotSelf{
+			MapID:          "map_0_0",
+			Position:       protocol.Position{X: 1, Y: 2},
+			StaminaCurrent: 0,
+		},
+	}
+
+	data, err := json.Marshal(message)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if !strings.Contains(string(data), `"staminaCurrent":0`) {
+		t.Fatalf("expected zero stamina to be serialized, got %s", string(data))
 	}
 }
 

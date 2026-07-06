@@ -229,7 +229,7 @@ type SnapshotSelf struct {
 	MapID          string   `json:"mapId,omitempty"`
 	Position       Position `json:"position"`
 	Sprinting      bool     `json:"sprinting,omitempty"`
-	StaminaCurrent int      `json:"staminaCurrent,omitempty"`
+	StaminaCurrent int      `json:"staminaCurrent"`
 }
 
 type WSServerMessage struct {
@@ -262,7 +262,7 @@ type RuntimeResources struct {
 	ManaMax        int `json:"manaMax,omitempty"`
 	ManaCurrent    int `json:"manaCurrent,omitempty"`
 	StaminaMax     int `json:"staminaMax,omitempty"`
-	StaminaCurrent int `json:"staminaCurrent,omitempty"`
+	StaminaCurrent int `json:"staminaCurrent"`
 }
 
 type CharacterStats struct {

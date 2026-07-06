@@ -330,7 +330,7 @@ export type SnapshotSelf = {
   mapId?: string;
   position: Position;
   sprinting?: boolean;
-  staminaCurrent?: number;
+  staminaCurrent: number;
 };
 
 export type WSServerMessage = {

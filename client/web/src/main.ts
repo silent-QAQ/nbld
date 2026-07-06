@@ -589,6 +589,9 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("keyup", (event) => {
   state.pressed.delete(event.code);
+  if (isSprintKey(event.code)) {
+    stopSprintIntent();
+  }
   if (state.menuOpen || state.inventoryOpen) return;
   if (isTypingTarget(event.target)) return;
 });
@@ -2454,9 +2457,14 @@ function handleWorldSnapshot(message: WSServerMessage): void {
   // — the client keeps predicting its own, matching prior behavior.
   if (message.self) {
     state.mapId = message.self.mapId || state.mapId;
+    const combat = getCombatStats(currentPlayerCharacter()?.stats);
+    const staminaMax = state.runtimeResources.staminaMax ?? combat.resources.staminaMax;
+    const staminaCurrent = typeof message.self.staminaCurrent === "number"
+      ? message.self.staminaCurrent
+      : state.currentStamina;
     applyRuntimeResources(
-      { ...state.runtimeResources, staminaCurrent: message.self.staminaCurrent },
-      getCombatStats(currentPlayerCharacter()?.stats),
+      { ...state.runtimeResources, staminaMax, staminaCurrent },
+      combat,
       message.self.sprinting,
     );
   }
@@ -2554,7 +2562,6 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   const moving = dx !== 0 || dy !== 0;
   const wantsSprint = isSprintPressed();
   state.wantsSprint = moving && wantsSprint && state.currentStamina > 0;
-  predictRuntimeStamina(deltaSeconds, combat);
 
   if (moving) {
     const length = Math.hypot(dx, dy);
@@ -2590,25 +2597,6 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 function getCurrentMoveSpeed(combat: CharacterCombatStats, sprinting: boolean): number {
   const baseMoveSpeed = Math.max(0, combat.moveSpeed);
   return sprinting ? baseMoveSpeed * SPRINT_SPEED_MULTIPLIER : baseMoveSpeed;
-}
-
-function predictRuntimeStamina(deltaSeconds: number, combat: CharacterCombatStats): void {
-  const staminaMax = Math.max(1, state.runtimeResources.staminaMax ?? combat.resources.staminaMax);
-  state.currentStamina = clamp(state.currentStamina, 0, staminaMax);
-  if (!state.wantsSprint) return;
-
-  const drainPerSecond = Math.max(0, SPRINT_STAMINA_COST_PER_SECOND - STAMINA_REGEN_WHILE_RUNNING);
-  const nextStamina = clamp(state.currentStamina - drainPerSecond * deltaSeconds, 0, staminaMax);
-  state.currentStamina = nextStamina;
-  state.runtimeResources = {
-    ...state.runtimeResources,
-    staminaMax,
-    staminaCurrent: nextStamina,
-  };
-  state.sprinting = nextStamina > 0;
-  if (nextStamina <= 0) {
-    state.wantsSprint = false;
-  }
 }
 
 function updatePlayerVisual(deltaSeconds: number): void {
@@ -2653,10 +2641,13 @@ function sendMove(): void {
 function releaseGameplayInput(): void {
   if (state.pressed.size === 0 && !state.wantsSprint) return;
   state.pressed.clear();
-  if (state.wantsSprint) {
-    state.wantsSprint = false;
-    sendMove();
-  }
+  stopSprintIntent();
+}
+
+function stopSprintIntent(): void {
+  if (!state.wantsSprint) return;
+  state.wantsSprint = false;
+  sendMove();
 }
 
 async function syncRuntimeResources(force = false): Promise<void> {
