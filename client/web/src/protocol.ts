@@ -310,14 +310,37 @@ export type WorldPlayer = {
   characterName?: string;
   mapId?: string;
   position: Position;
+  facing?: string;
   resources?: RuntimeResources;
   sprinting?: boolean;
   appearance?: CharacterAppearance;
   equipment?: CharacterEquipment;
 };
 
+export type SlimPlayerState = {
+  playerId: string;
+  mapId?: string;
+  position: Position;
+  facing?: string;
+  sprinting?: boolean;
+  staminaCurrent?: number;
+};
+
+export type SnapshotSelf = {
+  mapId?: string;
+  position: Position;
+  sprinting?: boolean;
+  staminaCurrent?: number;
+};
+
 export type WSServerMessage = {
-  type: "auth_ok" | "player_moved" | "map_transition" | "error" | string;
+  type:
+    | "auth_ok"
+    | "world_snapshot"
+    | "player_moved"
+    | "map_transition"
+    | "error"
+    | string;
   playerId?: string;
   characterId?: string;
   characterName?: string;
@@ -328,6 +351,12 @@ export type WSServerMessage = {
   sprinting?: boolean;
   players?: WorldPlayer[];
   error?: string;
+  // world_snapshot fields
+  tick?: number;
+  self?: SnapshotSelf;
+  entered?: WorldPlayer[];
+  moved?: SlimPlayerState[];
+  left?: string[];
 };
 
 export type ChunkCoord = {

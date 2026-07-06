@@ -179,6 +179,7 @@ type WorldPlayer struct {
 	CharacterName string              `json:"characterName,omitempty"`
 	MapID         string              `json:"mapId,omitempty"`
 	Position      Position            `json:"position"`
+	Facing        string              `json:"facing,omitempty"`
 	Resources     RuntimeResources    `json:"resources,omitempty"`
 	Sprinting     bool                `json:"sprinting,omitempty"`
 	Appearance    CharacterAppearance `json:"appearance"`
@@ -204,6 +205,31 @@ type WSClientMessage struct {
 	Token     string   `json:"token,omitempty"`
 	Position  Position `json:"position,omitempty"`
 	Sprinting bool     `json:"sprinting,omitempty"`
+	Facing    string   `json:"facing,omitempty"`
+}
+
+// SlimPlayerState is the lightweight per-player payload sent in world
+// snapshots. It intentionally omits appearance/equipment/full resources —
+// those are only synced on AOI entry (via SnapshotSelf/WorldPlayer.entered),
+// login, and gear/appearance changes.
+type SlimPlayerState struct {
+	PlayerID       string   `json:"playerId"`
+	MapID          string   `json:"mapId,omitempty"`
+	Position       Position `json:"position"`
+	Facing         string   `json:"facing,omitempty"`
+	Sprinting      bool     `json:"sprinting,omitempty"`
+	StaminaCurrent int      `json:"staminaCurrent,omitempty"`
+}
+
+// SnapshotSelf carries the owning connection's authoritative resource/sprint
+// state so the local stamina bar keeps updating while moving (the client
+// skips the slower HTTP resource sync during sustained movement). Position is
+// advisory only; the client keeps predicting its own position.
+type SnapshotSelf struct {
+	MapID          string   `json:"mapId,omitempty"`
+	Position       Position `json:"position"`
+	Sprinting      bool     `json:"sprinting,omitempty"`
+	StaminaCurrent int      `json:"staminaCurrent,omitempty"`
 }
 
 type WSServerMessage struct {
@@ -220,6 +246,14 @@ type WSServerMessage struct {
 	Appearance    CharacterAppearance `json:"appearance,omitempty"`
 	Equipment     CharacterEquipment  `json:"equipment,omitempty"`
 	Error         string              `json:"error,omitempty"`
+
+	// world_snapshot fields (type == "world_snapshot"): a batched tick frame
+	// coalescing all AOI changes for one connection into a single WS message.
+	Tick    int64             `json:"tick,omitempty"`
+	Self    *SnapshotSelf     `json:"self,omitempty"`
+	Entered []WorldPlayer     `json:"entered,omitempty"`
+	Moved   []SlimPlayerState `json:"moved,omitempty"`
+	Left    []string          `json:"left,omitempty"`
 }
 
 type RuntimeResources struct {

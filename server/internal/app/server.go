@@ -102,6 +102,8 @@ func (s *Server) Run() error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	go s.runSnapshotLoop()
+
 	log.Printf("gateway listening on %s", s.addr)
 	if s.authRequired {
 		log.Printf("account store: postgres")
@@ -817,10 +819,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
-	previousMapID := session.MapID
-	previousPosition := session.Position
-
-	session, ok = s.state.updateMovement(req.Token, req.Position, req.Sprinting)
+	session, ok = s.state.updateMovement(req.Token, req.Position, req.Sprinting, "")
 	if !ok {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
@@ -868,24 +867,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		Equipment:     toProtocolEquipment(session.Equipment),
 	})
 
-	nearbyPositions := []protocol.Position{session.Position}
-	if previousMapID == session.MapID {
-		nearbyPositions = append(nearbyPositions, previousPosition)
-	}
-	s.ws.broadcastNearbyAny(session.WorldID, session.MapID, nearbyPositions, protocol.WSServerMessage{
-		Type:          "player_moved",
-		PlayerID:      session.PlayerID,
-		CharacterID:   session.CharacterID,
-		CharacterName: session.CharacterName,
-		WorldID:       session.WorldID,
-		MapID:         session.MapID,
-		Position:      session.Position,
-		Resources:     session.Resources.toProtocol(),
-		Sprinting:     session.Sprinting,
-		Appearance:    toProtocolAppearance(session.Appearance),
-		Equipment:     toProtocolEquipment(session.Equipment),
-	})
-
+	// Peer movement is delivered by the snapshot ticker (world_snapshot),
+	// which reads the session state updated above regardless of transport.
 	if transitioned {
 		s.ws.broadcastNearby(session.WorldID, session.MapID, session.Position, protocol.WSServerMessage{
 			Type:          "map_transition",
@@ -1317,6 +1300,8 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 		mapID:    session.MapID,
 		position: session.Position,
 		send:     make(chan protocol.WSServerMessage, 16),
+		quit:     make(chan struct{}),
+		aoi:      make(map[string]*aoiEntry),
 	}
 	s.ws.add(client)
 	defer s.ws.remove(client)
@@ -1324,6 +1309,9 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 	writeDone := make(chan struct{})
 	go s.writeWSLoop(client, writeDone)
 
+	// auth_ok no longer carries the nearby roster; the first world_snapshot
+	// (<= one tick away) delivers the initial peers via "entered", keeping a
+	// single source of truth and avoiding a seeding race with the ticker.
 	client.send <- protocol.WSServerMessage{
 		Type:          "auth_ok",
 		PlayerID:      session.PlayerID,
@@ -1336,7 +1324,6 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 		Sprinting:     session.Sprinting,
 		Appearance:    toProtocolAppearance(session.Appearance),
 		Equipment:     toProtocolEquipment(session.Equipment),
-		Players:       s.state.listNearbyWorldPlayers(session.WorldID, session.MapID, session.Position),
 	}
 
 	for {
@@ -1353,10 +1340,7 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		previousMapID := client.mapID
-		previousPosition := client.position
-
-		updated, ok := s.state.updateMovement(hello.Token, message.Position, message.Sprinting)
+		updated, ok := s.state.updateMovement(hello.Token, message.Position, message.Sprinting, message.Facing)
 		if !ok {
 			client.send <- protocol.WSServerMessage{
 				Type:  "error",
@@ -1387,20 +1371,10 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		broadcast := protocol.WSServerMessage{
-			Type:          "player_moved",
-			PlayerID:      updated.PlayerID,
-			CharacterID:   updated.CharacterID,
-			CharacterName: updated.CharacterName,
-			WorldID:       updated.WorldID,
-			MapID:         updated.MapID,
-			Position:      updated.Position,
-			Resources:     updated.Resources.toProtocol(),
-			Sprinting:     updated.Sprinting,
-			Appearance:    toProtocolAppearance(updated.Appearance),
-			Equipment:     toProtocolEquipment(updated.Equipment),
-		}
-
+		// Peer movement is no longer pushed per-message; the snapshot ticker
+		// coalesces it into world_snapshot frames with slim payloads + LOD.
+		// The SSE event stream (legacy, not used by the H5 client) still
+		// carries full data for admin/other consumers.
 		s.events.broadcast(protocol.WorldEvent{
 			Type:          "player_moved",
 			PlayerID:      updated.PlayerID,
@@ -1414,14 +1388,11 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			Appearance:    toProtocolAppearance(updated.Appearance),
 			Equipment:     toProtocolEquipment(updated.Equipment),
 		})
-		nearbyPositions := []protocol.Position{updated.Position}
-		if previousMapID == updated.MapID {
-			nearbyPositions = append(nearbyPositions, previousPosition)
-		}
-		s.ws.broadcastNearbyAny(updated.WorldID, updated.MapID, nearbyPositions, broadcast)
 
 		if transitioned {
-			s.ws.broadcastNearby(updated.WorldID, updated.MapID, updated.Position, protocol.WSServerMessage{
+			// Only the mover reacts to map_transition (client checks
+			// playerId === self), so send it straight to this connection.
+			client.send <- protocol.WSServerMessage{
 				Type:          "map_transition",
 				PlayerID:      updated.PlayerID,
 				CharacterID:   updated.CharacterID,
@@ -1431,20 +1402,63 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 				Position:      updated.Position,
 				Resources:     updated.Resources.toProtocol(),
 				Sprinting:     updated.Sprinting,
-			})
+			}
 		}
 	}
 
-	close(client.send)
+	close(client.quit)
 	<-writeDone
 }
 
 func (s *Server) writeWSLoop(client *wsClient, done chan<- struct{}) {
 	defer close(done)
 
-	for message := range client.send {
-		if err := writeWSJSON(client.conn, message); err != nil {
+	for {
+		select {
+		case message, ok := <-client.send:
+			if !ok {
+				return
+			}
+			if err := writeWSJSON(client.conn, message); err != nil {
+				return
+			}
+		case <-client.quit:
 			return
+		}
+	}
+}
+
+// runSnapshotLoop drives the per-connection world-snapshot tick. It coalesces
+// all AOI changes (entered/moved/left) for each client into one message per
+// interval, applying network LOD by distance. Runs for the process lifetime.
+func (s *Server) runSnapshotLoop() {
+	ticker := time.NewTicker(snapshotTickInterval)
+	defer ticker.Stop()
+	var tick int64
+	for range ticker.C {
+		tick++
+		s.broadcastSnapshots(tick)
+	}
+}
+
+// broadcastSnapshots builds and dispatches one tick of world snapshots. Split
+// out so tests can drive a deterministic tick without the ticker.
+func (s *Server) broadcastSnapshots(tick int64) {
+	viewers := s.ws.snapshotViewers()
+	if len(viewers) == 0 {
+		return
+	}
+	buckets := s.state.snapshotWorld()
+	for _, viewer := range viewers {
+		message, ok := buildSnapshotFor(viewer, tick, buckets)
+		if !ok {
+			continue
+		}
+		select {
+		case viewer.client.send <- message:
+		default:
+			// Slow consumer: drop this tick. The next full snapshot will
+			// reconcile via entered/left, so state stays eventually correct.
 		}
 	}
 }

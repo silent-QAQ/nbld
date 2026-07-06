@@ -19,6 +19,7 @@ type sessionState struct {
 	WorldID           string
 	MapID             string
 	Position          protocol.Position
+	Facing            string
 	Resources         runtimeResources
 	Sprinting         bool
 	ResourceAt        time.Time
@@ -68,7 +69,7 @@ func (s *stateStore) deleteSession(token string) (sessionState, bool) {
 	return session, true
 }
 
-func (s *stateStore) updateMovement(token string, position protocol.Position, sprinting bool) (sessionState, bool) {
+func (s *stateStore) updateMovement(token string, position protocol.Position, sprinting bool, facing string) (sessionState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -79,6 +80,9 @@ func (s *stateStore) updateMovement(token string, position protocol.Position, sp
 
 	now := time.Now().UTC()
 	session.advanceRuntimeResources(now, session.Sprinting)
+	if facing != "" {
+		session.Facing = facing
+	}
 	wasSprinting := session.Sprinting
 	if sprinting && session.Resources.StaminaCurrent > 0 {
 		session.Sprinting = true
@@ -134,6 +138,7 @@ func (s *stateStore) listNearbyWorldPlayers(worldID, mapID string, position prot
 			CharacterName: session.CharacterName,
 			MapID:         session.MapID,
 			Position:      session.Position,
+			Facing:        session.Facing,
 			Resources:     session.Resources.toProtocol(),
 			Sprinting:     session.Sprinting,
 			Appearance:    toProtocolAppearance(session.Appearance),
@@ -142,6 +147,59 @@ func (s *stateStore) listNearbyWorldPlayers(worldID, mapID string, position prot
 	}
 
 	return players
+}
+
+// worldPlayerSnapshot holds one player's data prepared once per tick, so the
+// snapshot builder can reuse it for every viewer without re-reading state.
+type worldPlayerSnapshot struct {
+	full protocol.WorldPlayer // complete data for AOI "entered" events
+	slim protocol.SlimPlayerState
+}
+
+// snapshotWorld captures every live session once, bucketed by world+map, so the
+// per-tick snapshot builder can scan only same-map peers. It advances runtime
+// resources so stamina in the slim payload is current.
+func (s *stateStore) snapshotWorld() map[string][]worldPlayerSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	buckets := make(map[string][]worldPlayerSnapshot, len(s.sessions))
+	now := time.Now().UTC()
+	for token, session := range s.sessions {
+		session.advanceRuntimeResources(now, session.Sprinting)
+		s.sessions[token] = session
+		if session.WorldID == "" || session.PlayerID == "" {
+			continue
+		}
+		stamina := int(session.Resources.StaminaCurrent)
+		full := protocol.WorldPlayer{
+			PlayerID:      session.PlayerID,
+			CharacterID:   session.CharacterID,
+			CharacterName: session.CharacterName,
+			MapID:         session.MapID,
+			Position:      session.Position,
+			Facing:        session.Facing,
+			Resources:     session.Resources.toProtocol(),
+			Sprinting:     session.Sprinting,
+			Appearance:    toProtocolAppearance(session.Appearance),
+			Equipment:     toProtocolEquipment(session.Equipment),
+		}
+		slim := protocol.SlimPlayerState{
+			PlayerID:       session.PlayerID,
+			MapID:          session.MapID,
+			Position:       session.Position,
+			Facing:         session.Facing,
+			Sprinting:      session.Sprinting,
+			StaminaCurrent: stamina,
+		}
+		key := session.WorldID + "\x00" + session.MapID
+		buckets[key] = append(buckets[key], worldPlayerSnapshot{full: full, slim: slim})
+	}
+	return buckets
+}
+
+func snapshotBucketKey(worldID, mapID string) string {
+	return worldID + "\x00" + mapID
 }
 
 func (s *stateStore) listSessions() []sessionState {
