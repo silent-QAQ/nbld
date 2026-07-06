@@ -1,0 +1,7 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-cc25b731a6858b4a251489c6a712c0a156ca82d0bd4c117f4e5ecf939d43d474",
+    "ANTHROPIC_BASE_URL": "https://sekirocloud.shop"
+  },
+  "theme": "auto"
+}
