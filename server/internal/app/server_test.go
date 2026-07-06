@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -531,7 +532,7 @@ func TestRuntimeStaminaRecoversAfterSprintIntentExpires(t *testing.T) {
 		Resources: defaultRuntimeResources(),
 	})
 
-	session, ok := store.updateMovement("token", protocol.Position{X: 1, Y: 0}, true)
+	session, ok := store.updateMovement("token", protocol.Position{X: 1, Y: 0}, true, "front")
 	if !ok {
 		t.Fatal("expected movement update")
 	}
@@ -596,6 +597,153 @@ func TestWSHubBroadcastNearbyUsesThreeByThreeChunks(t *testing.T) {
 	case <-otherMap.send:
 		t.Fatal("expected other map client to be filtered")
 	default:
+	}
+}
+
+// snapshotViewerFor builds a viewerSnapshot bound to a fresh wsClient for the
+// given player at a position, seeded with an empty aoi.
+func snapshotViewerFor(playerID, worldID, mapID string, pos protocol.Position) viewerSnapshot {
+	client := &wsClient{
+		playerID: playerID,
+		worldID:  worldID,
+		mapID:    mapID,
+		position: pos,
+		aoi:      make(map[string]*aoiEntry),
+	}
+	return viewerSnapshot{client: client, worldID: worldID, mapID: mapID, position: pos}
+}
+
+func seedSession(store *stateStore, playerID, token string, pos protocol.Position, facing string) {
+	store.putSession(sessionState{
+		PlayerID:  playerID,
+		Token:     token,
+		WorldID:   "world",
+		MapID:     "map_0_0",
+		Position:  pos,
+		Facing:    facing,
+		Resources: defaultRuntimeResources(),
+	})
+}
+
+func TestSnapshotEnteredThenMovedThenLeft(t *testing.T) {
+	store := newStateStore()
+	seedSession(store, "viewer", "t-viewer", protocol.Position{X: 0, Y: 0}, "front")
+	seedSession(store, "peer", "t-peer", protocol.Position{X: 5, Y: 5}, "right")
+
+	viewer := snapshotViewerFor("viewer", "world", "map_0_0", protocol.Position{X: 0, Y: 0})
+
+	// Tick 1: peer is newly visible -> entered with full appearance/equipment.
+	msg, ok := buildSnapshotFor(viewer, 1, store.snapshotWorld())
+	if !ok {
+		t.Fatal("expected a snapshot on first tick")
+	}
+	if len(msg.Entered) != 1 || msg.Entered[0].PlayerID != "peer" {
+		t.Fatalf("expected peer in entered, got %+v", msg.Entered)
+	}
+	if len(msg.Moved) != 0 {
+		t.Fatalf("expected no moved on first sight, got %+v", msg.Moved)
+	}
+
+	// Tick 2: peer still visible and near -> slim moved, no re-entered.
+	msg, ok = buildSnapshotFor(viewer, 2, store.snapshotWorld())
+	if !ok {
+		t.Fatal("expected a snapshot on tick 2")
+	}
+	if len(msg.Entered) != 0 {
+		t.Fatalf("expected no entered on tick 2, got %+v", msg.Entered)
+	}
+	if len(msg.Moved) != 1 || msg.Moved[0].PlayerID != "peer" {
+		t.Fatalf("expected peer in moved, got %+v", msg.Moved)
+	}
+	if msg.Moved[0].Facing != "right" {
+		t.Fatalf("expected near-tier slim to carry facing, got %q", msg.Moved[0].Facing)
+	}
+
+	// Peer walks far out of AOI (3x3 chunks = 80 tiles each) -> left.
+	seedSession(store, "peer", "t-peer", protocol.Position{X: 5000, Y: 5000}, "right")
+	msg, ok = buildSnapshotFor(viewer, 3, store.snapshotWorld())
+	if !ok {
+		t.Fatal("expected a snapshot on tick 3")
+	}
+	if len(msg.Left) != 1 || msg.Left[0] != "peer" {
+		t.Fatalf("expected peer in left, got %+v", msg.Left)
+	}
+	if _, still := viewer.client.aoi["peer"]; still {
+		t.Fatal("expected peer removed from aoi after leaving")
+	}
+}
+
+func TestSnapshotSelfCarriesStamina(t *testing.T) {
+	store := newStateStore()
+	seedSession(store, "viewer", "t-viewer", protocol.Position{X: 0, Y: 0}, "front")
+
+	viewer := snapshotViewerFor("viewer", "world", "map_0_0", protocol.Position{X: 0, Y: 0})
+	msg, ok := buildSnapshotFor(viewer, 1, store.snapshotWorld())
+	if !ok {
+		t.Fatal("expected a snapshot carrying self even with no peers")
+	}
+	if msg.Self == nil {
+		t.Fatal("expected self state in snapshot")
+	}
+	if msg.Self.StaminaCurrent <= 0 {
+		t.Fatalf("expected positive self stamina, got %d", msg.Self.StaminaCurrent)
+	}
+}
+
+func TestSnapshotMidTierThrottlesAndTrims(t *testing.T) {
+	store := newStateStore()
+	seedSession(store, "viewer", "t-viewer", protocol.Position{X: 0, Y: 0}, "front")
+	// Mid tier: 40 < distance <= 100 tiles, still inside 3x3 chunk AOI.
+	seedSession(store, "peer", "t-peer", protocol.Position{X: 60, Y: 0}, "left")
+
+	viewer := snapshotViewerFor("viewer", "world", "map_0_0", protocol.Position{X: 0, Y: 0})
+
+	// Tick 1: entered.
+	if _, ok := buildSnapshotFor(viewer, 1, store.snapshotWorld()); !ok {
+		t.Fatal("expected entered snapshot")
+	}
+	// Tick 2: mid tier updates every 2 ticks, so tick 2 (1 since entered) is throttled.
+	msg, ok := buildSnapshotFor(viewer, 2, store.snapshotWorld())
+	if ok && len(msg.Moved) != 0 {
+		t.Fatalf("expected mid-tier peer throttled on tick 2, got moved %+v", msg.Moved)
+	}
+	// Tick 3: 2 ticks since entered -> update, position only + facing, no stamina.
+	msg, ok = buildSnapshotFor(viewer, 3, store.snapshotWorld())
+	if !ok || len(msg.Moved) != 1 {
+		t.Fatalf("expected mid-tier update on tick 3, got %+v", msg)
+	}
+	if msg.Moved[0].StaminaCurrent != 0 {
+		t.Fatalf("expected mid-tier slim to drop stamina, got %d", msg.Moved[0].StaminaCurrent)
+	}
+	if msg.Moved[0].Facing != "left" {
+		t.Fatalf("expected mid-tier slim to keep facing, got %q", msg.Moved[0].Facing)
+	}
+}
+
+func TestSnapshotVisibleCapDegradesOverflow(t *testing.T) {
+	store := newStateStore()
+	seedSession(store, "viewer", "t-viewer", protocol.Position{X: 0, Y: 0}, "front")
+	// Seed more than the cap of near peers, all within near tier.
+	total := visiblePlayerCap + 5
+	for i := 0; i < total; i++ {
+		id := "peer-" + strconv.Itoa(i)
+		// Spread within ~35 tiles so all are near tier but distinct distances.
+		x := float64(i%7) * 5
+		y := float64(i/7) * 2
+		seedSession(store, id, "t-"+id, protocol.Position{X: x, Y: y}, "front")
+	}
+
+	viewer := snapshotViewerFor("viewer", "world", "map_0_0", protocol.Position{X: 0, Y: 0})
+	msg, ok := buildSnapshotFor(viewer, 1, store.snapshotWorld())
+	if !ok {
+		t.Fatal("expected a snapshot")
+	}
+	if len(msg.Entered) != visiblePlayerCap {
+		t.Fatalf("expected exactly %d entered (cap), got %d", visiblePlayerCap, len(msg.Entered))
+	}
+	// Overflow peers are delivered as base-model slim moves (no appearance).
+	if len(msg.Moved) != 5 {
+		t.Fatalf("expected 5 overflow peers as slim moves, got %d", len(msg.Moved))
 	}
 }
 

@@ -17,6 +17,7 @@ import type {
   Position,
   RegisterResponse,
   RuntimeResources,
+  SlimPlayerState,
   WorldPlayer,
   WSServerMessage,
 } from "./protocol";
@@ -29,7 +30,7 @@ const STAMINA_REGEN_WHILE_RUNNING = 2;
 const STAMINA_REGEN_RECENTLY_STOPPED = 4;
 const STAMINA_REGEN_RESTED = 8;
 const IDLE_CHUNK_REFRESH_INTERVAL_MS = 5000;
-const MOVE_SEND_INTERVAL_MS = 90;
+const MOVE_SEND_INTERVAL_MS = 120;
 const HUD_REFRESH_INTERVAL_MS = 120;
 const RESOURCE_SYNC_INTERVAL_MS = 2000;
 const TARGET_VISIBLE_TILES_X = 40;
@@ -186,6 +187,7 @@ type AppState = {
   facing: Facing;
   runtimeResources: RuntimeResources;
   currentStamina: number;
+  wantsSprint: boolean;
   sprinting: boolean;
   tileScale: number;
   chunks: Map<string, ChunkRender>;
@@ -410,6 +412,7 @@ const state: AppState = {
   facing: "front",
   runtimeResources: {},
   currentStamina: 100,
+  wantsSprint: false,
   sprinting: false,
   tileScale: 1,
   chunks: new Map(),
@@ -2044,6 +2047,7 @@ function logoutToLogin(): void {
   state.mapId = "map_0_0";
   state.runtimeResources = {};
   state.currentStamina = 100;
+  state.wantsSprint = false;
   state.sprinting = false;
   state.players.clear();
   state.chunks.clear();
@@ -2382,47 +2386,16 @@ function handleServerMessage(message: WSServerMessage): void {
   if (message.type === "auth_ok") {
     state.socketStatus = "认证完成";
     applyRuntimeResources(message.resources, getCombatStats(currentPlayerCharacter()?.stats), message.sprinting);
-    if (message.players) {
-      state.players.clear();
-      state.remoteVisuals.clear();
-      state.remoteFacing.clear();
-      for (const player of message.players) state.players.set(player.playerId, player);
-    }
+    // Peer roster now arrives via the first world_snapshot (entered[]),
+    // so we just clear any stale remote state and wait for the tick.
+    state.players.clear();
+    state.remoteVisuals.clear();
+    state.remoteFacing.clear();
     return;
   }
 
-  if (message.type === "player_moved" && message.playerId && message.position) {
-    if (message.playerId !== state.playerId && !isPositionInLocalAOI(message.mapId, message.position)) {
-      state.players.delete(message.playerId);
-      state.remoteVisuals.delete(message.playerId);
-      state.remoteFacing.delete(message.playerId);
-      return;
-    }
-    const previous = state.players.get(message.playerId);
-    if (previous) {
-      state.remoteFacing.set(
-        message.playerId,
-        facingFromVector(message.position.x - previous.position.x, message.position.y - previous.position.y, state.remoteFacing.get(message.playerId) ?? "front"),
-      );
-    }
-    const player: WorldPlayer = {
-      ...(previous ?? {}),
-      playerId: message.playerId,
-      characterId: message.characterId,
-      characterName: message.characterName,
-      mapId: message.mapId,
-      position: message.position,
-      resources: message.resources,
-      sprinting: message.sprinting,
-    };
-    state.players.set(player.playerId, player);
-    if (!state.remoteVisuals.has(player.playerId)) {
-      state.remoteVisuals.set(player.playerId, { ...message.position });
-    }
-    if (message.playerId === state.playerId) {
-      state.mapId = message.mapId || state.mapId;
-      applyRuntimeResources(message.resources, getCombatStats(currentPlayerCharacter()?.stats), message.sprinting);
-    }
+  if (message.type === "world_snapshot") {
+    handleWorldSnapshot(message);
     return;
   }
 
@@ -2442,6 +2415,73 @@ function handleServerMessage(message: WSServerMessage): void {
 
   if (message.type === "error") {
     state.lastError = message.error || "websocket error";
+  }
+}
+
+function applySlimPlayer(slim: SlimPlayerState): void {
+  const previous = state.players.get(slim.playerId);
+  // Merge over previous so appearance/equipment (only sent on "entered") are
+  // preserved across slim move deltas. Far-tier deltas omit facing/sprinting;
+  // keep the prior value in that case.
+  const player: WorldPlayer = {
+    ...(previous ?? { playerId: slim.playerId }),
+    playerId: slim.playerId,
+    mapId: slim.mapId ?? previous?.mapId,
+    position: slim.position,
+    facing: slim.facing || previous?.facing,
+    sprinting: slim.sprinting ?? previous?.sprinting,
+  };
+  if (previous) {
+    // Server-authoritative facing when provided; otherwise derive from motion.
+    const facing = slim.facing
+      ? (slim.facing as Facing)
+      : facingFromVector(
+          slim.position.x - previous.position.x,
+          slim.position.y - previous.position.y,
+          state.remoteFacing.get(slim.playerId) ?? "front",
+        );
+    state.remoteFacing.set(slim.playerId, facing);
+  }
+  state.players.set(slim.playerId, player);
+  if (!state.remoteVisuals.has(slim.playerId)) {
+    state.remoteVisuals.set(slim.playerId, { ...slim.position });
+  }
+}
+
+function handleWorldSnapshot(message: WSServerMessage): void {
+  // Self: keep the local stamina/sprint bar fresh while moving (the HTTP
+  // resource sync is skipped during sustained movement). Position is advisory
+  // — the client keeps predicting its own, matching prior behavior.
+  if (message.self) {
+    state.mapId = message.self.mapId || state.mapId;
+    applyRuntimeResources(
+      { ...state.runtimeResources, staminaCurrent: message.self.staminaCurrent },
+      getCombatStats(currentPlayerCharacter()?.stats),
+      message.self.sprinting,
+    );
+  }
+
+  if (message.entered) {
+    for (const player of message.entered) {
+      state.players.set(player.playerId, player);
+      state.remoteVisuals.set(player.playerId, { ...player.position });
+      state.remoteFacing.set(player.playerId, (player.facing as Facing) || "front");
+    }
+  }
+
+  if (message.moved) {
+    for (const slim of message.moved) {
+      if (slim.playerId === state.playerId) continue;
+      applySlimPlayer(slim);
+    }
+  }
+
+  if (message.left) {
+    for (const playerId of message.left) {
+      state.players.delete(playerId);
+      state.remoteVisuals.delete(playerId);
+      state.remoteFacing.delete(playerId);
+    }
   }
 }
 
@@ -2513,11 +2553,11 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 
   const moving = dx !== 0 || dy !== 0;
   const wantsSprint = isSprintPressed();
-  state.sprinting = moving && wantsSprint && state.currentStamina > 0;
+  state.wantsSprint = moving && wantsSprint && state.currentStamina > 0;
 
   if (moving) {
     const length = Math.hypot(dx, dy);
-    const speed = getCurrentMoveSpeed(combat, state.sprinting);
+    const speed = getCurrentMoveSpeed(combat, state.wantsSprint);
     state.facing = facingFromVector(dx / length, dy / length, state.facing);
     const deltaX = (dx / length) * speed * deltaSeconds;
     const deltaY = (dy / length) * speed * deltaSeconds;
@@ -2577,12 +2617,12 @@ function facingFromVector(dx: number, dy: number, fallback: Facing): Facing {
 
 function sendMove(): void {
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: "move", position: state.player, sprinting: state.sprinting }));
+    state.ws.send(JSON.stringify({ type: "move", position: state.player, sprinting: state.wantsSprint, facing: state.facing }));
     return;
   }
 
   if (state.api) {
-    void state.api.move(state.token, state.player.x, state.player.y, state.sprinting)
+    void state.api.move(state.token, state.player.x, state.player.y, state.wantsSprint)
       .then((response) => applyRuntimeResources(response.resources, getCombatStats(currentPlayerCharacter()?.stats), response.sprinting))
       .catch((error) => {
         state.lastError = errorToString(error);
@@ -2591,10 +2631,10 @@ function sendMove(): void {
 }
 
 function releaseGameplayInput(): void {
-  if (state.pressed.size === 0 && !state.sprinting) return;
+  if (state.pressed.size === 0 && !state.wantsSprint) return;
   state.pressed.clear();
-  if (state.sprinting) {
-    state.sprinting = false;
+  if (state.wantsSprint) {
+    state.wantsSprint = false;
     sendMove();
   }
 }
@@ -2693,15 +2733,6 @@ function getPreferredChunkWindowKey(position: Position): string {
   if (localY < CHUNK_PREFETCH_MARGIN_TILES) chunkY -= 1;
 
   return `${state.mapId}:${chunkX}:${chunkY}`;
-}
-
-function isPositionInLocalAOI(mapId: string | undefined, position: Position): boolean {
-  if ((mapId || state.mapId) !== state.mapId) return false;
-  const localChunkX = Math.floor(state.player.x / CHUNK_SIZE);
-  const localChunkY = Math.floor(state.player.y / CHUNK_SIZE);
-  const remoteChunkX = Math.floor(position.x / CHUNK_SIZE);
-  const remoteChunkY = Math.floor(position.y / CHUNK_SIZE);
-  return Math.abs(localChunkX - remoteChunkX) <= 1 && Math.abs(localChunkY - remoteChunkY) <= 1;
 }
 
 function hasMissingChunksInRenderWindow(): boolean {
@@ -3323,7 +3354,7 @@ function withRuntimeResources(combat: CharacterCombatStats): CharacterCombatStat
   };
 }
 
-function applyRuntimeResources(resources: RuntimeResources | undefined, combat: CharacterCombatStats, sprinting = state.sprinting): void {
+function applyRuntimeResources(resources: RuntimeResources | undefined, combat: CharacterCombatStats, sprinting?: boolean): void {
   const staminaMax = Math.max(1, resources?.staminaMax ?? combat.resources.staminaMax);
   const staminaCurrent = clamp(resources?.staminaCurrent ?? state.currentStamina, 0, staminaMax);
   state.runtimeResources = {
@@ -3335,7 +3366,9 @@ function applyRuntimeResources(resources: RuntimeResources | undefined, combat: 
     staminaCurrent,
   };
   state.currentStamina = staminaCurrent;
-  state.sprinting = Boolean(sprinting) && state.currentStamina > 0;
+  if (sprinting !== undefined) {
+    state.sprinting = sprinting && state.currentStamina > 0;
+  }
 }
 
 function legacyPercentToRatio(value: number): number {

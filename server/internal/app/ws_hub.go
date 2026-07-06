@@ -120,34 +120,6 @@ func (h *wsHub) broadcastNearby(worldID, mapID string, position protocol.Positio
 	}
 }
 
-func (h *wsHub) broadcastNearbyAny(worldID, mapID string, positions []protocol.Position, message protocol.WSServerMessage) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	for client := range h.clients {
-		if client.worldID != worldID || client.mapID != mapID {
-			continue
-		}
-		if !clientInAnyAOI(client.position, positions) {
-			continue
-		}
-
-		select {
-		case client.send <- message:
-		default:
-		}
-	}
-}
-
-func clientInAnyAOI(clientPosition protocol.Position, positions []protocol.Position) bool {
-	for _, position := range positions {
-		if positionsInAOI(clientPosition, position) {
-			return true
-		}
-	}
-	return false
-}
-
 func positionsInAOI(left, right protocol.Position) bool {
 	leftChunkX, leftChunkY := worldToChunk(left.X, left.Y)
 	rightChunkX, rightChunkY := worldToChunk(right.X, right.Y)
