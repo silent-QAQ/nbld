@@ -1,0 +1,35 @@
+language = "zh-CN"
+localeOverride = "zh-CN"
+enable_i18n = true
+model_provider = "OpenAI"
+model = "gpt-5.5"
+review_model = "gpt-5.4"
+model_reasoning_effort = "medium"
+disable_response_storage = true
+network_access = "enabled"
+windows_wsl_setup_acknowledged = true
+model_context_window = 1_000_000
+model_auto_compact_token_limit = 900_000
+mcp_servers = { }
+
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "https://ai-pixel.online"
+wire_api = "responses"
+requires_openai_auth = true
+
+[projects."/root"]
+trust_level = "trusted"
+
+[projects."/nbld"]
+trust_level = "trusted"
+
+[projects."/"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.4" = 1
+"gpt-5.5" = 4
+
+[features]
+goals = true
