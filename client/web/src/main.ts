@@ -2554,6 +2554,7 @@ function updatePlayer(deltaSeconds: number, now: number): void {
   const moving = dx !== 0 || dy !== 0;
   const wantsSprint = isSprintPressed();
   state.wantsSprint = moving && wantsSprint && state.currentStamina > 0;
+  predictRuntimeStamina(deltaSeconds, combat);
 
   if (moving) {
     const length = Math.hypot(dx, dy);
@@ -2589,6 +2590,25 @@ function updatePlayer(deltaSeconds: number, now: number): void {
 function getCurrentMoveSpeed(combat: CharacterCombatStats, sprinting: boolean): number {
   const baseMoveSpeed = Math.max(0, combat.moveSpeed);
   return sprinting ? baseMoveSpeed * SPRINT_SPEED_MULTIPLIER : baseMoveSpeed;
+}
+
+function predictRuntimeStamina(deltaSeconds: number, combat: CharacterCombatStats): void {
+  const staminaMax = Math.max(1, state.runtimeResources.staminaMax ?? combat.resources.staminaMax);
+  state.currentStamina = clamp(state.currentStamina, 0, staminaMax);
+  if (!state.wantsSprint) return;
+
+  const drainPerSecond = Math.max(0, SPRINT_STAMINA_COST_PER_SECOND - STAMINA_REGEN_WHILE_RUNNING);
+  const nextStamina = clamp(state.currentStamina - drainPerSecond * deltaSeconds, 0, staminaMax);
+  state.currentStamina = nextStamina;
+  state.runtimeResources = {
+    ...state.runtimeResources,
+    staminaMax,
+    staminaCurrent: nextStamina,
+  };
+  state.sprinting = nextStamina > 0;
+  if (nextStamina <= 0) {
+    state.wantsSprint = false;
+  }
 }
 
 function updatePlayerVisual(deltaSeconds: number): void {
@@ -3197,7 +3217,7 @@ function updateHud(): void {
   const tile = state.currentTile;
   const visibleTilesX = TARGET_VISIBLE_TILES_X;
   const visibleTilesY = TARGET_VISIBLE_TILES_Y;
-  const speed = getCurrentMoveSpeed(combat, state.sprinting);
+  const speed = getCurrentMoveSpeed(combat, isSprintDisplayActive());
   hud.innerHTML = renderGameHud(character, combat);
   staminaHud.innerHTML = renderStaminaHud(combat);
 
@@ -3244,7 +3264,7 @@ function renderStaminaHud(combat: CharacterCombatStats): string {
   const percent = resourcePercent(current, max);
   const status = staminaStatusLabel(current, max);
   return `
-    <div class="stamina-widget ${state.sprinting ? "running" : ""}">
+    <div class="stamina-widget ${isSprintDisplayActive() ? "running" : ""}">
       <div class="stamina-widget-header">
         <span>耐力</span>
         <strong>${formatInteger(current)} / ${formatInteger(max)}</strong>
@@ -3261,11 +3281,15 @@ function renderStaminaHud(combat: CharacterCombatStats): string {
 }
 
 function staminaStatusLabel(current: number, max: number): string {
-  if (state.sprinting) {
+  if (isSprintDisplayActive()) {
     return `消耗 ${formatInteger(SPRINT_STAMINA_COST_PER_SECOND)}/秒 · 恢复 ${formatInteger(STAMINA_REGEN_WHILE_RUNNING)}/秒`;
   }
   if (current >= max - 0.01) return "已满";
   return `恢复 ${formatInteger(STAMINA_REGEN_RECENTLY_STOPPED)}-${formatInteger(STAMINA_REGEN_RESTED)}/秒`;
+}
+
+function isSprintDisplayActive(): boolean {
+  return state.wantsSprint || state.sprinting;
 }
 
 function dominantTerrain(): string {
