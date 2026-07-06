@@ -557,6 +557,39 @@ func TestRuntimeStaminaRecoversAfterSprintIntentExpires(t *testing.T) {
 	}
 }
 
+func TestRuntimeStaminaDrainsWhileSprintIntentContinues(t *testing.T) {
+	store := newStateStore()
+	store.putSession(sessionState{
+		PlayerID:  "p1",
+		Token:     "token",
+		WorldID:   "world-dev-001",
+		MapID:     "map_0_0",
+		Position:  protocol.Position{X: 0, Y: 0},
+		Resources: defaultRuntimeResources(),
+	})
+
+	session, ok := store.updateMovement("token", protocol.Position{X: 1, Y: 0}, true, "front")
+	if !ok {
+		t.Fatal("expected movement update")
+	}
+
+	now := time.Now().UTC()
+	session.ResourceAt = now.Add(-500 * time.Millisecond)
+	session.SprintIntentUntil = now.Add(500 * time.Millisecond)
+	store.sessions["token"] = session
+
+	session, ok = store.updateMovement("token", protocol.Position{X: 2, Y: 0}, true, "front")
+	if !ok {
+		t.Fatal("expected movement update")
+	}
+	if !session.Sprinting {
+		t.Fatal("expected sprinting to remain active")
+	}
+	if session.Resources.StaminaCurrent >= float64(session.Resources.StaminaMax) {
+		t.Fatalf("expected stamina to drain while sprinting, got %.2f/%d", session.Resources.StaminaCurrent, session.Resources.StaminaMax)
+	}
+}
+
 func TestWSHubBroadcastNearbyUsesThreeByThreeChunks(t *testing.T) {
 	hub := newWSHub()
 	near := &wsClient{
