@@ -336,6 +336,7 @@ export type SnapshotSelf = {
 export type WSServerMessage = {
   type:
     | "auth_ok"
+    | "self_state"
     | "world_snapshot"
     | "player_moved"
     | "map_transition"

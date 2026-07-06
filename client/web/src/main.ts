@@ -2397,6 +2397,15 @@ function handleServerMessage(message: WSServerMessage): void {
     return;
   }
 
+  if (message.type === "self_state") {
+    state.mapId = message.mapId || state.mapId;
+    if (message.position) {
+      state.player = { ...message.position };
+    }
+    applyRuntimeResources(message.resources, getCombatStats(currentPlayerCharacter()?.stats), message.sprinting);
+    return;
+  }
+
   if (message.type === "world_snapshot") {
     handleWorldSnapshot(message);
     return;

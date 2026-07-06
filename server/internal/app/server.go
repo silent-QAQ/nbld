@@ -1371,6 +1371,17 @@ func (s *Server) handleWorldWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		client.send <- protocol.WSServerMessage{
+			Type:        "self_state",
+			PlayerID:    updated.PlayerID,
+			CharacterID: updated.CharacterID,
+			WorldID:     updated.WorldID,
+			MapID:       updated.MapID,
+			Position:    updated.Position,
+			Resources:   updated.Resources.toProtocol(),
+			Sprinting:   updated.Sprinting,
+		}
+
 		// Peer movement is no longer pushed per-message; the snapshot ticker
 		// coalesces it into world_snapshot frames with slim payloads + LOD.
 		// The SSE event stream (legacy, not used by the H5 client) still
